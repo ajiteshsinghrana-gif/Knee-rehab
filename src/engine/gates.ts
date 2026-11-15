@@ -47,7 +47,7 @@ export function evaluateGate(p: Patient, basePack: ProtocolPack, asOf: string): 
       label: c.label,
       measure: c.measure,
       required: `${c.operator} ${String(c.value)}${typeof c.value === 'number' ? unit : ''}`,
-      actual: lv ? `${String(lv.value)}${typeof lv.value === 'number' ? unit : ''}` : 'not measured',
+      actual: lv ? `${String(lv.value)}${typeof lv.value === 'number' ? unit : ''}${p.periodic.find((e) => e.date === lv.date && e.values[c.measure] !== undefined)?.methods?.[c.measure] === 'photo' ? ' (measured on photo)' : ''}` : 'not measured',
       met: !!lv && compare(c.operator, lv.value, c.value),
       source: c.source,
     };

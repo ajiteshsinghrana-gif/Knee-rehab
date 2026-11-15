@@ -3,11 +3,12 @@ import baseEn from './en.base.json';
 import baseHi from './hi.base.json';
 import { extraEn, extraHi } from './extra';
 import { p2En, p2Hi } from './phase2';
+import { p4En, p4Hi } from './phase4';
 
 /** Neutral app name replaces "Knee Rehab Buddy" (Phase 1.7). */
 export const DICT: Record<Lang, Record<string, string>> = {
-  en: { ...(baseEn as Record<string, string>), ...extraEn, ...p2En },
-  hi: { ...(baseHi as Record<string, string>), ...extraHi, ...p2Hi },
+  en: { ...(baseEn as Record<string, string>), ...extraEn, ...p2En, ...p4En },
+  hi: { ...(baseHi as Record<string, string>), ...extraHi, ...p2Hi, ...p4Hi },
 };
 
 export function t(lang: Lang, key: string, params?: Record<string, string | number>): string {

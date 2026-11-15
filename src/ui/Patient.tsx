@@ -13,6 +13,7 @@ import { listen, parseVoice, voiceSupported } from '../voice/parser';
 import { speak, speakSupported } from '../voice/speak';
 import { currentExercises } from '../engine/plan';
 import { exerciseName, getExercise } from '../exercises/library';
+import { AngleTool } from './AngleTool';
 import { noticeText } from '../notices';
 
 const FACES = ['😀', '🙂', '🙂', '😐', '😐', '😕', '😟', '😣', '😣', '😫', '😭'];
@@ -404,6 +405,8 @@ function Weekly({ patient, pack, lang, onDone, onBack }: { patient: Patient; pac
   const ms = weeklyMeasures(pack, patient);
   const [vals, setVals] = useState<Record<string, Value | null>>({});
   const [photos, setPhotos] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<Record<string, File>>({});
+  const [methods, setMethods] = useState<Record<string, 'photo'>>({});
   const ok = weeklyComplete(pack, patient, vals);
   const unit = (m: { unit: string | null }) => (m.unit === 'cm' ? T('units_cm') : m.unit === 'deg' ? T('units_deg') : m.unit === 'reps' ? T('units_reps') : m.unit === 'sec' ? T('units_sec') : m.unit ?? '');
   return (
@@ -422,21 +425,23 @@ function Weekly({ patient, pack, lang, onDone, onBack }: { patient: Patient; pac
                 </div></div>
             ) : (
               <>
-                <NumField label={partner ? `${L(m.label, lang)}: ${T('opLeg')}` : L(m.label, lang)} hint={m.hint ? L(m.hint, lang) : undefined} value={vals[m.id] ?? null} onChange={(v) => setVals({ ...vals, [m.id]: v })}
+                <NumField label={partner ? `${L(m.label, lang)}: ${T('opLeg')}` : L(m.label, lang)} hint={m.hint ? L(m.hint, lang) : undefined} value={vals[m.id] ?? null} onChange={(v) => { setVals({ ...vals, [m.id]: v }); setMethods(({ [m.id]: _gone, ...rest }) => rest); }}
                   min={m.input?.min ?? 0} max={m.input?.max ?? 100} step={m.input?.step ?? 1} unit={unit(m)} />
                 {partner && <NumField label={T('otherLeg')} value={vals[partner.id] ?? null} onChange={(v) => setVals({ ...vals, [partner.id]: v })} min={partner.input?.min ?? 1} max={partner.input?.max ?? 100} step={partner.input?.step ?? 1} unit={unit(partner)} />}
               </>
             )}
             {m.capture === 'photo' && (
               <>
-                <label className="filebtn">📷 {T('photoOptional')}<input type="file" accept="image/*" capture="environment" onChange={(e) => setPhotos({ ...photos, [m.id]: String(e.target.files?.[0]?.name ?? '') })} /></label>
+                <label className="filebtn">📷 {T('photoOptional')}<input type="file" accept="image/*" capture="environment" onChange={(e) => { const f = e.target.files?.[0]; setPhotos({ ...photos, [m.id]: String(f?.name ?? '') }); if (f) setFiles({ ...files, [m.id]: f }); }} /></label>
                 {photos[m.id] && <small>📎 {photos[m.id]} · {T('photoSoon')}</small>}
+                {m.photoAngle && files[m.id] && <AngleTool file={files[m.id]} measure={m} lang={lang} onUse={(deg) => { setVals({ ...vals, [m.id]: deg }); setMethods({ ...methods, [m.id]: 'photo' }); }} />}
+                {methods[m.id] && <small>✔ {T('angleFromPhoto')}</small>}
               </>
             )}
           </div>
         );
       })}
-      <button className="big primary" disabled={!ok} onClick={() => { updatePatient(patient.id, (p) => saveWeekly(pack, p, getState().today, vals, Object.fromEntries(Object.entries(photos).filter(([, v]) => v)))); onDone(); }}>{ok ? T('saveWeekly') : T('fillAll')}</button>
+      <button className="big primary" disabled={!ok} onClick={() => { updatePatient(patient.id, (p) => saveWeekly(pack, p, getState().today, vals, Object.fromEntries(Object.entries(photos).filter(([, v]) => v)), methods)); onDone(); }}>{ok ? T('saveWeekly') : T('fillAll')}</button>
     </main>
   );
 }
@@ -454,6 +459,7 @@ function Monthly({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
       <button className="back" onClick={i === 0 ? onBack : () => setI(i - 1)}>← {T('back')}</button>
       <h2>{L(q.title, lang)}</h2>
       <p className="sub">{L(q.intro, lang)}</p>
+      <p className="tiny">{q.credit}</p>
       <div className="progress tight">{q.items.map((_, k) => <span key={k} className={ans[k] !== null ? 'on' : ''} />)}</div>
       <p className="sub">{T('tskQ', { n: i + 1 })}</p>
       <div className="statement">{L(q.items[i], lang)}</div>

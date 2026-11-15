@@ -160,6 +160,23 @@
    "short": {
     "en": "Knee bend (degrees)",
     "hi": "घुटना मोड़ना (डिग्री)"
+   },
+   "photoAngle": {
+    "reading": "deviation",
+    "points": [
+     {
+      "en": "the middle of your hip",
+      "hi": "कूल्हे का बीच"
+     },
+     {
+      "en": "the middle of your knee",
+      "hi": "घुटने का बीच"
+     },
+     {
+      "en": "your ankle",
+      "hi": "टखना"
+     }
+    ]
    }
   },
   {
@@ -594,6 +611,18 @@
    "source": "NEEDS_PHYSIO_SIGNOFF",
    "type": "belowCurve",
    "measure": "flexionDeg"
+  },
+  {
+   "id": "S1",
+   "label": {
+    "en": "No check-in for several days",
+    "hi": "कई दिन से कोई चेक-इन नहीं"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "silence",
+   "hours": 72,
+   "hoursSource": "NEEDS_PHYSIO_SIGNOFF"
   }
  ],
  "questionnaires": [],
@@ -638,6 +667,9 @@
   "C1": [
    "reassess-bring-visit-forward",
    "regress-exercise"
+  ],
+  "S1": [
+   "call-patient"
   ]
  },
  "responseHours": {

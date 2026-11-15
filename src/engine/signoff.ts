@@ -32,7 +32,10 @@ export function collectSignoffs(p: ProtocolPack): SignoffItem[] {
   }
   for (const pr of p.precautions) add(`precaution ${pr.id} restricted phases`, pr.phases.join(', '), pr.source);
   add('followUpProposal', `tele-review within ${p.followUpProposal.teleReviewWithinHours} h, check-ins every ${p.followUpProposal.checkInEveryDays} d for ${p.followUpProposal.forDays} d`, p.followUpProposal.source);
-  for (const q of p.questionnaires) add(`questionnaire ${q.id}`, `${q.items.length} items`, q.source);
+  for (const q of p.questionnaires) {
+    add(`questionnaire ${q.id}`, `${q.items.length} items`, q.source);
+    add(`questionnaire ${q.id} permission to use`, q.credit, q.licenceConfirmed ? 'PHYSIO_CONFIRMED' : NEEDS_SIGNOFF);
+  }
   return out;
 }
 

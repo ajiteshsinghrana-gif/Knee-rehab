@@ -3,7 +3,7 @@ import type { Bi, Operator } from '../types';
 import { LIBRARY } from '../exercises/library';
 import { PACKS } from '../engine/packs';
 import {
-  PAIN_ID, draftAsNewVersion, blankBi, blankDraft, buildConditionPack, newConditionId, placeholderAlerts, validateDraft,
+  PAIN_ID, draftAsNewVersion, fatDraft, blankBi, blankDraft, buildConditionPack, newConditionId, placeholderAlerts, validateDraft,
   type AlertGroup, type Alerts, type ConditionDraft,
 } from '../author/condition';
 import { clockMs, getState, setState } from '../store';
@@ -15,6 +15,7 @@ const GROUPS: { key: AlertGroup; title: string; fields: { path: string; label: s
   { key: 'missed', title: 'Missed sessions', fields: [{ path: 'missed.count', label: 'Days in a row' }, { path: 'missed.adherencePct', label: 'Or adherence below (%)' }] },
   { key: 'combination', title: 'Several signals together', fields: [{ path: 'combination.minDistinct', label: 'At least this many REVIEW signals' }, { path: 'combination.windowDays', label: 'Within (days)' }] },
   { key: 'painRise', title: 'Pain rising', fields: [{ path: 'painRise.delta', label: 'Rise of (points)' }, { path: 'painRise.window', label: 'Over (check-ins)' }] },
+  { key: 'silence', title: 'No check-in at all', fields: [{ path: 'silence.hours', label: 'Raise a REVIEW alert after (h)' }] },
   { key: 'followUp', title: 'Follow-up after an URGENT alert', fields: [{ path: 'followUp.teleHours', label: 'Tele-review within (h)' }, { path: 'followUp.checkInDays', label: 'Check in every (days)' }, { path: 'followUp.forDays', label: 'For (days)' }] },
 ];
 const getAt = (a: Alerts, path: string): number => path.split('.').reduce((o: any, k) => o?.[k], a) as number;
@@ -74,7 +75,7 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
       const base = blankDraft(d.id);
       const arrays = ['phases', 'exercises', 'measures', 'gates', 'rules', 'precautions', 'signs', 'curves'] as const;
       for (const k of arrays) if (x[k] !== undefined && !Array.isArray(x[k])) throw new Error(`"${k}" must be a list`);
-      const next: ConditionDraft = { ...base, ...x, id: d.id };
+      const next: ConditionDraft = fatDraft({ ...base, ...x, id: d.id });
       // exercise ids are tied to the draft id, so a loaded draft is renamed to this one
       const old = typeof x.id === 'string' ? x.id : '';
       if (old && old !== d.id) {
@@ -181,6 +182,34 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
         </div>))}
       <button className="btn" disabled={d.measures.length === 0} onClick={() => up((c) => { c.curves.push({ measure: '', better: 'higher', tolerance: 0, points: [{ week: 0, value: 0 }, { week: 1, value: 0 }] }); })}>+ Add an expected recovery</button>
 
+      <h3>4c. Monthly questionnaire <small>(optional)</small></h3>
+      <p className="tiny">Enter a questionnaire you are allowed to use. The app does not include licensed questionnaires such as the Oxford Knee Score or Oxford Shoulder Score; get a licence from the publisher and type the questions here. The patient answers monthly and the total is the sum of the option scores.</p>
+      {d.questionnaire ? (
+        <div className="subcard" data-testid="questionnaire-form">
+          <BiField label="Title" value={d.questionnaire.title} onChange={(b) => up((c) => { c.questionnaire!.title = b; })} />
+          <BiField label="Introduction" value={d.questionnaire.intro} onChange={(b) => up((c) => { c.questionnaire!.intro = b; })} />
+          {d.questionnaire.items.map((it, i) => (
+            <div key={i} className="fu"><BiField label={`Question ${i + 1}`} value={it} onChange={(b) => up((c) => { c.questionnaire!.items[i] = b; })} /><button className="btn" onClick={() => up((c) => { c.questionnaire!.items.splice(i, 1); })}>Remove</button></div>))}
+          <button className="btn" onClick={() => up((c) => { c.questionnaire!.items.push(blankBi()); })}>+ Add a question</button>
+          {d.questionnaire.options.map((o, i) => (
+            <div key={i} className="fu">
+              <label>Score<input type="number" aria-label={`Option ${i + 1} score`} value={o.value} onChange={(e) => up((c) => { c.questionnaire!.options[i].value = Number(e.target.value); })} /></label>
+              <BiField label={`Answer option ${i + 1}`} value={o.label} onChange={(b) => up((c) => { c.questionnaire!.options[i].label = b; })} />
+              <button className="btn" onClick={() => up((c) => { c.questionnaire!.options.splice(i, 1); })}>Remove</button>
+            </div>))}
+          <button className="btn" onClick={() => up((c) => { const l = c.questionnaire!.options; l.push({ value: l.length, label: blankBi() }); })}>+ Add an answer option</button>
+          <label>Credit and terms of use (shown to the patient)<textarea rows={2} aria-label="Questionnaire credit" value={d.questionnaire.credit} onChange={(e) => up((c) => { c.questionnaire!.credit = e.target.value; })} /></label>
+          <label className="check"><input type="checkbox" aria-label="Permission to use" checked={d.questionnaire.permission} onChange={(e) => up((c) => { c.questionnaire!.permission = e.target.checked; })} /> I have permission to use this questionnaire</label>
+          <div className="fu">
+            <label className="check"><input type="checkbox" aria-label="Questionnaire alert" checked={!!d.questionnaire.alert} onChange={(e) => up((c) => { c.questionnaire!.alert = e.target.checked ? { operator: '<=', value: 0 } : undefined; })} /> Alert me (REVIEW) when the total score is</label>
+            {d.questionnaire.alert && <>
+              <select aria-label="Questionnaire alert comparison" value={d.questionnaire.alert.operator} onChange={(e) => up((c) => { c.questionnaire!.alert!.operator = e.target.value as Operator; })}>{OPS.map((o) => <option key={o}>{o}</option>)}</select>
+              <input type="number" aria-label="Questionnaire alert value" value={d.questionnaire.alert.value} onChange={(e) => up((c) => { c.questionnaire!.alert!.value = Number(e.target.value); })} /></>}
+          </div>
+          <button className="btn" onClick={() => up((c) => { delete c.questionnaire; })}>Remove questionnaire</button>
+        </div>
+      ) : <button className="btn" onClick={() => up((c) => { c.questionnaire = { title: blankBi(), intro: blankBi(), items: [blankBi()], options: [{ value: 0, label: blankBi() }, { value: 1, label: blankBi() }], credit: '', permission: false }; })}>+ Add a questionnaire</button>}
+
       <h3>5. When can a patient move to the next phase?</h3>
       {d.phases.length < 2 && <p className="tiny">One phase only: no criteria needed.</p>}
       {d.phases.slice(0, -1).map((_, i) => {
@@ -232,7 +261,7 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
       <h3>7. Alert timings</h3>
       {!a ? (
         <div className="btnrow">
-          <button className="btn" onClick={() => up((c) => { c.alerts = { ...placeholderAlerts(), hours: { SAFETY: 0, URGENT: 0, REVIEW: 0 }, missed: { count: 0, adherencePct: 0 }, combination: { minDistinct: 0, windowDays: 0 }, painRise: { delta: 0, window: 0 }, followUp: { teleHours: 0, checkInDays: 0, forDays: 0 }, source: { hours: 'physio', missed: 'physio', combination: 'physio', painRise: 'physio', followUp: 'physio' } }; })}>Enter my own values</button>
+          <button className="btn" onClick={() => up((c) => { c.alerts = { ...placeholderAlerts(), hours: { SAFETY: 0, URGENT: 0, REVIEW: 0 }, missed: { count: 0, adherencePct: 0 }, combination: { minDistinct: 0, windowDays: 0 }, painRise: { delta: 0, window: 0 }, followUp: { teleHours: 0, checkInDays: 0, forDays: 0 }, silence: { hours: 0 }, source: { hours: 'physio', missed: 'physio', combination: 'physio', painRise: 'physio', followUp: 'physio', silence: 'physio' } }; })}>Enter my own values</button>
           <button className="btn" onClick={() => up((c) => { c.alerts = placeholderAlerts(); })}>Use placeholder values (needs sign-off)</button>
         </div>
       ) : GROUPS.map((g) => (

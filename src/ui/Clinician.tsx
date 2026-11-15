@@ -200,6 +200,17 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
       <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} />
       <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
 
+      {pack.questionnaires.map((q) => {
+        const rows = p.periodic.filter((e) => e.values[q.measure] !== undefined);
+        const last = rows[rows.length - 1];
+        return (
+          <div className="card" key={q.id} data-testid="questionnaire-card">
+            <h3>{q.title.en} <small>{q.items.length} question{q.items.length === 1 ? "" : "s"}, scored by adding the answers</small></h3>
+            {last ? <p>Latest score <b>{String(last.values[q.measure])}</b> on {last.date}{rows.length > 1 ? `; before that ${rows.slice(0, -1).map((e) => `${String(e.values[q.measure])} (${e.date})`).join(', ')}` : ''}.</p> : <p>Not answered yet.</p>}
+            <p className="tiny">{q.credit}{q.licenceConfirmed ? '' : ' (permission to use: NEEDS_PHYSIO_SIGNOFF)'}</p>
+          </div>);
+      })}
+
       <div className="charts">
         <div className="card">
           <LineChart title="Pain (last 6 weeks)" xLabel={`weeks ${pack.anchorLabel.en}`} yLabel="0-10" yMin={0} yMax={10}

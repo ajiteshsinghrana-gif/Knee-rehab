@@ -186,6 +186,23 @@
    "short": {
     "en": "Knee bend (degrees)",
     "hi": "घुटना मोड़ना (डिग्री)"
+   },
+   "photoAngle": {
+    "reading": "deviation",
+    "points": [
+     {
+      "en": "the middle of your hip",
+      "hi": "कूल्हे का बीच"
+     },
+     {
+      "en": "the middle of your knee",
+      "hi": "घुटने का बीच"
+     },
+     {
+      "en": "your ankle",
+      "hi": "टखना"
+     }
+    ]
    }
   },
   {
@@ -1178,6 +1195,18 @@
      "source": "MELBOURNE"
     }
    ]
+  },
+  {
+   "id": "S1",
+   "label": {
+    "en": "No check-in for several days",
+    "hi": "कई दिन से कोई चेक-इन नहीं"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "silence",
+   "hours": 72,
+   "hoursSource": "NEEDS_PHYSIO_SIGNOFF"
   }
  ],
  "questionnaires": [
@@ -1269,7 +1298,9 @@
     }
    ],
    "scoring": "sum",
-   "source": "TSK-11 (Woby et al. 2005); licensing to be confirmed, see README"
+   "source": "TSK-11 (Woby et al. 2005); licensing to be confirmed, see README",
+   "credit": "Tampa Scale for Kinesiophobia, 11-item version (TSK-11): Woby SR, Roach NK, Urmston M, Watson PJ. Pain 2005;117:137-144. Permission to use in this app: to be confirmed by the physio.",
+   "licenceConfirmed": false
   }
  ],
  "suggestedActions": {
@@ -1322,6 +1353,9 @@
   "A8": [
    "call-patient",
    "reassess-bring-visit-forward"
+  ],
+  "S1": [
+   "call-patient"
   ]
  },
  "responseHours": {

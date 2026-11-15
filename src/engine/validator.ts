@@ -90,6 +90,10 @@ export function validatePack(p: ProtocolPack): string[] {
     if (!['tap', 'voice', 'photo', 'number'].includes(m.capture)) err(`measure ${m.id} has invalid capture`);
     if (!['daily', 'weekly', 'monthly'].includes(m.frequency)) err(`measure ${m.id} has invalid frequency`);
     if (m.valueType === 'enum' && !(m.options && m.options.length)) err(`enum measure ${m.id} needs options`);
+    if (m.photoAngle) {
+      if (m.valueType !== 'number' || m.capture !== 'photo') err(`measure ${m.id} can only be measured on a photo if it is a number with photo capture`);
+      if (!['between', 'deviation'].includes(m.photoAngle.reading) || m.photoAngle.points?.length !== 3 || m.photoAngle.points.some((x) => !bi(x))) err(`measure ${m.id} photoAngle needs a reading type and three points in en and hi`);
+    }
   }
   for (const m of p.measures ?? []) {
     if (m.derived) {
@@ -218,6 +222,10 @@ export function validatePack(p: ProtocolPack): string[] {
   for (const q of p.questionnaires ?? []) {
     needM(q.measure, `questionnaire ${q.id}`);
     if (!hasSource(q.source)) err(`questionnaire ${q.id} has no source tag`);
+    if (!hasSource(q.credit)) err(`questionnaire ${q.id} needs a credit line (author and terms of use)`);
+    if (typeof q.licenceConfirmed !== 'boolean') err(`questionnaire ${q.id} must say whether permission to use it is confirmed`);
+    if (!q.items?.length || q.items.some((it) => !bi(it))) err(`questionnaire ${q.id} needs items in en and hi`);
+    if ((q.options ?? []).length < 2 || q.options.some((o) => !bi(o.label) || typeof o.value !== 'number')) err(`questionnaire ${q.id} needs at least two answer options in en and hi`);
   }
   return e;
 }
