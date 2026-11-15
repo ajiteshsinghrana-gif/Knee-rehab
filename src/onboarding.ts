@@ -2,6 +2,7 @@
 import type { Lang, Patient, Plan } from './types';
 import { getPack, PACKS } from './engine/packs';
 import { buildImportedPack } from './import/apply';
+import { buildConditionPack, type ConditionDraft } from './author/condition';
 import type { ProtocolPack } from './types';
 import { applyAction, normalizePatient, planDefaults, PHYSIO } from './engine/plan';
 import { getExercise } from './exercises/library';
@@ -72,14 +73,15 @@ export function buildPatient(d: OnboardDraft, ctx: { nowMs: number; today: strin
 }
 
 // ---------------- invite link (Phase 3.1) ----------------
-interface Invite { v: 1; i: string; n: string; a: number; p: string; l: Lang; d: string; ph: string; ps: string; s: number; e?: string; cp?: { base: string; file: string; fields: { target: string; value: number | string[] }[] }; plan: Plan }
+interface Invite { v: 1; i: string; n: string; a: number; p: string; l: Lang; d: string; ph: string; ps: string; s: number; e?: string; cp?: { base: string; file: string; fields: { target: string; value: number | string[] }[] }; ca?: ConditionDraft; plan: Plan }
 
 const b64 = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64 = (s: string) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)));
 
 /** A physio-imported pack is sent as base id + the approved fields (small), and rebuilt on the other device. */
-function customPart(p: Patient): { cp?: Invite['cp'] } {
+function customPart(p: Patient): { cp?: Invite['cp']; ca?: ConditionDraft } {
   const pk = PACKS[p.packId];
+  if (pk?.authored) return { ca: pk.authored as ConditionDraft };
   return pk?.basedOn && pk.imported ? { cp: { base: pk.basedOn, file: pk.imported.file, fields: pk.imported.fields } } : {};
 }
 
@@ -94,7 +96,8 @@ export function decodeInvite(code: string): { patient: Patient; pack?: ProtocolP
     const x = JSON.parse(unb64(code)) as Invite;
     if (x?.v !== 1 || typeof x.i !== 'string' || typeof x.n !== 'string' || !isDate(x.d) || !isDate(x.ps)) return null;
     let built: ProtocolPack | undefined;
-    if (!PACKS[x.p] && x.cp && PACKS[x.cp.base]) {
+    if (!PACKS[x.p] && x.ca && x.ca.id === x.p) built = buildConditionPack(x.ca); // a physio-written condition: same validator as any pack
+    else if (!PACKS[x.p] && x.cp && PACKS[x.cp.base]) {
       const props = x.cp.fields.map((f) => ({ target: f.target, label: f.target, kind: Array.isArray(f.value) ? 'exercises' as const : 'number' as const, current: 0, proposed: f.value, line: '' }));
       built = buildImportedPack(PACKS[x.cp.base], props, String(x.cp.file), x.p); // same validator as any import
     }
