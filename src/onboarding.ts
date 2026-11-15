@@ -2,7 +2,8 @@
 import type { Lang, Patient, Plan } from './types';
 import { getPack, PACKS } from './engine/packs';
 import { buildImportedPack } from './import/apply';
-import { buildConditionPack, type ConditionDraft } from './author/condition';
+import { buildConditionPack, fatDraft, slimDraft, type ConditionDraft } from './author/condition';
+import { compress, decompress } from './lzss';
 import type { ProtocolPack } from './types';
 import { applyAction, normalizePatient, planDefaults, PHYSIO } from './engine/plan';
 import { getExercise } from './exercises/library';
@@ -73,21 +74,25 @@ export function buildPatient(d: OnboardDraft, ctx: { nowMs: number; today: strin
 }
 
 // ---------------- invite link (Phase 3.1) ----------------
-interface Invite { v: 1; i: string; n: string; a: number; p: string; l: Lang; d: string; ph: string; ps: string; s: number; e?: string; cp?: { base: string; file: string; fields: { target: string; value: number | string[] }[] }; ca?: ConditionDraft; plan: Plan }
+interface Invite { v: 1; i: string; n: string; a: number; p: string; l: Lang; d: string; ph: string; ps: string; s: number; e?: string; cp?: { base: string; file: string; fields: { target: string; value: number | string[] }[] }; ca?: Record<string, unknown>; plan: Plan }
 
 const b64 = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const unb64 = (s: string) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)));
+const unb64bytes = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+const b64bytes = (u: Uint8Array) => btoa(String.fromCharCode(...u)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+/** A leading "~" marks a compressed link; older links without it still open. */
+const unb64 = (s: string) => new TextDecoder().decode(s.startsWith('~') ? decompress(unb64bytes(s.slice(1))) : unb64bytes(s));
+const pack64 = (json: string): string => { const plain = b64(json); const z = '~' + b64bytes(compress(new TextEncoder().encode(json))); return z.length < plain.length ? z : plain; };
 
 /** A physio-imported pack is sent as base id + the approved fields (small), and rebuilt on the other device. */
-function customPart(p: Patient): { cp?: Invite['cp']; ca?: ConditionDraft } {
+function customPart(p: Patient): { cp?: Invite['cp']; ca?: Invite['ca'] } {
   const pk = PACKS[p.packId];
-  if (pk?.authored) return { ca: pk.authored as ConditionDraft };
+  if (pk?.authored) return { ca: slimDraft(pk.authored as ConditionDraft) };
   return pk?.basedOn && pk.imported ? { cp: { base: pk.basedOn, file: pk.imported.file, fields: pk.imported.fields } } : {};
 }
 
 export function encodeInvite(p: Patient): string {
   const inv: Invite = { v: 1, i: p.id, n: p.name, a: p.age, p: p.packId, l: p.language, d: p.anchorDate, ph: p.currentPhase, ps: p.phaseStartDate, s: p.sessionsPrescribedPerDay, ...(p.enrolledOn ? { e: p.enrolledOn } : {}), ...customPart(p), plan: p.plan };
-  return b64(JSON.stringify(inv));
+  return pack64(JSON.stringify(inv));
 }
 
 /** Returns a new, empty patient from an invite, or null if the link is damaged or for an unknown condition. */
@@ -96,7 +101,7 @@ export function decodeInvite(code: string): { patient: Patient; pack?: ProtocolP
     const x = JSON.parse(unb64(code)) as Invite;
     if (x?.v !== 1 || typeof x.i !== 'string' || typeof x.n !== 'string' || !isDate(x.d) || !isDate(x.ps)) return null;
     let built: ProtocolPack | undefined;
-    if (!PACKS[x.p] && x.ca && x.ca.id === x.p) built = buildConditionPack(x.ca); // a physio-written condition: same validator as any pack
+    if (!PACKS[x.p] && x.ca && x.ca.id === x.p) built = buildConditionPack(fatDraft(x.ca)); // a physio-written condition: same validator as any pack
     else if (!PACKS[x.p] && x.cp && PACKS[x.cp.base]) {
       const props = x.cp.fields.map((f) => ({ target: f.target, label: f.target, kind: Array.isArray(f.value) ? 'exercises' as const : 'number' as const, current: 0, proposed: f.value, line: '' }));
       built = buildImportedPack(PACKS[x.cp.base], props, String(x.cp.file), x.p); // same validator as any import

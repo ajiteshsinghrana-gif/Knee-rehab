@@ -12,6 +12,10 @@ import { dailyEntry } from '../src/demo/seed';
 import { addDays, toMs } from '../src/engine/dates';
 import { ids } from './helpers';
 import type { Patient } from '../src/types';
+import { compress, decompress } from '../src/lzss';
+import { draftAsNewVersion, fatDraft, slimDraft } from '../src/author/condition';
+import { qrMatrix } from '../src/qr';
+import { inviteUrl } from '../src/onboarding';
 
 // A made-up protocol used only as a test fixture. None of these numbers is clinical guidance.
 const NOW = toMs('2026-11-15') + 9 * 3_600_000;
@@ -144,11 +148,104 @@ describe('physio-written condition (Phase 3.3)', () => {
     buildConditionPack(draft('custom-t11'));
     const code = encodeInvite(patientOn('custom-t11'));
     cleanup('custom-t11');
-    const json = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(code.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))));
-    json.ca.alerts = null;
+    const raw = (c: string) => Uint8Array.from(atob(c.replace(/-/g, '+').replace(/_/g, '/')), (ch) => ch.charCodeAt(0));
+    const json = JSON.parse(new TextDecoder().decode(code.startsWith('~') ? decompress(raw(code.slice(1))) : raw(code)));
+    json.ca.alerts = { hours: 1 }; // not a valid set of timings
     const bad = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(json)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     expect(decodeInvite(bad)).toBeNull();
     expect(PACKS['custom-t11']).toBeUndefined();
     expect(getExercise('custom-t11-e1')).toBeUndefined();
+  });
+});
+
+describe('expected recovery for written conditions (Phase 3.4)', () => {
+  const withCurve = (id: string): ConditionDraft => ({ ...draft(id), curves: [{ measure: 'm1', better: 'higher', tolerance: 20, points: [{ week: 0, value: 0 }, { week: 6, value: 100 }, { week: 12, value: 300 }] }] });
+  it('adds a below-the-curve alert that fires and carries the physio tag', () => {
+    const pack = buildConditionPack(withCurve('custom-c1'));
+    expect(pack.expectedCurves[0]).toMatchObject({ measure: 'm1', tolerance: 20, source: 'PHYSIO_AUTHORED' });
+    expect(pack.rules.find((r) => r.id === 'C1')).toMatchObject({ type: 'belowCurve', measure: 'm1' });
+    let p = withDays(patientOn('custom-c1'), 45);
+    p = { ...p, periodic: [{ date: '2026-11-14', values: { m1: 5 } }] };
+    expect(triage(p, pack, { nowMs: NOW }).triggers.some((t) => t.ruleId === 'C1')).toBe(true);
+    p = { ...p, periodic: [{ date: '2026-11-14', values: { m1: 250 } }] };
+    expect(triage(p, pack, { nowMs: NOW }).triggers.some((t) => t.ruleId === 'C1')).toBe(false);
+    cleanup('custom-c1');
+  });
+  it('explains what is wrong with a curve', () => {
+    const d = withCurve('custom-c2');
+    d.curves[0].points = [{ week: 6, value: 1 }, { week: 3, value: 2 }];
+    d.curves.push({ measure: 'm1', better: 'higher', tolerance: 0, points: [{ week: 0, value: 0 }] });
+    const e = validateDraft(d).join(' | ');
+    expect(e).toMatch(/weeks must increase/);
+    expect(e).toMatch(/already has an expected recovery/);
+    expect(e).toMatch(/allowed gap must be above 0/);
+    expect(e).toMatch(/at least two points/);
+    expect(validateDraft({ ...withCurve('custom-c3'), curves: [{ measure: 'pain', better: 'lower', tolerance: 1, points: [{ week: 0, value: 5 }, { week: 4, value: 2 }] }] }).join()).toMatch(/choose one of your weekly measures/);
+  });
+});
+
+describe('save as a new version (Phase 3.4)', () => {
+  it('copies the condition under new ids, leaves the old one and its patients alone', () => {
+    const v1 = buildConditionPack(draft('custom-v1'));
+    const patient = patientOn('custom-v1');
+    const d2 = draftAsNewVersion(v1.authored as ConditionDraft, 'custom-v2');
+    expect(d2.version).toBe(2);
+    expect(d2.previousId).toBe('custom-v1');
+    expect(d2.condition.en).toBe('Test condition (version 2)');
+    expect(d2.phases[0].exercises).toContain('custom-v2-e1');
+    d2.phases[0].exercises = [...d2.phases[0].exercises, 'heel-slides'];
+    const v2 = buildConditionPack(d2);
+    expect(v2.version).toBe('2.0.0-physio-authored');
+    expect(getExercise('custom-v2-e1')?.name.en).toBe('Seated march');
+    // v1 is unchanged and the patient on it still works
+    expect(PACKS['custom-v1'].phases[0].exercises).toEqual(['custom-v1-e1', 'ankle-pumps']);
+    expect(currentExercises(patient, PACKS['custom-v1'])).toEqual(['custom-v1-e1', 'ankle-pumps']);
+    expect(draftAsNewVersion(d2, 'custom-v3').condition.en).toBe('Test condition (version 3)');
+    cleanup('custom-v1'); cleanup('custom-v2');
+  });
+});
+
+describe('smaller invite links (Phase 3.4)', () => {
+  it('compression round-trips any bytes, including Hindi and random data', () => {
+    const text = new TextEncoder().encode('{"hi":"कूल्हे की हड्डी का फिक्सेशन","hi2":"कूल्हे की हड्डी का फिक्सेशन"}'.repeat(5));
+    expect(new TextDecoder().decode(decompress(compress(text)))).toBe(new TextDecoder().decode(text));
+    expect(compress(text).length).toBeLessThan(text.length / 2);
+    for (let n = 0; n < 40; n++) {
+      const b = Uint8Array.from({ length: n * 37 }, (_, i) => (i * 7919 + n * 31) % (n % 2 ? 256 : 5));
+      expect(Array.from(decompress(compress(b)))).toEqual(Array.from(b));
+    }
+    expect(Array.from(decompress(compress(new Uint8Array(0))))).toEqual([]);
+  });
+  it('refuses damaged compressed data', () => {
+    expect(() => decompress(Uint8Array.from([0, 0xff, 0xff]))).toThrow();
+    expect(decodeInvite('~!!!')).toBeNull();
+  });
+  it('slim and fat drafts are the same protocol', () => {
+    const d = draft('custom-s1');
+    const slim = slimDraft(d) as any;
+    expect(slim.alerts).toBe('P');
+    expect(fatDraft(slim)).toEqual(d);
+    expect(buildConditionPack(fatDraft(slim)).responseHours.URGENT.hours).toBe(24);
+    cleanup('custom-s1');
+  });
+  it('a small written condition now fits in a QR code, and still opens on another device', () => {
+    const d = draft('custom-q1');
+    d.phases = [d.phases[0]]; d.gates = []; d.precautions = []; d.signs = []; d.rules = []; d.measures = [];
+    const pack = buildConditionPack(d);
+    const p = patientOn('custom-q1');
+    const url = inviteUrl(p, 'https://ajiteshsinghrana-gif.github.io/Knee-rehab/');
+    expect(() => qrMatrix(url)).not.toThrow();
+    cleanup('custom-q1');
+    const inv = decodeInvite(url.split('#join=')[1])!;
+    expect(inv.pack?.id).toBe('custom-q1');
+    expect(inv.pack?.phases[0].exercises).toEqual(pack.phases[0].exercises);
+    cleanup('custom-q1');
+  });
+  it('old uncompressed links still open', () => {
+    const p = patientOn('total-knee-replacement');
+    const old = { v: 1, i: 'old1', n: 'Asha', a: 41, p: p.packId, l: 'en', d: p.anchorDate, ph: 'p1', ps: p.phaseStartDate, s: 2, plan: p.plan };
+    const code = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(old)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    expect(decodeInvite(code)?.patient.name).toBe('Asha');
+    expect(decodeInvite(encodeInvite(p))?.patient.id).toBe(p.id);
   });
 });

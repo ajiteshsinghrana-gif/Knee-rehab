@@ -26,6 +26,9 @@ export interface RuleDraft { measure: string; operator: Operator; value: number;
 export interface PrecautionDraft { label: Bi; question: Bi; phases: number[] }
 export interface SignDraft { label: Bi; tier: 'REVIEW' | 'URGENT' }
 
+/** Expected values by week since day zero for one weekly measure. Drift beyond the band raises the existing below-the-curve alert. */
+export interface CurveDraft { measure: string; better: 'higher' | 'lower'; tolerance: number; points: { week: number; value: number }[] }
+
 export type AlertGroup = 'hours' | 'missed' | 'combination' | 'painRise' | 'followUp';
 export interface Alerts {
   hours: { SAFETY: number; URGENT: number; REVIEW: number };
@@ -61,7 +64,12 @@ export interface ConditionDraft {
   rules: RuleDraft[];
   precautions: PrecautionDraft[];
   signs: SignDraft[];
+  curves: CurveDraft[];
   alerts: Alerts | null;
+  /** 1 for a first condition; a copy saved as a new version is 2, 3 ... Old versions stay as they were. */
+  version: number;
+  /** The condition id this one was copied from. */
+  previousId?: string;
 }
 
 let seq = 0;
@@ -71,7 +79,7 @@ export const blankBi = (): Bi => ({ en: '', hi: '' });
 export const blankDraft = (id: string): ConditionDraft => ({
   id, condition: blankBi(), anchorLabel: { en: 'after surgery', hi: 'सर्जरी के बाद' }, population: '',
   phases: [{ name: blankBi(), exercises: [], sessionsPerDay: 2, followUpEveryDays: 7, weeksMin: 0, weeksMax: null }],
-  exercises: [], measures: [], gates: [], rules: [], precautions: [], signs: [], alerts: null,
+  exercises: [], measures: [], gates: [], rules: [], precautions: [], signs: [], curves: [], alerts: null, version: 1,
 });
 
 export const PAIN_ID = 'pain';
@@ -118,6 +126,20 @@ export function validateDraft(d: ConditionDraft): string[] {
   d.precautions.forEach((p, i) => {
     if (!bi(p.label) || !bi(p.question)) e.push(`Restricted movement ${i + 1}: write the name and the question in English and Hindi`);
     if (!p.phases.length) e.push(`Restricted movement ${i + 1}: choose the phases it applies to`);
+  });
+  const seenCurve = new Set<string>();
+  (d.curves ?? []).forEach((c, i) => {
+    const w = `Expected recovery ${i + 1}`;
+    if (!d.measures.some((m) => m.id === c.measure)) e.push(`${w}: choose one of your weekly measures`);
+    else if (seenCurve.has(c.measure)) e.push(`${w}: that measure already has an expected recovery`);
+    seenCurve.add(c.measure);
+    if (c.better !== 'higher' && c.better !== 'lower') e.push(`${w}: say whether higher or lower is better`);
+    if (!num(c.tolerance) || !(c.tolerance > 0)) e.push(`${w}: the allowed gap must be above 0`);
+    if (!Array.isArray(c.points) || c.points.length < 2) e.push(`${w}: add at least two points (week and value)`);
+    else {
+      if (c.points.some((x) => !num(x.week) || !num(x.value) || x.week < 0)) e.push(`${w}: every point needs a week (0 or more) and a value`);
+      for (let k = 1; k < c.points.length; k++) if (!(c.points[k].week > c.points[k - 1].week)) { e.push(`${w}: weeks must increase from one point to the next`); break; }
+    }
   });
   d.signs.forEach((s, i) => { if (!bi(s.label)) e.push(`Extra warning sign ${i + 1}: write it in English and Hindi`); });
   const a = d.alerts;
@@ -194,10 +216,16 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
   if (gates.length) rules.push({ id: 'A6', label: { en: 'Phase taking longer than expected', hi: 'चरण अपेक्षा से लंबा चल रहा है' }, tier: 'REVIEW', source: NEEDS_SIGNOFF, type: 'gateOverdue' });
   if (d.precautions.length) rules.push({ id: 'P1', label: { en: 'Restricted movement in a restricted phase', hi: 'प्रतिबंधित हरकत प्रतिबंध वाले चरण में' }, tier: 'REVIEW', source: NEEDS_SIGNOFF, type: 'precautionBreach' });
 
+  (d.curves ?? []).forEach((c, i) => {
+    const m = mlabel(c.measure);
+    const lower = c.better === 'lower';
+    rules.push({ id: `C${i + 1}`, label: { en: `${m.en} ${lower ? 'above' : 'below'} the expected recovery`, hi: `${m.hi} अपेक्षित सुधार से ${lower ? 'ऊपर' : 'नीचे'}` }, tier: 'REVIEW', source: NEEDS_SIGNOFF, type: 'belowCurve', measure: c.measure });
+  });
   const call = ['call-patient', 'reassess-bring-visit-forward'];
   const suggestedActions: Record<string, string[]> = { R1: call, R5: ['hold-progression', ...call], A1: ['hold-progression'], A3: ['call-patient'], A8: call };
   d.rules.forEach((_, i) => { suggestedActions[`T${i + 1}`] = ['call-patient', 'hold-progression', 'reassess-bring-visit-forward']; });
   d.signs.forEach((_, i) => { suggestedActions[`X${i + 1}`] = call; });
+  (d.curves ?? []).forEach((_, i) => { suggestedActions[`C${i + 1}`] = ['reassess-bring-visit-forward']; });
   if (gates.length) suggestedActions.A6 = ['reassess-bring-visit-forward'];
   if (d.precautions.length) suggestedActions.P1 = call;
 
@@ -206,7 +234,7 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
     authored: JSON.parse(JSON.stringify(d)),
     condition: { en: d.condition.en.trim(), hi: d.condition.hi.trim() },
     population: d.population.trim() || 'Written by the treating physio. Every clinical value was entered or approved by the physio.',
-    version: '1.0.0-physio-authored',
+    version: `${d.version ?? 1}.0.0-physio-authored`,
     sources: ['Written by the treating physio in the app (PHYSIO_AUTHORED). Values tagged NEEDS_PHYSIO_SIGNOFF are placeholders.'],
     anchorLabel: { en: d.anchorLabel.en.trim(), hi: d.anchorLabel.hi.trim() },
     phases: d.phases.map((p, i) => ({ id: phaseId(i), order: i + 1, name: { en: p.name.en.trim(), hi: p.name.hi.trim() }, exercises: [...p.exercises], sessionsPerDay: p.sessionsPerDay, followUpEveryDays: p.followUpEveryDays, expectedWeeks: [p.weeksMin, p.weeksMax], source: AUTHORED_TAG })),
@@ -215,7 +243,7 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
       ...d.measures.map((m) => ({ id: m.id, label: { en: m.label.en.trim(), hi: m.label.hi.trim() }, short: { en: m.label.en.trim(), hi: m.label.hi.trim() }, unit: m.unit.trim(), capture: 'number' as const, frequency: 'weekly' as const, valueType: 'number' as const, input: { min: m.min, max: m.max, step: m.step } })),
     ],
     gates: gates.map((g) => ({ fromPhase: phaseId(g.from), toPhase: phaseId(g.from + 1), criteria: g.criteria.map((c, k) => ({ id: `g${g.from + 1}.${k + 1}`, label: mlabel(c.measure), measure: c.measure, operator: c.operator, value: c.value, source: AUTHORED_TAG })) })),
-    expectedCurves: [],
+    expectedCurves: (d.curves ?? []).map((c) => ({ measure: c.measure, better: c.better, tolerance: c.tolerance, points: c.points.map((x): [number, number] => [x.week, x.value]), source: AUTHORED_TAG })),
     precautions: d.precautions.map((p, i) => ({ id: `prec${i + 1}`, label: { en: p.label.en.trim(), hi: p.label.hi.trim() }, question: { en: p.question.en.trim(), hi: p.question.hi.trim() }, phases: p.phases.map(phaseId), source: AUTHORED_TAG })),
     warningSigns,
     rules,
@@ -239,4 +267,43 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
 export function restoreAuthoredPack(p: ProtocolPack): void {
   if (p.authored) registerDraftExercises(p.authored as ConditionDraft);
   registerPack(p);
+}
+
+/**
+ * Copy a written condition so the physio can change it and save it as the next version.
+ * The old condition and the patients on it are never touched. Exercises written for the old one are copied under new ids.
+ */
+export function draftAsNewVersion(from: ConditionDraft, newId: string): ConditionDraft {
+  const c: ConditionDraft = JSON.parse(JSON.stringify(from));
+  const swap = (id: string) => (id.startsWith(`${from.id}-e`) ? `${newId}${id.slice(from.id.length)}` : id);
+  c.exercises = c.exercises.map((x) => ({ ...x, id: swap(x.id) }));
+  c.phases = c.phases.map((p) => ({ ...p, exercises: p.exercises.map(swap) }));
+  c.id = newId;
+  c.previousId = from.id;
+  c.version = (from.version ?? 1) + 1;
+  c.curves = c.curves ?? [];
+  c.condition = { en: `${stripVersion(from.condition.en)} (version ${c.version})`, hi: `${stripVersion(from.condition.hi)} (संस्करण ${c.version})` };
+  return c;
+}
+const stripVersion = (s: string) => s.replace(/\s*\((version|संस्करण) \d+\)\s*$/, '');
+
+// ---------- compact form for invite links (Phase 3.4) ----------
+/** Leaves out everything that equals the default, so the link is shorter. `fatDraft` puts it back. */
+export function slimDraft(d: ConditionDraft): Record<string, unknown> {
+  const x: Record<string, any> = JSON.parse(JSON.stringify(d));
+  if (!x.population) delete x.population;
+  for (const k of ['exercises', 'measures', 'gates', 'rules', 'precautions', 'signs', 'curves']) if (!x[k]?.length) delete x[k];
+  if (x.version === 1) delete x.version;
+  if (!x.previousId) delete x.previousId;
+  for (const e of x.exercises ?? []) if (!e.doseText || (!e.doseText.en && !e.doseText.hi)) delete e.doseText;
+  if (JSON.stringify(x.alerts) === JSON.stringify(placeholderAlerts())) x.alerts = 'P';
+  return x;
+}
+export function fatDraft(x: any): ConditionDraft {
+  if (!x || typeof x !== 'object' || typeof x.id !== 'string') throw new Error('not a condition');
+  const base = blankDraft(x.id);
+  const d = { ...base, ...x } as ConditionDraft;
+  if ((x as any).alerts === 'P') d.alerts = placeholderAlerts();
+  for (const k of ['phases', 'exercises', 'measures', 'gates', 'rules', 'precautions', 'signs', 'curves'] as const) if (!Array.isArray(d[k])) throw new Error(`${k} must be a list`);
+  return d;
 }
