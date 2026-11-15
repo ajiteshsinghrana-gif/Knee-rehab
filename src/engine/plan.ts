@@ -11,7 +11,7 @@ import { listOverridable } from './overrides';
 export const PHYSIO = 'Demo physio';
 
 export const planDefaults = (): Pick<Patient, 'plan' | 'audit' | 'notices' | 'proposalStatus'> => ({
-  plan: { swaps: {}, hold: null, followUp: null, overrides: [] },
+  plan: { swaps: {}, added: [], removed: [], hold: null, followUp: null, overrides: [] },
   audit: [],
   notices: [],
   proposalStatus: {},
@@ -24,7 +24,8 @@ export const normalizePatient = (p: Patient): Patient => ({ ...planDefaults(), .
 export function currentExercises(p: Patient, pack: ProtocolPack): string[] {
   const phase = pack.phases.find((x) => x.id === p.currentPhase);
   const out: string[] = [];
-  for (const id of phase?.exercises ?? []) {
+  const base = [...(phase?.exercises ?? []).filter((x) => !(p.plan.removed ?? []).includes(x)), ...(p.plan.added ?? [])];
+  for (const id of base) {
     const id2 = p.plan.swaps[id] ?? id;
     if (!out.includes(id2)) out.push(id2);
   }
@@ -61,6 +62,7 @@ export function pendingProposal(p: Patient, pack: ProtocolPack, tri: { tier: str
 export type PlanAction =
   | { type: 'regress-exercise'; exerciseId: string; note?: string }
   | { type: 'restore-exercise'; exerciseId: string; note?: string }
+  | { type: 'set-exercises'; add?: string[]; remove?: string[]; note?: string }
   | { type: 'hold-progression'; note?: string }
   | { type: 'release-hold'; note?: string }
   | { type: 'change-follow-up'; checkInEveryDays: number; reviewEveryDays?: number; nextReviewDate: string | null; until?: string | null; note?: string; flagKey?: string; proposalStatus?: 'approved' | 'modified' }
@@ -106,6 +108,27 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       audit = entry(a.type, `Restored ${key} (was ${was})`, { exercise: was }, { exercise: key }, a.note);
       break;
     }
+    case 'set-exercises': {
+      const phase = pack.phases.find((x) => x.id === p.currentPhase);
+      const cur = currentExercises(p, pack);
+      const added = new Set(plan.added ?? []);
+      const removed = new Set(plan.removed ?? []);
+      for (const id of a.add ?? []) {
+        if (!getExercise(id)) throw new Error(`Unknown exercise ${id}`);
+        if (cur.includes(id)) continue;
+        removed.delete(id);
+        if (!(phase?.exercises ?? []).includes(id)) added.add(id);
+      }
+      for (const id of a.remove ?? []) {
+        added.delete(id);
+        if ((phase?.exercises ?? []).includes(id)) removed.add(id);
+        delete plan.swaps[id];
+      }
+      plan.added = [...added];
+      plan.removed = [...removed];
+      audit = entry(a.type, `Exercise list changed: +${(a.add ?? []).join(', ') || 'none'} -${(a.remove ?? []).join(', ') || 'none'}`, { exercises: cur }, { exercises: currentExercises({ ...p, plan }, pack) }, a.note);
+      break;
+    }
     case 'hold-progression': {
       if (plan.hold) throw new Error('Progression is already on hold');
       plan.hold = { at, by: who, ...(a.note ? { note: a.note } : {}) };
@@ -145,7 +168,7 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       if (!gate) throw new Error('There is no next phase');
       if (!gate.allMet) throw new Error('Gate criteria are not all met');
       out = { ...out, currentPhase: gate.toPhase, phaseStartDate: ctx.today };
-      plan = { ...plan, swaps: {} };
+      plan = { ...plan, swaps: {}, added: [], removed: [] };
       changes.push({ kind: 'phase', phaseId: gate.toPhase });
       audit = entry(a.type, `Phase signed off: ${gate.fromPhase} to ${gate.toPhase}`, { phase: gate.fromPhase }, { phase: gate.toPhase }, a.note);
       break;

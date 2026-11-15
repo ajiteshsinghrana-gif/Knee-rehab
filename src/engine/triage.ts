@@ -25,7 +25,9 @@ export interface TriageOptions {
 type Tr = Exclude<Tier, 'ON_PLAN'>;
 const sev = (t: Tier): number => TIER_ORDER.indexOf(t);
 
-export const lastCheckInDate = (p: Patient): string => (p.daily.length ? p.daily[p.daily.length - 1].date : p.anchorDate);
+/** First day the app can judge: the day they joined, or the surgery date for patients who started with it. */
+export const careStart = (p: Patient): string => (p.enrolledOn && p.enrolledOn > p.anchorDate ? p.enrolledOn : p.anchorDate);
+export const lastCheckInDate = (p: Patient): string => (p.daily.length ? p.daily[p.daily.length - 1].date : careStart(p));
 export const weeksSince = (p: Patient, d: string): number => diffDays(d, p.anchorDate) / 7;
 export const weeksInPhase = (p: Patient, d: string): number => diffDays(d, p.phaseStartDate) / 7;
 const truncate = (p: Patient, d: string): Patient => ({
@@ -80,7 +82,10 @@ function trend(r: Extract<Rule, { type: 'trend' }>, p: Patient, d: string): Trig
 function adherence(p: Patient, d: string, windowDays: number): number {
   let done = 0;
   for (let i = 0; i < windowDays; i++) done += entryOn(p, addDays(d, -i))?.sessionsDone ?? 0;
-  return done / (p.sessionsPrescribedPerDay * windowDays);
+  // A patient who joined mid-window is judged only on the days since they joined.
+  const days = p.enrolledOn ? Math.min(windowDays, diffDays(d, careStart(p))) : windowDays;
+  if (days <= 0) return 1;
+  return done / (p.sessionsPrescribedPerDay * days);
 }
 
 function streak(r: StreakRule, p: Patient, pack: ProtocolPack, d: string): Trigger | null {
@@ -96,7 +101,7 @@ function streak(r: StreakRule, p: Patient, pack: ProtocolPack, d: string): Trigg
   }
   if (r.metric === 'missedSessions') {
     let run = 0;
-    for (let x = d; x > p.anchorDate && isMissed(p, x); x = addDays(x, -1)) run++;
+    for (let x = d; x > careStart(p) && isMissed(p, x); x = addDays(x, -1)) run++;
     const why: string[] = [];
     if (run >= r.count) why.push(`${plural(run, 'missed day')} in a row`);
     if (r.orAdherenceBelowPct !== undefined) {
@@ -145,11 +150,11 @@ function gateOverdue(r: Extract<Rule, { type: 'gateOverdue' }>, p: Patient, pack
 function silence(r: Extract<Rule, { type: 'silence' }>, p: Patient, nowMs?: number): Trigger | null {
   if (nowMs === undefined) return null;
   const last = p.daily[p.daily.length - 1];
-  const lastMs = last ? last.recordedAt ?? toMs(last.date) + 86_400_000 - 1 : toMs(p.anchorDate);
+  const lastMs = last ? last.recordedAt ?? toMs(last.date) + 86_400_000 - 1 : toMs(careStart(p));
   const hours = (nowMs - lastMs) / 3_600_000;
   if (hours < r.hours) return null;
   const days = Math.floor(hours / 24);
-  return trig(r, `No check-in for ${days} day${days === 1 ? '' : 's'} (${Math.floor(hours)} h)`, last?.date ?? p.anchorDate);
+  return trig(r, `No check-in for ${days} day${days === 1 ? '' : 's'} (${Math.floor(hours)} h)`, last?.date ?? careStart(p));
 }
 
 function precautionBreach(r: Extract<Rule, { type: 'precautionBreach' }>, p: Patient, pack: ProtocolPack, d: string): Trigger | null {

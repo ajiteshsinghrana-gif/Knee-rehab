@@ -13,6 +13,11 @@ for (const p of RAW) {
   PACKS[p.id] = p;
 }
 export const PACK_LIST: ProtocolPack[] = Object.values(PACKS);
+/** Register a physio-imported pack. It must pass the same validator as the shipped packs. */
+export function registerPack(p: ProtocolPack): void {
+  assertValidPack(p);
+  PACKS[p.id] = p;
+}
 export const getPack = (id: string): ProtocolPack => {
   const p = PACKS[id];
   if (!p) throw new Error(`Unknown protocol pack: ${id}`);

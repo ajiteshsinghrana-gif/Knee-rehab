@@ -9,6 +9,8 @@ import { ACTION_LABELS, suggestedActions } from '../engine/actions';
 import { collectSignoffs } from '../engine/signoff';
 import { clockMs, getState, updatePatient, type AppState } from '../store';
 import { LineChart } from './Charts';
+import { Onboarding } from './Onboarding';
+import { ImportProtocol } from './Import';
 import { applyAction, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
 import { listOverridable } from '../engine/overrides';
 import { exerciseName, getExercise } from '../exercises/library';
@@ -35,6 +37,7 @@ export function Clinician({ state }: { state: AppState }) {
     [state.patients, now],
   );
   const [sel, setSel] = useState(state.activeId);
+  const [mode, setMode] = useState<'dash' | 'add' | 'import'>('dash');
   const cur = rows.find((x) => x.p.id === sel) ?? rows[0];
   const counts = (['SAFETY', 'URGENT', 'REVIEW', 'ON_PLAN'] as Tier[]).map((t) => [t, rows.filter((x) => x.r.tier === t).length] as const);
   return (
@@ -43,6 +46,7 @@ export function Clinician({ state }: { state: AppState }) {
       <div className="dash">
         <aside className="worklist">
           <h2>Worklist</h2>
+          <div className="btnrow"><button className="btn primary" onClick={() => setMode('add')}>+ Add patient</button><button className="btn" onClick={() => setMode('import')}>Import protocol</button></div>
           <p className="counts">{counts.map(([t, n]) => <span key={t}><Tier tier={t} /> {n}</span>)}</p>
           <ul>
             {rows.map(({ p, pack, r }) => (
@@ -60,7 +64,9 @@ export function Clinician({ state }: { state: AppState }) {
             ))}
           </ul>
         </aside>
-        <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />
+        {mode === 'add' && <Onboarding onClose={() => { setMode('dash'); setSel(getState().activeId); }} />}
+        {mode === 'import' && <ImportProtocol onClose={() => setMode('dash')} />}
+        {mode === 'dash' && <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />}
       </div>
     </>
   );

@@ -77,7 +77,7 @@ export function validatePack(p: ProtocolPack): string[] {
     for (const x of ph.exercises ?? []) {
       const ex = getExercise(x);
       if (!ex) err(`phase ${ph.id} prescribes unknown exercise ${x}`);
-      else if (!(ex.usedIn?.[p.id] ?? []).includes(ph.id)) err(`exercise ${x} is used in ${ph.id} but its library record does not list this pack and phase`);
+      else if (!p.basedOn && !(ex.usedIn?.[p.id] ?? []).includes(ph.id)) err(`exercise ${x} is used in ${ph.id} but its library record does not list this pack and phase`);
     }
   }
 
