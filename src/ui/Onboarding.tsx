@@ -3,6 +3,8 @@ import type { Lang } from '../types';
 import { PACKS } from '../engine/packs';
 import { LIBRARY, exerciseName } from '../exercises/library';
 import { listOverridable } from '../engine/overrides';
+import { getSyncStatus } from '../sync/engine';
+import { newSyncKey } from '../sync/client';
 import { buildPatient, inviteUrl, validateOnboard, type OnboardDraft } from '../onboarding';
 import { qrSvg } from '../qr';
 import { clockMs, getState, setState } from '../store';
@@ -42,7 +44,8 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
   const approve = () => {
     try {
       const st = getState();
-      const p = buildPatient(d, { nowMs: clockMs(st), today: st.today });
+      let p = buildPatient(d, { nowMs: clockMs(st), today: st.today });
+      if (getSyncStatus().enabled) p = { ...p, syncKey: newSyncKey(), syncRole: 'physio' as const }; // live sync: this computer is the physio's side
       setState({ ...st, patients: [...st.patients, p] });
       const base = window.location.href.split('#')[0];
       setMade({ id: p.id, url: inviteUrl(p, base) });
@@ -118,7 +121,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
           <p>Send this link, or let the patient scan the code. It opens {d.name}'s plan on their phone.</p>
           {qrOrNull(made.url) ? <div className="qr" dangerouslySetInnerHTML={{ __html: qrOrNull(made.url)! }} /> : <p className="tiny">This plan is too large for a QR code. Send the link instead.</p>}
           <p className="linkbox"><input readOnly value={made.url} aria-label="Invite link" onFocus={(e) => e.currentTarget.select()} /> <button className="btn" onClick={copy}>Copy link</button></p>
-          <p className="tiny">The link carries the patient's name and plan, so share it privately. Until the backend arrives (Phase 6), the patient's answers stay on the phone that opens the link.</p>
+          <p className="tiny">{getSyncStatus().enabled ? "The link carries the patient's name, plan and a secret sync key, so share it privately and only with the patient. Live sync is on: their check-ins will appear here by themselves, and your plan changes will reach their phone." : "The link carries the patient's name and plan, so share it privately. Live sync is not set up, so the patient's answers stay on the phone that opens the link."}</p>
           <div className="btnrow"><button className="btn primary" onClick={() => { setState({ ...getState(), activeId: made.id }); onClose(); }}>Done</button></div>
         </div>
       )}

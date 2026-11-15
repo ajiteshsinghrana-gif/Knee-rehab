@@ -5,6 +5,7 @@ import { getPack, PACKS } from './engine/packs';
 import { buildImportedPack } from './import/apply';
 import { buildConditionPack, fatDraft, slimDraft, type ConditionDraft } from './author/condition';
 import { compress, decompress } from './lzss';
+import { validSyncKey } from './sync/client';
 import type { ProtocolPack } from './types';
 import { applyAction, normalizePatient, planDefaults, PHYSIO } from './engine/plan';
 import { getExercise } from './exercises/library';
@@ -77,7 +78,7 @@ export function buildPatient(d: OnboardDraft, ctx: { nowMs: number; today: strin
 }
 
 // ---------------- invite link (Phase 3.1) ----------------
-interface Invite { cg?: 1; v: 1; i: string; n: string; a: number; p: string; l: Lang; d: string; ph: string; ps: string; s: number; e?: string; cp?: { base: string; file: string; fields: { target: string; value: number | string[] }[] }; ca?: Record<string, unknown>; plan: Plan }
+interface Invite { sk?: string; cg?: 1; v: 1; i: string; n: string; a: number; p: string; l: Lang; d: string; ph: string; ps: string; s: number; e?: string; cp?: { base: string; file: string; fields: { target: string; value: number | string[] }[] }; ca?: Record<string, unknown>; plan: Plan }
 
 const b64 = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64bytes = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
@@ -94,7 +95,7 @@ function customPart(p: Patient): { cp?: Invite['cp']; ca?: Invite['ca'] } {
 }
 
 export function encodeInvite(p: Patient): string {
-  const inv: Invite = { v: 1, i: p.id, n: p.name, a: p.age, p: p.packId, l: p.language, ...(p.caregiverMode ? { cg: 1 as const } : {}), d: p.anchorDate, ph: p.currentPhase, ps: p.phaseStartDate, s: p.sessionsPrescribedPerDay, ...(p.enrolledOn ? { e: p.enrolledOn } : {}), ...customPart(p), plan: p.plan };
+  const inv: Invite = { v: 1, i: p.id, n: p.name, a: p.age, p: p.packId, l: p.language, ...(p.caregiverMode ? { cg: 1 as const } : {}), ...(p.syncKey ? { sk: p.syncKey } : {}), d: p.anchorDate, ph: p.currentPhase, ps: p.phaseStartDate, s: p.sessionsPrescribedPerDay, ...(p.enrolledOn ? { e: p.enrolledOn } : {}), ...customPart(p), plan: p.plan };
   return pack64(JSON.stringify(inv));
 }
 
@@ -113,7 +114,7 @@ export function decodeInvite(code: string): { patient: Patient; pack?: ProtocolP
     const pack = PACKS[x.p];
     if (!pack.phases.some((ph) => ph.id === x.ph)) return null;
     const patient = normalizePatient({
-      id: x.i, name: x.n.slice(0, 80), age: Number(x.a) || 0, packId: x.p, language: isLang(x.l) ? x.l : 'en', ...(x.cg === 1 ? { caregiverMode: true } : {}), anchorDate: x.d, ...(isDate(x.e) ? { enrolledOn: x.e } : {}), currentPhase: x.ph, phaseStartDate: x.ps,
+      id: x.i, name: x.n.slice(0, 80), age: Number(x.a) || 0, packId: x.p, language: isLang(x.l) ? x.l : 'en', ...(x.cg === 1 ? { caregiverMode: true } : {}), ...(validSyncKey(x.sk) ? { syncKey: x.sk, syncRole: 'patient' as const } : {}), anchorDate: x.d, ...(isDate(x.e) ? { enrolledOn: x.e } : {}), currentPhase: x.ph, phaseStartDate: x.ps,
       sessionsPrescribedPerDay: Number(x.s) || 2, daily: [], periodic: [], reviewed: {}, decisions: [], ...planDefaults(), plan: { ...planDefaults().plan, ...x.plan },
     });
     return { patient, ...(built ? { pack: built } : {}) };

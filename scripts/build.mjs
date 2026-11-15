@@ -8,6 +8,8 @@ await build({
   jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'info',
 });
 copyFileSync('index.html', 'docs/index.html');
+// Live sync settings (Phase 6.1). Empty url means sync is off.
+if (existsSync('sync.config.json')) copyFileSync('sync.config.json', 'docs/sync.json');
 // pdf.js is loaded only when a PDF is imported; its files are served next to the app.
 mkdirSync('docs/vendor', { recursive: true });
 for (const f of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {

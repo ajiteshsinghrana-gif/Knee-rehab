@@ -85,3 +85,7 @@
 .curveedit input[type=number] { width: 90px; }
 .scope { border: 1px solid #cfd8d6; border-radius: 8px; margin: 8px 0; }
 .scope label { display: block; padding: 2px 0; }
+
+/* Phase 6.1: live sync */
+.syncchip { display: block; padding: 4px 12px; font-size: 13px; background: #e7f4ee; color: #0a5a3c; }
+.syncchip.bad { background: #fdecea; color: #8c1d18; }

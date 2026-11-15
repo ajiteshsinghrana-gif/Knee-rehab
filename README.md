@@ -300,3 +300,26 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | exercise wall-slide dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
 
 <!-- SIGNOFF:END -->
+
+## Live sync (Phase 6.1)
+
+Patient phones and the physio dashboard can share data through a Supabase table, so a check-in done on the patient's phone appears on the physio screen, and approved plan changes reach the patient's phone.
+
+**Set up (once, about 10 minutes):**
+1. Create a free project at supabase.com.
+2. SQL Editor: paste and run `supabase/schema.sql`.
+3. Project Settings > API: copy the Project URL and the `anon` public key.
+4. Put them in `sync.config.json` as `{ "url": "...", "anonKey": "..." }`, then run `node scripts/build.mjs` and commit `docs/`.
+Leaving both empty keeps sync off; the app then works exactly as before.
+
+**What goes each way:**
+- Phone to physio ("up"): daily and weekly/monthly check-ins, language, caregiver mode, which notices were seen.
+- Physio to phone ("down"): name, age, dates, current phase, sessions per day, the plan (with physio reasons removed) and notices.
+- Never leaves the physio computer: audit log, decisions, review state, and every physio reason. Incoming data is validated and copied field by field; the phone can never change a plan.
+
+**Limits (be honest in the demo):**
+- Security is a secret link/key only. Anyone with a patient's invite link can read and write that patient's rows. There is no real login yet. **Do not use real patient data** until proper authentication, consent and compliance are in place.
+- Tested only against a fake local server (`scripts/fake-supabase.mjs`), not a real Supabase project. Expect to fix small setup issues the first time.
+- Offline: the app keeps working and catches up when the connection returns.
+- The physio device keeps the keys in its browser storage, so one physio device only.
+- Demo patients are never synced. The demo calendar (Fast-forward) is shared by all and is not synced.

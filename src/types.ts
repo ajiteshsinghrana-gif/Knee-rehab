@@ -307,6 +307,10 @@ export interface Patient {
   language: Lang;
   /** True when a family member or carer usually answers on this phone (Phase 5.3). Changes only who is recorded as answering. */
   caregiverMode?: boolean;
+  /** Secret that ties this patient's data in the cloud together (Phase 6.1). Whoever holds it can read and write that patient's sync rows. */
+  syncKey?: string;
+  /** Which side of the sync this device is: the physio who created the patient, or the patient's own phone. */
+  syncRole?: 'physio' | 'patient';
   anchorDate: string; // surgery date
   currentPhase: string; // phase id
   phaseStartDate: string;
