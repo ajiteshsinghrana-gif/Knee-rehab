@@ -10,6 +10,12 @@ import { getSyncStatus, subscribeSync } from '../sync/engine';
 
 const route = (): 'patient' | 'clinician' => (window.location.hash === '#clinician' ? 'clinician' : 'patient');
 
+// A phone that joined through an invite link becomes a patient-only phone: no demo bar, no tabs, no patient picker.
+// Typing #demo in the address clears it again (for a laptop used to show both sides).
+const PATIENT_ONLY = 'rehabpath-patient-only';
+const getPatientOnly = () => { try { return localStorage.getItem(PATIENT_ONLY) === '1'; } catch { return false; } };
+const setPatientOnly = (on: boolean) => { try { on ? localStorage.setItem(PATIENT_ONLY, '1') : localStorage.removeItem(PATIENT_ONLY); } catch { /* storage blocked: stays in demo mode */ } };
+
 function SyncChip() {
   const s = useSyncExternalStore(subscribeSync, getSyncStatus);
   if (!s.enabled) return null;
@@ -21,14 +27,18 @@ function SyncChip() {
 export function App() {
   const state = useSyncExternalStore(subscribe, getState);
   const [view, setView] = useState(route);
+  const [patientOnly, setPO] = useState(getPatientOnly);
   useEffect(() => {
     // Invite link / QR code: #join=<code> adds the patient on this device and opens their phone view.
     const join = () => {
       const m = /^#join=(.+)$/.exec(window.location.hash);
+      if (window.location.hash === '#demo') { setPatientOnly(false); setPO(false); window.location.hash = 'patient'; return; }
       if (!m) return;
       const inv = decodeInvite(m[1]);
       const st = getState();
       if (inv) setState({ ...st, patients: st.patients.some((p) => p.id === inv.patient.id) ? st.patients : [...st.patients, inv.patient], customPacks: inv.pack && !(st.customPacks ?? []).some((c) => c.id === inv.pack!.id) ? [...(st.customPacks ?? []), inv.pack] : st.customPacks, activeId: inv.patient.id });
+      // the physio's own device already holds this patient (as the owner), so it must stay in full mode
+      if (inv && !st.patients.some((p) => p.id === inv.patient.id && p.syncRole === 'physio')) { setPatientOnly(true); setPO(true); }
       window.location.hash = 'patient';
     };
     join();
@@ -49,6 +59,8 @@ export function App() {
     const date = next.daily[next.daily.length - 1].date;
     setState({ ...state, patients: state.patients.map((p) => (p.id === 'ravi' ? next : p)), today: addDays(date, 1), demoStep: step + 1 });
   };
+
+  if (patientOnly && view === 'patient') return <><SyncChip /><PatientView key={patient.id} patient={patient} /></>;
 
   return (
     <>

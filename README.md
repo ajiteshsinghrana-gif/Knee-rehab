@@ -323,3 +323,6 @@ Leaving both empty keeps sync off; the app then works exactly as before.
 - Offline: the app keeps working and catches up when the connection returns.
 - The physio device keeps the keys in its browser storage, so one physio device only.
 - Demo patients are never synced. The demo calendar (Fast-forward) is shared by all and is not synced.
+
+### Patient-only phones (Phase 6.2)
+A phone that opens a patient's invite link becomes a patient-only phone: no demo bar, no tabs, no patient picker, and it stays that way when reopened. The physio's own device (which created the patient) stays in full mode even if it opens the same link. To bring a phone back to full demo mode, open the app address followed by `#demo`. This is a tidy-up for the demo, not a security feature: the real protection is that only the physio device can change a plan.
