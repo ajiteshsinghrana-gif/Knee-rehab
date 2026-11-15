@@ -229,6 +229,8 @@ export interface ProtocolPack {
   basedOn?: string;
   /** The approved import this pack was built from, so an invite link can rebuild it on another device. */
   imported?: { file: string; fields: { target: string; value: number | string[] }[] };
+  /** The physio's own protocol for a condition the app does not ship (Phase 3.3). Rebuilds the pack and its exercises on another device. */
+  authored?: unknown;
   condition: Bi;
   population: string;
   version: string;

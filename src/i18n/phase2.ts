@@ -1,5 +1,6 @@
 // Phase 2 strings (exercise cards, physio-review notices). Every key exists in both languages (tested).
 export const p2En: Record<string, string> = {
+  dayBefore: 'before you joined',
   exTodayTitle: "Today's exercises",
   exTodaySub: 'Tap Done or Could not do for each one.',
   exDone: 'Done',
@@ -24,6 +25,7 @@ export const p2En: Record<string, string> = {
   readUnsupported: 'Read-aloud is not available on this device.',
 };
 export const p2Hi: Record<string, string> = {
+  dayBefore: 'जुड़ने से पहले',
   exTodayTitle: 'आज की कसरतें',
   exTodaySub: 'हर कसरत के लिए "हो गया" या "नहीं कर पाया" दबाएं।',
   exDone: 'हो गया',

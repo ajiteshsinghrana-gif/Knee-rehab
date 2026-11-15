@@ -10,7 +10,7 @@ const show = (v: number | string[]) => (Array.isArray(v) ? (v.length ? v.map((id
 
 /** Phase 3.2: physio uploads a file or pastes text; each imported value is reviewed next to the default and approved one by one. */
 export function ImportProtocol({ onClose }: { onClose: () => void }) {
-  const packs = Object.values(PACKS).filter((p) => !p.basedOn);
+  const packs = Object.values(PACKS).filter((p) => !p.basedOn && !p.authored);
   const [baseId, setBaseId] = useState(packs[0].id);
   const base = PACKS[baseId];
   const [text, setText] = useState('');

@@ -89,6 +89,17 @@ Copy a pack in `src/packs/`, register it in `src/engine/packs.ts`, run `npm test
 - AI-assisted extraction is deferred to Phase 6 (needs a backend). Scanned PDFs have no text layer: paste the text instead.
 - The invite link carries the patient's name and plan, so share it privately. Until Phase 6, a patient's answers stay on the phone that opened the link.
 
+## Any condition (Phase 3.3)
+
+- **+ Add a condition** (physio dashboard): the physio writes a protocol for a condition the app does not ship. Phases and their exercises, weekly measures the patient enters (angle, distance, weight, a score), the criteria to move to the next phase, threshold alerts, extra warning signs and restricted movements are all typed by the physio. A draft can be downloaded and loaded again as a JSON file.
+- **New exercises**: the physio can write exercises (English and Hindi name, optional dose). They join the shared library. A dose left empty shows "as shown by your physio" and is listed for sign-off. Pictures are one shared placeholder (`public/media/custom.svg`) until real ones are supplied.
+- **Always on, cannot be removed**: fever, calf pain or redness, wound fluid, spreading redness, chest pain or breathlessness (SAFETY, source tag `SAFETY`), new numbness or tingling, several signals together, pain rising, missed sessions.
+- **No invented values.** What the physio types is tagged `PHYSIO_AUTHORED`. The alert timings (response hours, missed sessions, several signals, pain rising, follow-up proposal) are either typed by the physio or filled with the project's existing placeholders, which are tagged `NEEDS_PHYSIO_SIGNOFF` and appear in the sign-off list shown for every patient of that condition.
+- **Patient text is English and Hindi.** Every patient-facing field the physio writes must have both; the form refuses to save otherwise.
+- **Same validator.** The pack is checked by the same validator as the shipped packs. A refused pack leaves nothing behind.
+- **Invite links** carry the written protocol so the patient's phone rebuilds it. The link is too long for a QR code for most written conditions; the app says so and shows the link.
+- A saved condition cannot be edited (patients' plans refer to it). Save a new version instead. Importing a protocol file (3.2) works on the shipped conditions only. No expected-recovery curves yet for written conditions, so the "below the curve" alert is not available for them.
+
 ## Run
 
 ```
@@ -100,7 +111,7 @@ npm run signoff   # refresh the list below from the packs
 
 ## Known limits
 
-- Phases 0 to 3 are built. Monitoring additions (photo angle, questionnaires), caregiver mode, third language, Supabase, FHIR and AI extraction are not.
+- Phases 0 to 3 (including written conditions) are built. Monitoring additions (photo angle, questionnaires), caregiver mode, third language, Supabase, FHIR and AI extraction are not.
 - The photo field stores the file name only. There is no upload yet.
 - The Overdue clock in the demo uses the demo calendar, not real time.
 - Adherence (A3) divides by the full 7-day window even in the first week after surgery, as in the previous build. A patient with few days of data can trip A3.

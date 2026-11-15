@@ -26,6 +26,7 @@ function mk(actual: any, neg = false) {
     toContain: (e: any) => chk(actual.includes(e), `expected ${JSON.stringify(actual)} to contain ${JSON.stringify(e)}`),
     toMatch: (re: RegExp | string) => chk(typeof re === 'string' ? String(actual).includes(re) : re.test(String(actual)), `expected ${JSON.stringify(actual)} to match ${re}`),
     toBeNull: () => chk(actual === null, `expected ${JSON.stringify(actual)} null`),
+    toBeDefined: () => chk(actual !== undefined, "expected a defined value"),
     toBeTruthy: () => chk(!!actual, `expected ${JSON.stringify(actual)} truthy`),
     toBeFalsy: () => chk(!actual, `expected ${JSON.stringify(actual)} falsy`),
     toBeUndefined: () => chk(actual === undefined, `expected ${JSON.stringify(actual)} undefined`),

@@ -1,7 +1,8 @@
 import type { Patient, PeriodicEntry, ProtocolPack, Value } from './types';
 import { addDays } from './engine/dates';
 import { normalizePatient, planDefaults } from './engine/plan';
-import { getPack, registerPack } from './engine/packs';
+import { getPack } from './engine/packs';
+import { restoreAuthoredPack } from './author/condition';
 import { DEMO_TODAY_LAST, makeAllPatients } from './demo/seed';
 
 export const STORAGE_KEY = 'rehabpath-v1';
@@ -80,7 +81,7 @@ export function loadState(storage: Storage | null = typeof localStorage === 'und
     if (cur) {
       const s = JSON.parse(cur) as AppState;
       if (s?.version === 1 && Array.isArray(s.patients)) {
-        for (const cp of s.customPacks ?? []) { try { registerPack(cp); } catch { /* an invalid saved pack is ignored, never used */ } }
+        for (const cp of s.customPacks ?? []) { try { restoreAuthoredPack(cp); } catch { /* an invalid saved pack is ignored, never used */ } }
         const known = (id: string) => { try { getPack(id); return true; } catch { return false; } };
         const patients = s.patients.filter((x) => known(x.packId)).map(normalizePatient);
         if (patients.length) return { ...s, patients, activeId: patients.some((x) => x.id === s.activeId) ? s.activeId : patients[0].id };

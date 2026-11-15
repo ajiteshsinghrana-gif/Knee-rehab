@@ -3,7 +3,7 @@ import type { Lang, Patient, ProtocolPack, Value } from '../types';
 import { L, t } from '../i18n';
 import { getPack } from '../engine/packs';
 import { addDays, diffDays } from '../engine/dates';
-import { triage } from '../engine/triage';
+import { careStart, triage } from '../engine/triage';
 import { clockMs, getState, updatePatient } from '../store';
 import {
   activePrecautions, applyVoice, draftFromEntry, dueState, isComplete, newDraft, saveCheckIn, saveQuestionnaire, saveWeekly, toDaily,
@@ -81,8 +81,9 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
         <div className="dots">
           {last7.map((d) => {
             const e = patient.daily.find((x) => x.date === d);
-            const [cls, ch] = e ? sym[e.exercises] : d === today ? ['', '·'] : ['miss', '✕'];
-            return <span key={d} className={`dot ${cls}`} role="img" aria-label={e ? T(e.exercises === 'all' ? 'dayOk' : e.exercises === 'some' ? 'dayPart' : 'dayMiss') : d === today ? T('dayToday') : T('dayMiss')}>{ch}</span>;
+            const before = !e && d < careStart(patient); // before the patient joined: not a missed day
+            const [cls, ch] = e ? sym[e.exercises] : d === today || before ? ['', '·'] : ['miss', '✕'];
+            return <span key={d} className={`dot ${cls}`} role="img" aria-label={e ? T(e.exercises === 'all' ? 'dayOk' : e.exercises === 'some' ? 'dayPart' : 'dayMiss') : d === today ? T('dayToday') : before ? T('dayBefore') : T('dayMiss')}>{ch}</span>;
           })}
         </div>
       </div>
