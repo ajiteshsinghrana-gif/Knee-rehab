@@ -1,0 +1,820 @@
+{
+ "id": "total-knee-replacement",
+ "condition": {
+  "en": "Total knee replacement",
+  "hi": "घुटना प्रत्यारोपण (टोटल नी रिप्लेसमेंट)"
+ },
+ "population": "Adults after primary total knee replacement. STRUCTURE ONLY: every clinical number is a placeholder until the physio signs off.",
+ "version": "0.1.0-placeholder",
+ "sources": [
+  "Structure follows the ACL pack; no clinical source adopted yet. Physio to supply protocol."
+ ],
+ "anchorLabel": {
+  "en": "after surgery",
+  "hi": "सर्जरी के बाद"
+ },
+ "phases": [
+  {
+   "id": "p1",
+   "order": 1,
+   "name": {
+    "en": "Phase 1: early recovery (swelling, bending, walking)",
+    "hi": "चरण 1: शुरुआती रिकवरी (सूजन, मोड़ना, चलना)"
+   },
+   "exercises": [
+    {
+     "id": "ice-elevation",
+     "name": {
+      "en": "Ice and leg elevation",
+      "hi": "बर्फ और पैर ऊंचा रखना"
+     }
+    },
+    {
+     "id": "ankle-pumps",
+     "name": {
+      "en": "Ankle pumps",
+      "hi": "टखने की पंपिंग"
+     }
+    },
+    {
+     "id": "quad-set",
+     "name": {
+      "en": "Quad setting (tighten the thigh)",
+      "hi": "जांघ कसना (क्वाड सेटिंग)"
+     }
+    },
+    {
+     "id": "heel-slides",
+     "name": {
+      "en": "Heel slides",
+      "hi": "एड़ी खिसकाना"
+     }
+    },
+    {
+     "id": "straight-leg-raise",
+     "name": {
+      "en": "Straight leg raise",
+      "hi": "सीधा पैर उठाना"
+     }
+    },
+    {
+     "id": "walking-aid",
+     "name": {
+      "en": "Walking with your walking aid",
+      "hi": "सहारे (वॉकर/छड़ी) के साथ चलना"
+     }
+    }
+   ],
+   "sessionsPerDay": 2,
+   "followUpEveryDays": 7,
+   "expectedWeeks": [
+    0,
+    6
+   ],
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  {
+   "id": "p2",
+   "order": 2,
+   "name": {
+    "en": "Phase 2: strength and everyday function",
+    "hi": "चरण 2: ताकत और रोज़मर्रा के काम"
+   },
+   "exercises": [
+    {
+     "id": "sit-to-stand",
+     "name": {
+      "en": "Sit to stand",
+      "hi": "बैठकर उठना"
+     }
+    },
+    {
+     "id": "mini-squats",
+     "name": {
+      "en": "Mini squats",
+      "hi": "छोटे स्क्वैट"
+     }
+    },
+    {
+     "id": "step-ups",
+     "name": {
+      "en": "Step-ups",
+      "hi": "स्टेप-अप (सीढ़ी चढ़ना)"
+     }
+    },
+    {
+     "id": "stationary-cycling",
+     "name": {
+      "en": "Stationary cycling",
+      "hi": "स्थिर साइकिल"
+     }
+    },
+    {
+     "id": "balance",
+     "name": {
+      "en": "Balance exercises",
+      "hi": "संतुलन की कसरत"
+     }
+    },
+    {
+     "id": "walking",
+     "name": {
+      "en": "Walking",
+      "hi": "टहलना"
+     }
+    }
+   ],
+   "sessionsPerDay": 2,
+   "followUpEveryDays": 7,
+   "expectedWeeks": [
+    0,
+    12
+   ],
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  {
+   "id": "p3",
+   "order": 3,
+   "name": {
+    "en": "Phase 3: return to activity",
+    "hi": "चरण 3: रोज़ की गतिविधियों में वापसी"
+   },
+   "exercises": [
+    {
+     "id": "walking-programme",
+     "name": {
+      "en": "Walking programme",
+      "hi": "टहलने का कार्यक्रम"
+     }
+    },
+    {
+     "id": "stairs-practice",
+     "name": {
+      "en": "Stairs practice",
+      "hi": "सीढ़ी का अभ्यास"
+     }
+    }
+   ],
+   "sessionsPerDay": 2,
+   "followUpEveryDays": 7,
+   "expectedWeeks": [
+    0,
+    null
+   ],
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  }
+ ],
+ "measures": [
+  {
+   "id": "pain",
+   "label": {
+    "en": "Pain",
+    "hi": "दर्द"
+   },
+   "question": {
+    "en": "How much does your knee hurt?",
+    "hi": "आपके घुटने में कितना दर्द है?"
+   },
+   "unit": "0-10",
+   "capture": "tap",
+   "frequency": "daily",
+   "valueType": "number",
+   "scale": {
+    "min": 0,
+    "max": 10
+   }
+  },
+  {
+   "id": "swelling",
+   "label": {
+    "en": "Swelling",
+    "hi": "सूजन"
+   },
+   "question": {
+    "en": "Is your knee swollen?",
+    "hi": "क्या घुटने में सूजन है?"
+   },
+   "unit": null,
+   "capture": "tap",
+   "frequency": "daily",
+   "valueType": "enum",
+   "options": [
+    {
+     "id": "less",
+     "label": {
+      "en": "Less",
+      "hi": "कम"
+     }
+    },
+    {
+     "id": "same",
+     "label": {
+      "en": "Same",
+      "hi": "वैसी ही"
+     }
+    },
+    {
+     "id": "more",
+     "label": {
+      "en": "More",
+      "hi": "ज़्यादा"
+     }
+    }
+   ]
+  },
+  {
+   "id": "flexionDeg",
+   "label": {
+    "en": "How far can you bend it?",
+    "hi": "आप घुटना कितना मोड़ पाते हैं?"
+   },
+   "hint": {
+    "en": "Slide your heel towards your bottom. Type the angle in degrees.",
+    "hi": "एड़ी को कूल्हे की तरफ खिसकाएं। कोण डिग्री में लिखें।"
+   },
+   "unit": "deg",
+   "capture": "photo",
+   "frequency": "weekly",
+   "valueType": "number",
+   "input": {
+    "min": 0,
+    "max": 160,
+    "step": 5
+   },
+   "short": {
+    "en": "Knee bend (degrees)",
+    "hi": "घुटना मोड़ना (डिग्री)"
+   }
+  },
+  {
+   "id": "extensionDeficitDeg",
+   "label": {
+    "en": "Can you straighten your knee fully?",
+    "hi": "क्या आप घुटना पूरा सीधा कर पाते हैं?"
+   },
+   "hint": {
+    "en": "Lie on your back. Type how many degrees short of fully straight the knee stays. 0 = fully straight.",
+    "hi": "पीठ के बल लेटें। घुटना पूरा सीधा होने से कितने डिग्री कम रहता है, वह लिखें। 0 = पूरा सीधा।"
+   },
+   "unit": "deg",
+   "capture": "number",
+   "frequency": "weekly",
+   "valueType": "number",
+   "input": {
+    "min": 0,
+    "max": 40,
+    "step": 1
+   },
+   "short": {
+    "en": "Extension deficit (degrees)",
+    "hi": "घुटना सीधा न होना (डिग्री)"
+   }
+  },
+  {
+   "id": "kneeCircumferenceDiffCm",
+   "label": {
+    "en": "Is the knee bigger than the other one?",
+    "hi": "क्या घुटना दूसरे घुटने से ज़्यादा सूजा है?"
+   },
+   "hint": {
+    "en": "Tape around the middle of each kneecap. Type how many cm bigger the operated knee is.",
+    "hi": "दोनों घुटनों की कटोरी के बीच में फीता लपेटें। ऑपरेशन वाला घुटना कितने सेमी बड़ा है, लिखें।"
+   },
+   "unit": "cm",
+   "capture": "number",
+   "frequency": "weekly",
+   "valueType": "number",
+   "input": {
+    "min": 0,
+    "max": 15,
+    "step": 0.5
+   }
+  }
+ ],
+ "gates": [
+  {
+   "fromPhase": "p1",
+   "toPhase": "p2",
+   "criteria": [
+    {
+     "id": "g1.flexion",
+     "label": {
+      "en": "Bending",
+      "hi": "घुटना मोड़ना"
+     },
+     "measure": "flexionDeg",
+     "operator": ">=",
+     "value": 90,
+     "source": "NEEDS_PHYSIO_SIGNOFF"
+    },
+    {
+     "id": "g1.extension",
+     "label": {
+      "en": "Knee straightening",
+      "hi": "घुटना सीधा करना"
+     },
+     "measure": "extensionDeficitDeg",
+     "operator": "<=",
+     "value": 5,
+     "source": "NEEDS_PHYSIO_SIGNOFF"
+    }
+   ]
+  },
+  {
+   "fromPhase": "p2",
+   "toPhase": "p3",
+   "criteria": [
+    {
+     "id": "g2.flexion",
+     "label": {
+      "en": "Bending",
+      "hi": "घुटना मोड़ना"
+     },
+     "measure": "flexionDeg",
+     "operator": ">=",
+     "value": 110,
+     "source": "NEEDS_PHYSIO_SIGNOFF"
+    },
+    {
+     "id": "g2.extension",
+     "label": {
+      "en": "Knee straightening",
+      "hi": "घुटना सीधा करना"
+     },
+     "measure": "extensionDeficitDeg",
+     "operator": "<=",
+     "value": 3,
+     "source": "NEEDS_PHYSIO_SIGNOFF"
+    }
+   ]
+  }
+ ],
+ "expectedCurves": [
+  {
+   "measure": "flexionDeg",
+   "better": "higher",
+   "tolerance": 10,
+   "points": [
+    [
+     0,
+     40
+    ],
+    [
+     2,
+     70
+    ],
+    [
+     6,
+     90
+    ],
+    [
+     12,
+     110
+    ]
+   ],
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  {
+   "measure": "extensionDeficitDeg",
+   "better": "lower",
+   "tolerance": 3,
+   "points": [
+    [
+     0,
+     15
+    ],
+    [
+     2,
+     10
+    ],
+    [
+     6,
+     5
+    ],
+    [
+     12,
+     0
+    ]
+   ],
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  }
+ ],
+ "precautions": [],
+ "warningSigns": [
+  {
+   "id": "calfPainOrRedness",
+   "label": {
+    "en": "Calf pain or redness",
+    "hi": "पिंडली में दर्द या लाली"
+   },
+   "ruleLabel": {
+    "en": "Red-flag symptom",
+    "hi": "खतरे का लक्षण"
+   },
+   "tier": "SAFETY",
+   "ruleId": "R1",
+   "source": "SAFETY",
+   "voice": [
+    "calf",
+    "pindli",
+    "पिंडली"
+   ]
+  },
+  {
+   "id": "fever",
+   "label": {
+    "en": "Fever",
+    "hi": "बुखार"
+   },
+   "ruleLabel": {
+    "en": "Red-flag symptom",
+    "hi": "खतरे का लक्षण"
+   },
+   "tier": "SAFETY",
+   "ruleId": "R1",
+   "source": "SAFETY",
+   "voice": [
+    "fever",
+    "temperature",
+    "bukhar",
+    "bukhaar",
+    "बुखार"
+   ]
+  },
+  {
+   "id": "woundDischarge",
+   "label": {
+    "en": "Fluid from the wound",
+    "hi": "घाव से पानी या मवाद"
+   },
+   "ruleLabel": {
+    "en": "Red-flag symptom",
+    "hi": "खतरे का लक्षण"
+   },
+   "tier": "SAFETY",
+   "ruleId": "R1",
+   "source": "SAFETY",
+   "voice": [
+    "discharge",
+    "\\bpus\\b",
+    "oozing",
+    "मवाद",
+    "रिस"
+   ]
+  },
+  {
+   "id": "spreadingRedness",
+   "label": {
+    "en": "Redness spreading",
+    "hi": "लाली फैल रही है"
+   },
+   "ruleLabel": {
+    "en": "Red-flag symptom",
+    "hi": "खतरे का लक्षण"
+   },
+   "tier": "SAFETY",
+   "ruleId": "R1",
+   "source": "SAFETY",
+   "voice": [
+    "spreading",
+    "लाली फैल",
+    "फैल रही"
+   ]
+  },
+  {
+   "id": "chestPainBreathless",
+   "label": {
+    "en": "Chest pain or breathlessness",
+    "hi": "सीने में दर्द या सांस फूलना"
+   },
+   "ruleLabel": {
+    "en": "Red-flag symptom",
+    "hi": "खतरे का लक्षण"
+   },
+   "tier": "SAFETY",
+   "ruleId": "R1",
+   "source": "SAFETY",
+   "voice": [
+    "chest",
+    "breathless",
+    "breathing",
+    "short of breath",
+    "seene",
+    "सीने",
+    "सांस",
+    "saans"
+   ]
+  },
+  {
+   "id": "fall",
+   "label": {
+    "en": "I had a fall",
+    "hi": "मैं गिर गया/गई"
+   },
+   "ruleLabel": {
+    "en": "Fall or giving way",
+    "hi": "गिरना या घुटना जवाब देना"
+   },
+   "tier": "URGENT",
+   "ruleId": "R2",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "voice": [
+    "\\bfell\\b",
+    "\\bfall\\b",
+    "गिर"
+   ]
+  },
+  {
+   "id": "givingWay",
+   "label": {
+    "en": "Knee gave way",
+    "hi": "घुटना जवाब दे गया"
+   },
+   "ruleLabel": {
+    "en": "Fall or giving way",
+    "hi": "गिरना या घुटना जवाब देना"
+   },
+   "tier": "URGENT",
+   "ruleId": "R2",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "voice": [
+    "giving way",
+    "gave way",
+    "giving out",
+    "buckl",
+    "जवाब दे"
+   ]
+  },
+  {
+   "id": "numbness",
+   "label": {
+    "en": "New or spreading numbness",
+    "hi": "नई या फैलती हुई सुन्नता"
+   },
+   "ruleLabel": {
+    "en": "New or spreading numbness",
+    "hi": "नई या फैलती हुई सुन्नता"
+   },
+   "tier": "REVIEW",
+   "ruleId": "A8",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "voice": [
+    "numb",
+    "tingl",
+    "sunn",
+    "सुन्न",
+    "झनझनाहट"
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "id": "R3",
+   "label": {
+    "en": "High pain",
+    "hi": "तेज़ दर्द"
+   },
+   "tier": "URGENT",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "threshold",
+   "measure": "pain",
+   "operator": ">=",
+   "stages": [
+    {
+     "minWeek": 0,
+     "maxWeek": 2,
+     "value": 7,
+     "source": "NEEDS_PHYSIO_SIGNOFF"
+    },
+    {
+     "minWeek": 2,
+     "maxWeek": 6,
+     "value": 7,
+     "source": "NEEDS_PHYSIO_SIGNOFF"
+    },
+    {
+     "minWeek": 6,
+     "maxWeek": null,
+     "value": 7,
+     "source": "NEEDS_PHYSIO_SIGNOFF"
+    }
+   ]
+  },
+  {
+   "id": "R5",
+   "label": {
+    "en": "Several amber signals together",
+    "hi": "कई चेतावनी संकेत एक साथ"
+   },
+   "tier": "URGENT",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "combination",
+   "ofTier": "REVIEW",
+   "minDistinct": 2,
+   "windowDays": 3,
+   "countSource": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  {
+   "id": "A1",
+   "label": {
+    "en": "Pain rising",
+    "hi": "दर्द बढ़ रहा है"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "trend",
+   "measure": "pain",
+   "direction": "up",
+   "delta": 2,
+   "window": 3,
+   "deltaSource": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  {
+   "id": "A2",
+   "label": {
+    "en": "Swelling increasing",
+    "hi": "सूजन बढ़ रही है"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "streak",
+   "metric": "measureEquals",
+   "measure": "swelling",
+   "equals": "more",
+   "count": 2,
+   "countSource": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  {
+   "id": "A3",
+   "label": {
+    "en": "Missed sessions",
+    "hi": "कसरत छूट रही है"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "streak",
+   "metric": "missedSessions",
+   "count": 2,
+   "orAdherenceBelowPct": 60,
+   "countSource": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  {
+   "id": "A6",
+   "label": {
+    "en": "Phase taking longer than expected",
+    "hi": "चरण अपेक्षा से लंबा चल रहा है"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "gateOverdue"
+  },
+  {
+   "id": "C1",
+   "label": {
+    "en": "Knee bend below the expected curve",
+    "hi": "घुटना मोड़ना अपेक्षित वक्र से नीचे"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "belowCurve",
+   "measure": "flexionDeg"
+  }
+ ],
+ "questionnaires": [],
+ "suggestedActions": {
+  "R1": [
+   "call-patient",
+   "reassess-bring-visit-forward"
+  ],
+  "R2": [
+   "call-patient",
+   "hold-progression",
+   "reassess-bring-visit-forward"
+  ],
+  "R3": [
+   "call-patient",
+   "hold-progression",
+   "reassess-bring-visit-forward"
+  ],
+  "R5": [
+   "hold-progression",
+   "reassess-bring-visit-forward",
+   "call-patient"
+  ],
+  "A1": [
+   "hold-progression",
+   "regress-exercise"
+  ],
+  "A2": [
+   "hold-progression",
+   "regress-exercise"
+  ],
+  "A3": [
+   "call-patient"
+  ],
+  "A6": [
+   "reassess-bring-visit-forward"
+  ],
+  "A8": [
+   "call-patient",
+   "reassess-bring-visit-forward"
+  ],
+  "C1": [
+   "reassess-bring-visit-forward",
+   "regress-exercise"
+  ]
+ },
+ "responseHours": {
+  "SAFETY": {
+   "hours": 2,
+   "source": "PLACEHOLDER; NEEDS_PHYSIO_SIGNOFF"
+  },
+  "URGENT": {
+   "hours": 24,
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "REVIEW": {
+   "hours": 72,
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  }
+ },
+ "adherenceWindowDays": 7,
+ "checkIn": {
+  "voiceExample": {
+   "en": "Say e.g. \"pain 4, swelling same, did all my exercises, stairs were hard, no fever\"",
+   "hi": "ऐसे बोलें: \"दर्द 4, सूजन वैसी ही, सारी कसरतें कीं, सीढ़ी चढ़ना मुश्किल था, बुखार नहीं\""
+  },
+  "dailyMeasures": [
+   "pain",
+   "swelling"
+  ],
+  "skipReasons": [
+   "pain",
+   "fear",
+   "time",
+   "access"
+  ],
+  "hardMovements": [
+   {
+    "id": "bending",
+    "label": {
+     "en": "Bending",
+     "hi": "घुटना मोड़ना"
+    },
+    "voice": [
+     "bend",
+     "मोड़"
+    ]
+   },
+   {
+    "id": "straightening",
+    "label": {
+     "en": "Straightening",
+     "hi": "घुटना सीधा करना"
+    },
+    "voice": [
+     "straighten",
+     "सीधा करना",
+     "सीधा"
+    ]
+   },
+   {
+    "id": "sit-to-stand",
+    "exerciseId": "sit-to-stand",
+    "label": {
+     "en": "Getting up from a chair",
+     "hi": "कुर्सी से उठना"
+    },
+    "voice": [
+     "chair",
+     "sit to stand",
+     "कुर्सी"
+    ]
+   },
+   {
+    "id": "walking",
+    "label": {
+     "en": "Walking",
+     "hi": "चलना"
+    },
+    "voice": [
+     "walk",
+     "चलन"
+    ]
+   },
+   {
+    "id": "stairs",
+    "label": {
+     "en": "Stairs",
+     "hi": "सीढ़ियां"
+    },
+    "voice": [
+     "stair",
+     "सीढ़ी",
+     "सीढ़ि",
+     "seedhi"
+    ]
+   }
+  ]
+ }
+}

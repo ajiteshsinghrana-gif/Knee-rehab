@@ -1,0 +1,31 @@
+// New strings added after the ACL-only version. Every key exists in both languages (tested).
+export const extraEn: Record<string, string> = {
+  appName: 'RehabPath',
+  safetyTitle: 'Seek care now: call 112',
+  safetyBody: 'You reported a warning sign. Do not wait for your next visit. Go to the nearest hospital or call 112.',
+  warnStepIntro: 'Tap Yes or No for every sign. Voice only suggests an answer; you must confirm it yourself.',
+  suggestedByVoice: 'Heard by voice, please confirm',
+  answerEverySign: 'Answer every question to save',
+  q_precautions: 'Did any of these happen today?',
+  yourExercises: 'Your exercises',
+  noQuestionnaire: 'No questionnaire is due for your plan.',
+  photoOptional: 'Add a photo (optional)',
+  demoPatient: 'Demo patient',
+  tapToAnswer: 'Tap to answer',
+  weeklyNone: 'No weekly self-test is needed for your plan.',
+};
+export const extraHi: Record<string, string> = {
+  appName: 'रिहैबपाथ',
+  safetyTitle: 'अभी इलाज लें: 112 पर कॉल करें',
+  safetyBody: 'आपने एक चेतावनी का लक्षण बताया है। अगली मुलाकात का इंतज़ार न करें। नज़दीकी अस्पताल जाएं या 112 पर कॉल करें।',
+  warnStepIntro: 'हर लक्षण के लिए हाँ या नहीं दबाएं। आवाज़ सिर्फ सुझाव देती है; पुष्टि आपको खुद करनी है।',
+  suggestedByVoice: 'आवाज़ से सुना, कृपया पुष्टि करें',
+  answerEverySign: 'सेव करने के लिए हर सवाल का जवाब दें',
+  q_precautions: 'क्या आज इनमें से कुछ हुआ?',
+  yourExercises: 'आपकी कसरतें',
+  noQuestionnaire: 'आपकी योजना में अभी कोई प्रश्नावली नहीं है।',
+  photoOptional: 'फोटो जोड़ें (वैकल्पिक)',
+  demoPatient: 'डेमो मरीज़',
+  tapToAnswer: 'जवाब देने के लिए दबाएं',
+  weeklyNone: 'आपकी योजना में साप्ताहिक जांच नहीं है।',
+};

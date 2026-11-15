@@ -1,0 +1,23 @@
+.pill.SAFETY{background:#5b0014}.pill.URGENT{background:#b3261e}.pill.REVIEW{background:#9a5b00}.pill.ON_PLAN{background:#1d6f42}
+.dot.SAFETY{background:#5b0014}.head.SAFETY{border-left-color:#5b0014}.rid.SAFETY{background:#5b0014}.pdl strong.SAFETY{color:#5b0014}
+.src.NEEDS_PHYSIO_SIGNOFF,.src.PLACEHOLDER{color:#9a5b00;font-weight:800}
+.src{font-size:.75rem}
+.overdue{display:inline-block;background:#fff;color:#b3261e;border:2px solid #b3261e;border-radius:999px;padding:1px 8px;font-weight:800;font-size:.75rem;margin-left:6px}
+.yn button.sug{outline:3px dashed #0a6b6b;outline-offset:2px}
+.sugnote{font-size:.8rem;color:#0a6b6b;font-weight:700}
+.safetybanner{background:#5b0014;color:#fff;border-radius:16px;padding:14px 16px}
+.safetybanner p{margin:6px 0 0}.safetybanner strong{font-size:1.25rem}
+.exlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.exlist li{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.selectrow{display:flex;gap:6px;align-items:center}
+.selectrow select{min-height:40px;border-radius:8px;border:2px solid #b9a24a;font:inherit;max-width:46vw}
+.placeholders{background:#fff3e0;border:1px solid #e0b36a;border-radius:10px;padding:10px;margin:0}
+.placeholders summary{cursor:pointer;font-weight:700}
+.placeholders ul{margin:6px 0 0;padding-left:18px;font-size:.8rem;max-height:240px;overflow:auto}
+.decisions{font-size:.85rem;margin:8px 0 0;padding-left:18px}
+.band{fill:#0a6b6b;opacity:.12}
+.tiny{font-size:.8rem;color:#33474f}
+.actrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)}
+.actrow .name{flex:1 1 180px;font-weight:700}
+.actrow input{flex:1 1 140px;min-height:40px;border:2px solid var(--line);border-radius:8px;padding:0 8px;font:inherit}
+.vtext{width:100%;min-height:72px;border:2px solid var(--line);border-radius:10px;padding:8px;font:inherit}
