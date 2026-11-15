@@ -97,8 +97,10 @@ Copy a pack in `src/packs/`, register it in `src/engine/packs.ts`, run `npm test
 - **No invented values.** What the physio types is tagged `PHYSIO_AUTHORED`. The alert timings (response hours, missed sessions, several signals, pain rising, follow-up proposal) are either typed by the physio or filled with the project's existing placeholders, which are tagged `NEEDS_PHYSIO_SIGNOFF` and appear in the sign-off list shown for every patient of that condition.
 - **Patient text is English and Hindi.** Every patient-facing field the physio writes must have both; the form refuses to save otherwise.
 - **Same validator.** The pack is checked by the same validator as the shipped packs. A refused pack leaves nothing behind.
-- **Invite links** carry the written protocol so the patient's phone rebuilds it. The link is too long for a QR code for most written conditions; the app says so and shows the link.
-- A saved condition cannot be edited (patients' plans refer to it). Save a new version instead. Importing a protocol file (3.2) works on the shipped conditions only. No expected-recovery curves yet for written conditions, so the "below the curve" alert is not available for them.
+- **Invite links** carry the written protocol so the patient's phone rebuilds it. Links are compressed (a built-in LZSS, `src/lzss.ts`) and leave out default values. A condition with one phase fits in a QR code; larger ones usually do not, and the app then shows the link only. Links made before compression still open.
+- **Expected recovery (optional)**: for a weekly measure the physio enters expected values by week since day zero and an allowed gap. This adds the existing below-the-curve alert (REVIEW; the rule tier is tagged `NEEDS_PHYSIO_SIGNOFF`, the curve itself `PHYSIO_AUTHORED`).
+- **New versions**: a saved condition cannot be edited. "Start from one of your written conditions" copies it into the form (new exercise ids, name gets "(version N)"); saving creates version N. The old condition and its patients are untouched. Moving an existing patient to a new version is not built.
+- Importing a protocol file (3.2) works on the shipped conditions only.
 
 ## Run
 

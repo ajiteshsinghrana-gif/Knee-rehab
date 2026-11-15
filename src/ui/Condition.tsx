@@ -3,7 +3,7 @@ import type { Bi, Operator } from '../types';
 import { LIBRARY } from '../exercises/library';
 import { PACKS } from '../engine/packs';
 import {
-  PAIN_ID, blankBi, blankDraft, buildConditionPack, newConditionId, placeholderAlerts, validateDraft,
+  PAIN_ID, draftAsNewVersion, blankBi, blankDraft, buildConditionPack, newConditionId, placeholderAlerts, validateDraft,
   type AlertGroup, type Alerts, type ConditionDraft,
 } from '../author/condition';
 import { clockMs, getState, setState } from '../store';
@@ -38,6 +38,7 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
   const [saved, setSaved] = useState('');
   const [msg, setMsg] = useState('');
   const up = (fn: (c: ConditionDraft) => void) => setD((x) => { const c: ConditionDraft = JSON.parse(JSON.stringify(x)); fn(c); return c; });
+  const written = Object.values(PACKS).filter((p) => p.authored);
   const problems = useMemo(() => validateDraft(d), [d]);
   const measureOptions = [{ id: PAIN_ID, label: 'Pain (daily, 0-10)' }, ...d.measures.map((m) => ({ id: m.id, label: m.label.en || m.id }))];
   const exOptions = [...d.exercises.map((x) => ({ id: x.id, name: x.name.en || '(new exercise)', isNew: true })), ...LIBRARY.filter((e) => !e.id.startsWith('custom-')).map((e) => ({ id: e.id, name: e.name.en, isNew: false })).sort((a, b) => a.name.localeCompare(b.name))];
@@ -51,7 +52,7 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
     c.precautions.forEach((p) => { p.phases = p.phases.filter((x) => x !== i).map((x) => (x > i ? x - 1 : x)); });
   });
   const addMeasure = () => up((c) => { const n = c.measures.reduce((m, x) => Math.max(m, Number(x.id.slice(1)) || 0), 0) + 1; c.measures.push({ id: `m${n}`, label: blankBi(), unit: '', min: 0, max: 100, step: 1 }); });
-  const removeMeasure = (id: string) => up((c) => { c.measures = c.measures.filter((m) => m.id !== id); c.gates.forEach((g) => { g.criteria = g.criteria.filter((k) => k.measure !== id); }); c.rules = c.rules.filter((r) => r.measure !== id); });
+  const removeMeasure = (id: string) => up((c) => { c.measures = c.measures.filter((m) => m.id !== id); c.gates.forEach((g) => { g.criteria = g.criteria.filter((k) => k.measure !== id); }); c.rules = c.rules.filter((r) => r.measure !== id); c.curves = c.curves.filter((k) => k.measure !== id); });
   const gateOf = (c: ConditionDraft, from: number) => { let g = c.gates.find((x) => x.from === from); if (!g) { g = { from, criteria: [] }; c.gates.push(g); } return g; };
 
   const save = () => {
@@ -71,7 +72,7 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
     try {
       const x = JSON.parse(await f.text());
       const base = blankDraft(d.id);
-      const arrays = ['phases', 'exercises', 'measures', 'gates', 'rules', 'precautions', 'signs'] as const;
+      const arrays = ['phases', 'exercises', 'measures', 'gates', 'rules', 'precautions', 'signs', 'curves'] as const;
       for (const k of arrays) if (x[k] !== undefined && !Array.isArray(x[k])) throw new Error(`"${k}" must be a list`);
       const next: ConditionDraft = { ...base, ...x, id: d.id };
       // exercise ids are tied to the draft id, so a loaded draft is renamed to this one
@@ -105,6 +106,13 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
       <p className="tiny">Write the protocol yourself. Every clinical value is typed or approved by you. The app only runs it and flags drift. Patient-facing text must be written in English and Hindi. A saved condition cannot be edited; save a new version instead.</p>
       {msg && <p className={msg.startsWith('Loaded') ? 'reviewed' : 'err'} role="alert">{msg}</p>}
       <div className="fu"><button className="btn" onClick={download}>Download draft</button><label className="filebtn">Load a draft file<input type="file" accept=".json,application/json" aria-label="Draft file" onChange={(e) => void load(e.target.files?.[0])} /></label></div>
+
+      {written.length > 0 && (
+        <label>Start from one of your written conditions (saved as a new version; the old one and its patients stay as they are)
+          <select aria-label="Copy a written condition" value="" onChange={(e) => { const pk = PACKS[e.target.value]; if (pk?.authored) { setD(draftAsNewVersion(pk.authored as ConditionDraft, d.id)); setMsg(`Copied ${pk.condition.en}. Change what you need, then save it as version ${((pk.authored as ConditionDraft).version ?? 1) + 1}.`); } }}>
+            <option value="">Choose a condition to copy</option>{written.map((w) => <option key={w.id} value={w.id}>{w.condition.en}</option>)}
+          </select></label>)}
+      {d.version > 1 && <p className="tiny">This is version {d.version}. Patients already on the earlier version stay on it. New patients can use this one.</p>}
 
       <h3>1. Condition</h3>
       <BiField label="Condition name" value={d.condition} onChange={(b) => up((c) => { c.condition = b; })} />
@@ -153,6 +161,25 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
           <button className="btn" onClick={() => removeMeasure(m.id)}>Remove measure</button>
         </div>))}
       <button className="btn" onClick={addMeasure}>+ Add a weekly measure</button>
+
+      <h3>4b. Expected recovery <small>(optional)</small></h3>
+      <p className="tiny">For a weekly measure, say where it should be by each week since day zero. If a patient falls outside the allowed gap, the physio gets a REVIEW alert.</p>
+      {d.curves.map((k, i) => (
+        <div className="subcard" key={i}>
+          <div className="fu">
+            <select aria-label="Curve measure" value={k.measure} onChange={(e) => up((c) => { c.curves[i].measure = e.target.value; })}><option value="">Choose a weekly measure</option>{d.measures.map((m) => <option key={m.id} value={m.id}>{m.label.en || m.id}</option>)}</select>
+            <select aria-label="Better is" value={k.better} onChange={(e) => up((c) => { c.curves[i].better = e.target.value as 'higher' | 'lower'; })}><option value="higher">Higher is better</option><option value="lower">Lower is better</option></select>
+            <label>Allowed gap<input type="number" min={0} step="any" aria-label="Allowed gap" value={k.tolerance || ''} onChange={(e) => up((c) => { c.curves[i].tolerance = Number(e.target.value); })} /></label>
+          </div>
+          {k.points.map((pt, j) => (
+            <div className="fu" key={j}>
+              <label>Week<input type="number" min={0} aria-label="Week" value={pt.week} onChange={(e) => up((c) => { c.curves[i].points[j].week = Number(e.target.value); })} /></label>
+              <label>Value<input type="number" step="any" aria-label="Expected value" value={pt.value} onChange={(e) => up((c) => { c.curves[i].points[j].value = Number(e.target.value); })} /></label>
+              <button className="btn" onClick={() => up((c) => { c.curves[i].points.splice(j, 1); })}>Remove point</button>
+            </div>))}
+          <div className="btnrow"><button className="btn" onClick={() => up((c) => { const l = c.curves[i].points; c.curves[i].points.push({ week: l.length ? l[l.length - 1].week + 1 : 0, value: 0 }); })}>+ Add a point</button><button className="btn" onClick={() => up((c) => { c.curves.splice(i, 1); })}>Remove expected recovery</button></div>
+        </div>))}
+      <button className="btn" disabled={d.measures.length === 0} onClick={() => up((c) => { c.curves.push({ measure: '', better: 'higher', tolerance: 0, points: [{ week: 0, value: 0 }, { week: 1, value: 0 }] }); })}>+ Add an expected recovery</button>
 
       <h3>5. When can a patient move to the next phase?</h3>
       {d.phases.length < 2 && <p className="tiny">One phase only: no criteria needed.</p>}
