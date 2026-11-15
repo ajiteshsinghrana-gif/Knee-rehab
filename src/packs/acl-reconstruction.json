@@ -815,7 +815,7 @@
      140
     ]
    ],
-   "source": "DEFAULT (curve); NEEDS_PHYSIO_SIGNOFF (tolerance)"
+   "source": "NEEDS_PHYSIO_SIGNOFF (placeholder curve and tolerance, no clinical source)"
   },
   {
    "measure": "extensionDeficitCm",
@@ -847,7 +847,7 @@
      0
     ]
    ],
-   "source": "DEFAULT (curve); NEEDS_PHYSIO_SIGNOFF (tolerance)"
+   "source": "NEEDS_PHYSIO_SIGNOFF (placeholder curve and tolerance, no clinical source)"
   }
  ],
  "precautions": [],

@@ -142,6 +142,19 @@ The physio can change a patient's treatment on his own, without waiting for a su
 
 Six demo patients: Ravi, Meera, Arjun, Sana (ACL), Kamla (knee replacement, Hindi, answered by her carer, below the expected curve) and Imran (rotator cuff, sling phase, Bengali, took the arm out of the sling). `DEMO.md` has a four-minute walk-through. Ravi's fast-forward and Meera's SAFETY flag are unchanged and tested.
 
+## Expected recovery curves (Phase 7.1)
+
+The shaded band on each recovery chart, and the "below the expected curve" alert (C1), come from an expected-recovery curve: a few (week, value) points plus an allowed difference. **The curves shipped with the three built-in conditions have no clinical source.** They are placeholders written to demonstrate the alert, tagged NEEDS_PHYSIO_SIGNOFF, and every chart shows "Placeholder curve: not clinically validated, awaiting physio sign-off" until a physio replaces it.
+
+On each patient, "Expected recovery curves" lets the physio replace a curve:
+- **This patient only**, or **all patients with this condition** (a clinic default).
+- Order of precedence: the patient's own curve, then the clinic default, then the protocol's curve. The shipped pack is never changed; the replacement is applied to a copy.
+- A written reason is required (put the source of the numbers there). It is saved in the audit log: on the patient for a patient curve, and on every patient of the condition for a clinic default.
+- Weeks must go up, at least two points, allowed difference above 0. The chart note then says who set the curve and why.
+- Either kind can be removed again (with a reason).
+- A clinic default is kept in this browser's saved state with the patients (there is no server yet, Phase 6), so on another phone or computer the clinic default is not there until the backend exists.
+- Only measures that already have a curve can be edited. A physio-written condition sets its curves in the "expected recovery" section of the form.
+
 ## Run
 
 ```
@@ -179,8 +192,8 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | phase p1 expectedWeeks / sessions / follow-up | [0,6], 2/day, every 7 d | DEFAULT (max weeks); NEEDS_PHYSIO_SIGNOFF (sessions, follow-up) |
 | phase p2 expectedWeeks / sessions / follow-up | [0,12], 2/day, every 7 d | DEFAULT (max weeks); NEEDS_PHYSIO_SIGNOFF (sessions, follow-up) |
 | phase p3 expectedWeeks / sessions / follow-up | [0,null], 0/day, every 7 d | MELBOURNE; NEEDS_PHYSIO_SIGNOFF (follow-up) |
-| curve flexionDeg | 7 points, tolerance 10 | DEFAULT (curve); NEEDS_PHYSIO_SIGNOFF (tolerance) |
-| curve extensionDeficitCm | 6 points, tolerance 0.5 | DEFAULT (curve); NEEDS_PHYSIO_SIGNOFF (tolerance) |
+| curve flexionDeg | 7 points, tolerance 10 | NEEDS_PHYSIO_SIGNOFF (placeholder curve and tolerance, no clinical source) |
+| curve extensionDeficitCm | 6 points, tolerance 0.5 | NEEDS_PHYSIO_SIGNOFF (placeholder curve and tolerance, no clinical source) |
 | warning sign numbness -> tier | REVIEW (A8) | NEEDS_PHYSIO_SIGNOFF |
 | rule R3 pain stage weeks 0-2 | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
 | rule R3 pain stage weeks 2-6 | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |

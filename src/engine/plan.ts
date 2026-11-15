@@ -7,6 +7,7 @@ import { getExercise } from '../exercises/library';
 import { addDays } from './dates';
 import { evaluateGate } from './gates';
 import { listOverridable } from './overrides';
+import { validateCurve } from './curves';
 
 export const PHYSIO = 'Demo physio';
 
@@ -69,6 +70,8 @@ export type PlanAction =
   | { type: 'change-follow-up'; checkInEveryDays: number; reviewEveryDays?: number; nextReviewDate: string | null; until?: string | null; note?: string; flagKey?: string; proposalStatus?: 'approved' | 'modified' }
   | { type: 'reject-proposal'; flagKey: string; note?: string }
   | { type: 'sign-off-phase'; note?: string }
+  | { type: 'set-curve'; measure: string; points: [number, number][]; tolerance: number; reason: string }
+  | { type: 'remove-curve'; measure: string; reason?: string }
   | { type: 'set-override'; target: string; value: number; reason: string }
   | { type: 'remove-override'; id: string; reason?: string }
   | { type: 'record'; action: string; status: 'approved' | 'modified'; note?: string };
@@ -198,6 +201,25 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       audit = entry(a.type, `Phase moved by the physio: ${p.currentPhase} to ${a.toPhase} (${direction})${overrode ? ', protocol overridden' : ''}`, { phase: p.currentPhase }, { phase: a.toPhase, direction, overrodeProtocol: overrode, unmetCriteria: unmet, holdWasOn: !!plan.hold }, a.note.trim());
       break;
     }
+    case 'set-curve': {
+      if (!a.reason || !a.reason.trim()) throw new Error('A reason is required to change an expected-recovery curve');
+      const base = pack.expectedCurves.find((x) => x.measure === a.measure);
+      if (!base) throw new Error('This condition has no expected curve for that measure');
+      const bad = validateCurve(a.points, a.tolerance);
+      if (bad) throw new Error(bad);
+      const prev = (plan.curveOverrides ?? []).find((x) => x.measure === a.measure);
+      const edit = { id: newId(ctx.nowMs), measure: a.measure, points: a.points.map(([w, v]) => [w, v] as [number, number]), tolerance: a.tolerance, reason: a.reason.trim(), by: who, at };
+      plan.curveOverrides = [...(plan.curveOverrides ?? []).filter((x) => x.measure !== a.measure), edit];
+      audit = entry(a.type, `Expected curve for ${a.measure} set for this patient`, prev ? { points: prev.points, tolerance: prev.tolerance } : { points: base.points, tolerance: base.tolerance }, { points: edit.points, tolerance: edit.tolerance }, a.reason.trim());
+      break;
+    }
+    case 'remove-curve': {
+      const prev = (plan.curveOverrides ?? []).find((x) => x.measure === a.measure);
+      if (!prev) throw new Error('This patient has no curve of their own for that measure');
+      plan.curveOverrides = (plan.curveOverrides ?? []).filter((x) => x.measure !== a.measure);
+      audit = entry(a.type, `Patient's own expected curve for ${a.measure} removed`, { points: prev.points, tolerance: prev.tolerance }, null, a.reason);
+      break;
+    }
     case 'set-override': {
       if (!a.reason || !a.reason.trim()) throw new Error('A reason is required for a per-patient override');
       const t = listOverridable(pack, p).find((x) => x.target === a.target);
@@ -240,4 +262,10 @@ export function applyManual(p: Patient, pack: ProtocolPack, a: PlanAction, reaso
   if (!(MANUAL_TYPES as readonly string[]).includes(a.type)) throw new Error('This change is not available as a manual change');
   const act: PlanAction = a.type === 'set-exercises' ? { ...a, note: why, notify: true } : ({ ...a, note: why } as PlanAction);
   return applyAction(p, pack, act, { ...ctx, manual: true });
+}
+
+/** Writes one audit line to a patient without changing their plan (used when a clinic-wide default changes). */
+export function withAuditNote(p: Patient, action: string, summary: string, before: unknown, after: unknown, note: string, ctx: Ctx): Patient {
+  const e: AuditEntry = { id: newId(ctx.nowMs), at: iso(ctx.nowMs), who: ctx.who ?? PHYSIO, action, summary, before, after, note, manual: true };
+  return { ...p, audit: [...p.audit, e] };
 }

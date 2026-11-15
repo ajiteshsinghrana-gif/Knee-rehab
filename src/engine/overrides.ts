@@ -1,5 +1,6 @@
 /** Per-patient threshold overrides (Phase 2.7). Applied to a copy of the pack, never to the pack itself. */
-import type { Patient, ProtocolPack, Rule } from '../types';
+import type { CurveEdit, Patient, ProtocolPack, Rule } from '../types';
+import { clinicCurvesFor } from './curves';
 
 export interface Overridable { target: string; label: string; base: number; current: number }
 
@@ -49,8 +50,16 @@ export function setPackValue(pack: ProtocolPack, target: string, value: number, 
 
 /** The pack as it applies to this patient. Overridden values are tagged PHYSIO_OVERRIDE with the reason. */
 export function effectivePack(p: Patient, pack: ProtocolPack): ProtocolPack {
-  if (!p.plan?.overrides?.length) return pack;
+  const clinic = clinicCurvesFor(pack.id);
+  const mine = p.plan?.curveOverrides ?? [];
+  if (!p.plan?.overrides?.length && !clinic.length && !mine.length) return pack;
   const eff: ProtocolPack = JSON.parse(JSON.stringify(pack));
-  for (const o of p.plan.overrides) setPackValue(eff, o.target, o.value, `PHYSIO_OVERRIDE: ${o.reason}`);
+  for (const o of p.plan?.overrides ?? []) setPackValue(eff, o.target, o.value, `PHYSIO_OVERRIDE: ${o.reason}`);
+  const put = (e: CurveEdit, tag: string) => {
+    const c = eff.expectedCurves.find((x) => x.measure === e.measure);
+    if (c) { c.points = e.points.map(([w, v]) => [w, v] as [number, number]); c.tolerance = e.tolerance; c.source = `${tag}: ${e.reason}`; }
+  };
+  for (const e of clinic) put(e, 'PHYSIO_CLINIC'); // all patients of this condition
+  for (const e of mine) put(e, 'PHYSIO_OVERRIDE'); // this patient only, wins
   return eff;
 }

@@ -8,6 +8,8 @@ const queue: { name: string; fn: Fn }[] = [];
 export function describe(name: string, fn: () => void) { suites.push(name); fn(); suites.pop(); }
 export function it(name: string, fn: Fn) { queue.push({ name: [...suites, name].join(' > '), fn }); }
 export const test = it;
+const afters: Fn[] = [];
+export function afterEach(fn: Fn) { afters.push(fn); }
 const eq = (a: any, b: any): boolean => {
   if (a === b) return true;
   if (typeof a !== 'object' || typeof b !== 'object' || !a || !b) return false;
@@ -47,7 +49,7 @@ export const expect = (a: any) => mk(a);
 export async function __run(): Promise<number> {
   let pass = 0, fail = 0;
   for (const t of queue) {
-    try { await t.fn(); pass++; console.log('  ok   ' + t.name); }
+    try { try { await t.fn(); } finally { for (const f of afters) await f(); } pass++; console.log('  ok   ' + t.name); }
     catch (e: any) { fail++; console.log('  FAIL ' + t.name + '\n       ' + String(e?.message ?? e).split('\n').join('\n       ')); }
   }
   console.log(`\n${pass} passed, ${fail} failed`);

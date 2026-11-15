@@ -78,3 +78,10 @@
 .adjust .fu { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
 .adjust .fu input { flex: 1 1 220px; }
 .warnline { display: flex; gap: 8px; align-items: flex-start; background: #fff6dd; border: 1px solid #e3c26b; border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+
+/* Phase 7.1: expected-recovery curves */
+.curverow { border-top: 1px solid #d9e1df; padding: 8px 0; }
+.curvenote { margin: 4px 0; }
+.curveedit input[type=number] { width: 90px; }
+.scope { border: 1px solid #cfd8d6; border-radius: 8px; margin: 8px 0; }
+.scope label { display: block; padding: 2px 0; }
