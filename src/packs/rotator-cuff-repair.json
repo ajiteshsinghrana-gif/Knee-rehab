@@ -99,8 +99,8 @@
     "hi": "आप बांह कितनी ऊंची उठा सकते हैं?"
    },
    "hint": {
-    "en": "Take a photo from the side while a helper holds your arm up as far as it comfortably goes. Your physio measures the angle.",
-    "hi": "किसी की मदद से बांह जितनी आराम से उठे उतनी उठाकर साइड से फोटो लें। फिज़ियो कोण मापेंगे।"
+    "en": "Take a photo from the side while a helper holds your arm up as far as it comfortably goes. Measure the angle on the photo, or type it.",
+    "hi": "किसी की मदद से बांह जितनी आराम से उठे उतनी उठाकर साइड से फोटो लें। फोटो पर कोण मापें, या खुद लिखें।"
    },
    "unit": "deg",
    "capture": "photo",
@@ -114,6 +114,23 @@
    "short": {
     "en": "Arm raise (degrees)",
     "hi": "बांह उठाना (डिग्री)"
+   },
+   "photoAngle": {
+    "reading": "between",
+    "points": [
+     {
+      "en": "your hip",
+      "hi": "कूल्हा"
+     },
+     {
+      "en": "your shoulder",
+      "hi": "कंधा"
+     },
+     {
+      "en": "your wrist",
+      "hi": "कलाई"
+     }
+    ]
    }
   }
  ],
@@ -429,6 +446,18 @@
    "source": "NEEDS_PHYSIO_SIGNOFF",
    "type": "belowCurve",
    "measure": "armRaiseDeg"
+  },
+  {
+   "id": "S1",
+   "label": {
+    "en": "No check-in for several days",
+    "hi": "कई दिन से कोई चेक-इन नहीं"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "silence",
+   "hours": 72,
+   "hoursSource": "NEEDS_PHYSIO_SIGNOFF"
   }
  ],
  "questionnaires": [],
@@ -468,6 +497,9 @@
   "P1": [
    "call-patient",
    "reassess-bring-visit-forward"
+  ],
+  "S1": [
+   "call-patient"
   ]
  },
  "responseHours": {

@@ -154,7 +154,9 @@ function silence(r: Extract<Rule, { type: 'silence' }>, p: Patient, nowMs?: numb
   const hours = (nowMs - lastMs) / 3_600_000;
   if (hours < r.hours) return null;
   const days = Math.floor(hours / 24);
-  return trig(r, `No check-in for ${days} day${days === 1 ? '' : 's'} (${Math.floor(hours)} h)`, last?.date ?? careStart(p));
+  const t = trig(r, `No check-in for ${days} day${days === 1 ? '' : 's'} (${Math.floor(hours)} h)`, last?.date ?? careStart(p));
+  // The label states how long, in both languages (Phase 4.3)
+  return { ...t, label: { en: `No check-in for ${days} day${days === 1 ? '' : 's'}`, hi: `${days} दिन से कोई चेक-इन नहीं` } };
 }
 
 function precautionBreach(r: Extract<Rule, { type: 'precautionBreach' }>, p: Patient, pack: ProtocolPack, d: string): Trigger | null {

@@ -29,13 +29,30 @@ export interface SignDraft { label: Bi; tier: 'REVIEW' | 'URGENT' }
 /** Expected values by week since day zero for one weekly measure. Drift beyond the band raises the existing below-the-curve alert. */
 export interface CurveDraft { measure: string; better: 'higher' | 'lower'; tolerance: number; points: { week: number; value: number }[] }
 
-export type AlertGroup = 'hours' | 'missed' | 'combination' | 'painRise' | 'followUp';
+/**
+ * A questionnaire the physio supplies (any validated score they are licensed to use, or their own).
+ * The app does not ship the text of licensed questionnaires such as the Oxford Knee or Shoulder Score.
+ * Scoring is the sum of the chosen option values.
+ */
+export interface QuestionnaireDraft {
+  title: Bi; intro: Bi; items: Bi[]; options: { value: number; label: Bi }[];
+  /** Author and terms of use, shown to the patient under the questions. */
+  credit: string;
+  /** The physio confirms they have permission to use it. Required. */
+  permission: boolean;
+  /** Optional REVIEW alert on the total score. */
+  alert?: { operator: Operator; value: number };
+}
+
+export type AlertGroup = 'hours' | 'missed' | 'combination' | 'painRise' | 'followUp' | 'silence';
 export interface Alerts {
   hours: { SAFETY: number; URGENT: number; REVIEW: number };
   missed: { count: number; adherencePct: number };
   combination: { minDistinct: number; windowDays: number };
   painRise: { delta: number; window: number };
   followUp: { teleHours: number; checkInDays: number; forDays: number };
+  /** Raise a REVIEW alert when the patient has not checked in for this many hours. */
+  silence: { hours: number };
   /** Where each group came from: the project placeholder (needs sign-off) or numbers the physio typed. */
   source: Record<AlertGroup, 'placeholder' | 'physio'>;
 }
@@ -46,7 +63,8 @@ export const placeholderAlerts = (): Alerts => ({
   combination: { minDistinct: 2, windowDays: 3 },
   painRise: { delta: 2, window: 3 },
   followUp: { teleHours: 48, checkInDays: 1, forDays: 7 },
-  source: { hours: 'placeholder', missed: 'placeholder', combination: 'placeholder', painRise: 'placeholder', followUp: 'placeholder' },
+  silence: { hours: 72 },
+  source: { hours: 'placeholder', missed: 'placeholder', combination: 'placeholder', painRise: 'placeholder', followUp: 'placeholder', silence: 'placeholder' },
 });
 
 export interface ConditionDraft {
@@ -65,6 +83,7 @@ export interface ConditionDraft {
   precautions: PrecautionDraft[];
   signs: SignDraft[];
   curves: CurveDraft[];
+  questionnaire?: QuestionnaireDraft;
   alerts: Alerts | null;
   /** 1 for a first condition; a copy saved as a new version is 2, 3 ... Old versions stay as they were. */
   version: number;
@@ -83,6 +102,7 @@ export const blankDraft = (id: string): ConditionDraft => ({
 });
 
 export const PAIN_ID = 'pain';
+export const QSCORE_ID = 'qscore';
 const OPS: Operator[] = ['>=', '>', '<=', '<', '==', '!='];
 const bi = (b?: Bi) => !!b && b.en.trim().length > 0 && b.hi.trim().length > 0;
 const num = (n: unknown) => typeof n === 'number' && Number.isFinite(n);
@@ -141,11 +161,22 @@ export function validateDraft(d: ConditionDraft): string[] {
       for (let k = 1; k < c.points.length; k++) if (!(c.points[k].week > c.points[k - 1].week)) { e.push(`${w}: weeks must increase from one point to the next`); break; }
     }
   });
+  const q = d.questionnaire;
+  if (q) {
+    if (!bi(q.title) || !bi(q.intro)) e.push('Questionnaire: write the title and the introduction in English and Hindi');
+    if (!q.items.length) e.push('Questionnaire: add at least one question');
+    q.items.forEach((it, i) => { if (!bi(it)) e.push(`Questionnaire question ${i + 1}: write it in English and Hindi`); });
+    if (q.options.length < 2) e.push('Questionnaire: add at least two answer options');
+    q.options.forEach((o, i) => { if (!bi(o.label) || !num(o.value)) e.push(`Questionnaire option ${i + 1}: needs a score and wording in English and Hindi`); });
+    if (!q.credit.trim()) e.push('Questionnaire: write who it is by and the terms of use (the credit line)');
+    if (!q.permission) e.push('Questionnaire: tick that you have permission to use it');
+    if (q.alert && (!OPS.includes(q.alert.operator) || !num(q.alert.value))) e.push('Questionnaire alert: choose a comparison and a number');
+  }
   d.signs.forEach((s, i) => { if (!bi(s.label)) e.push(`Extra warning sign ${i + 1}: write it in English and Hindi`); });
   const a = d.alerts;
   if (!a) e.push('Set the alert timings, or choose "Use placeholder values (needs sign-off)"');
   else {
-    const all = [a.hours.SAFETY, a.hours.URGENT, a.hours.REVIEW, a.missed.count, a.missed.adherencePct, a.combination.minDistinct, a.combination.windowDays, a.painRise.delta, a.painRise.window, a.followUp.teleHours, a.followUp.checkInDays, a.followUp.forDays];
+    const all = [a.hours.SAFETY, a.hours.URGENT, a.hours.REVIEW, a.missed.count, a.missed.adherencePct, a.combination.minDistinct, a.combination.windowDays, a.painRise.delta, a.painRise.window, a.followUp.teleHours, a.followUp.checkInDays, a.followUp.forDays, a.silence?.hours];
     if (!all.every((n) => num(n) && n > 0)) e.push('Every alert timing must be a number above 0');
     if (a.combination.minDistinct < 2) e.push('"Several signals together" needs at least 2 signals');
     if (a.painRise.window < 2) e.push('"Pain rising" needs a window of at least 2 check-ins');
@@ -211,6 +242,7 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
   d.rules.forEach((r, i) => rules.push({ id: `T${i + 1}`, label: sayRule(r.measure, r.operator, r.value), tier: r.tier, source: AUTHORED_TAG, type: 'threshold', measure: r.measure, operator: r.operator, stages: [{ minWeek: 0, maxWeek: null, value: r.value, source: AUTHORED_TAG }] }));
   rules.push({ id: 'R5', label: { en: 'Several amber signals together', hi: 'कई चेतावनी संकेत एक साथ' }, tier: 'URGENT', source: NEEDS_SIGNOFF, type: 'combination', ofTier: 'REVIEW', minDistinct: a.combination.minDistinct, windowDays: a.combination.windowDays, countSource: tag('combination') });
   rules.push({ id: 'A1', label: { en: 'Pain rising', hi: 'दर्द बढ़ रहा है' }, tier: 'REVIEW', source: NEEDS_SIGNOFF, type: 'trend', measure: PAIN_ID, direction: 'up', delta: a.painRise.delta, window: a.painRise.window, deltaSource: tag('painRise') });
+  rules.push({ id: 'S1', label: { en: 'No check-in for several days', hi: 'कई दिन से कोई चेक-इन नहीं' }, tier: 'REVIEW', source: NEEDS_SIGNOFF, type: 'silence', hours: a.silence.hours, hoursSource: tag('silence') });
   rules.push({ id: 'A3', label: { en: 'Missed sessions', hi: 'कसरत छूट रही है' }, tier: 'REVIEW', source: NEEDS_SIGNOFF, type: 'streak', metric: 'missedSessions', count: a.missed.count, orAdherenceBelowPct: a.missed.adherencePct, countSource: tag('missed') });
   const gates = d.gates.filter((g) => g.from < d.phases.length - 1 && g.criteria.length).sort((x, y) => x.from - y.from);
   if (gates.length) rules.push({ id: 'A6', label: { en: 'Phase taking longer than expected', hi: 'चरण अपेक्षा से लंबा चल रहा है' }, tier: 'REVIEW', source: NEEDS_SIGNOFF, type: 'gateOverdue' });
@@ -221,13 +253,16 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
     const lower = c.better === 'lower';
     rules.push({ id: `C${i + 1}`, label: { en: `${m.en} ${lower ? 'above' : 'below'} the expected recovery`, hi: `${m.hi} अपेक्षित सुधार से ${lower ? 'ऊपर' : 'नीचे'}` }, tier: 'REVIEW', source: NEEDS_SIGNOFF, type: 'belowCurve', measure: c.measure });
   });
+  const q = d.questionnaire;
+  if (q?.alert) rules.push({ id: 'Q1', label: { en: `${q.title.en.trim()} score ${OPSAY[q.alert.operator]} ${q.alert.value}`, hi: `${q.title.hi.trim()} स्कोर ${OPSAY[q.alert.operator]} ${q.alert.value}` }, tier: 'REVIEW', source: AUTHORED_TAG, type: 'threshold', measure: QSCORE_ID, operator: q.alert.operator, stages: [{ minWeek: 0, maxWeek: null, value: q.alert.value, source: AUTHORED_TAG }] });
   const call = ['call-patient', 'reassess-bring-visit-forward'];
-  const suggestedActions: Record<string, string[]> = { R1: call, R5: ['hold-progression', ...call], A1: ['hold-progression'], A3: ['call-patient'], A8: call };
+  const suggestedActions: Record<string, string[]> = { R1: call, R5: ['hold-progression', ...call], A1: ['hold-progression'], A3: ['call-patient'], S1: ['call-patient'], A8: call };
   d.rules.forEach((_, i) => { suggestedActions[`T${i + 1}`] = ['call-patient', 'hold-progression', 'reassess-bring-visit-forward']; });
   d.signs.forEach((_, i) => { suggestedActions[`X${i + 1}`] = call; });
   (d.curves ?? []).forEach((_, i) => { suggestedActions[`C${i + 1}`] = ['reassess-bring-visit-forward']; });
   if (gates.length) suggestedActions.A6 = ['reassess-bring-visit-forward'];
   if (d.precautions.length) suggestedActions.P1 = call;
+  if (q?.alert) suggestedActions.Q1 = ['call-patient'];
 
   const pack: ProtocolPack = {
     id: d.id,
@@ -241,6 +276,7 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
     measures: [
       { id: PAIN_ID, label: { en: 'Pain', hi: 'दर्द' }, question: { en: 'How much pain do you have today?', hi: 'आज आपको कितना दर्द है?' }, unit: '0-10', capture: 'tap', frequency: 'daily', valueType: 'number', scale: { min: 0, max: 10 } },
       ...d.measures.map((m) => ({ id: m.id, label: { en: m.label.en.trim(), hi: m.label.hi.trim() }, short: { en: m.label.en.trim(), hi: m.label.hi.trim() }, unit: m.unit.trim(), capture: 'number' as const, frequency: 'weekly' as const, valueType: 'number' as const, input: { min: m.min, max: m.max, step: m.step } })),
+      ...(q ? [{ id: QSCORE_ID, label: { en: q.title.en.trim(), hi: q.title.hi.trim() }, unit: 'score', capture: 'tap' as const, frequency: 'monthly' as const, valueType: 'number' as const }] : []),
     ],
     gates: gates.map((g) => ({ fromPhase: phaseId(g.from), toPhase: phaseId(g.from + 1), criteria: g.criteria.map((c, k) => ({ id: `g${g.from + 1}.${k + 1}`, label: mlabel(c.measure), measure: c.measure, operator: c.operator, value: c.value, source: AUTHORED_TAG })) })),
     expectedCurves: (d.curves ?? []).map((c) => ({ measure: c.measure, better: c.better, tolerance: c.tolerance, points: c.points.map((x): [number, number] => [x.week, x.value]), source: AUTHORED_TAG })),
@@ -251,7 +287,7 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
       voiceExample: { en: 'Say e.g. "pain 4, did all my exercises, no fever"', hi: 'ऐसे बोलें: "दर्द 4, सारी कसरतें कीं, बुखार नहीं"' },
       dailyMeasures: [PAIN_ID], skipReasons: ['pain', 'fear', 'time', 'access', 'understand'],
     },
-    questionnaires: [],
+    questionnaires: q ? [{ id: 'q1', measure: QSCORE_ID, title: { en: q.title.en.trim(), hi: q.title.hi.trim() }, intro: { en: q.intro.en.trim(), hi: q.intro.hi.trim() }, items: q.items.map((x) => ({ en: x.en.trim(), hi: x.hi.trim() })), options: q.options.map((o) => ({ value: o.value, label: { en: o.label.en.trim(), hi: o.label.hi.trim() } })), scoring: 'sum' as const, source: AUTHORED_TAG, credit: q.credit.trim(), licenceConfirmed: q.permission }] : [],
     followUpProposal: { teleReviewWithinHours: a.followUp.teleHours, checkInEveryDays: a.followUp.checkInDays, forDays: a.followUp.forDays, source: tag('followUp') },
     suggestedActions,
     responseHours: { SAFETY: { hours: a.hours.SAFETY, source: tag('hours') }, URGENT: { hours: a.hours.URGENT, source: tag('hours') }, REVIEW: { hours: a.hours.REVIEW, source: tag('hours') } },
@@ -304,6 +340,7 @@ export function fatDraft(x: any): ConditionDraft {
   const base = blankDraft(x.id);
   const d = { ...base, ...x } as ConditionDraft;
   if ((x as any).alerts === 'P') d.alerts = placeholderAlerts();
+  else if (d.alerts && typeof d.alerts === 'object' && !(d.alerts as any).silence) d.alerts = { ...d.alerts, silence: { hours: 72 }, source: { ...d.alerts.source, silence: 'placeholder' } };
   for (const k of ['phases', 'exercises', 'measures', 'gates', 'rules', 'precautions', 'signs', 'curves'] as const) if (!Array.isArray(d[k])) throw new Error(`${k} must be a list`);
   return d;
 }

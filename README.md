@@ -102,6 +102,13 @@ Copy a pack in `src/packs/`, register it in `src/engine/packs.ts`, run `npm test
 - **New versions**: a saved condition cannot be edited. "Start from one of your written conditions" copies it into the form (new exercise ids, name gets "(version N)"); saving creates version N. The old condition and its patients are untouched. Moving an existing patient to a new version is not built.
 - Importing a protocol file (3.2) works on the shipped conditions only.
 
+## Monitoring (Phase 4)
+
+- **Photo angle (4.1)**: in the weekly self-test the patient can add a photo and tap three points (hip, knee, ankle for knee bend; hip, shoulder, wrist for arm raise; points can be dragged). The app computes the angle with plain geometry (`src/angle.ts`), shows it, and fills the box on "Use this angle". Typing the number still works. The photo is shown from memory and is not stored or sent. The physio sees "(measured on photo)" next to the reading in the gate table. Packs opt in per measure with `photoAngle` (validated). Written conditions do not have this yet.
+- **Questionnaires (4.2)**: every questionnaire carries a credit line and a flag for whether permission to use it is confirmed. TSK-11 shows its authors (Woby et al., 2005) and is listed under NEEDS_PHYSIO_SIGNOFF until the physio confirms permission. **The Oxford Knee Score and Oxford Shoulder Score are not included**: they are licensed by their publisher and their wording cannot be bundled here. A physio who holds a licence can type any questionnaire into "Add a condition" (monthly, scored by summing option values, optional REVIEW alert on the total, permission box required). The physio's patient view shows the latest score with the credit line.
+- **Silence (4.3)**: all three shipped conditions and every written condition raise a REVIEW alert when a patient has not checked in for a set time. It is labelled "No check-in for N days" in English and Hindi with the real number of days. The hours are placeholders (72 h) tagged NEEDS_PHYSIO_SIGNOFF.
+- Still to come in later phases: caregiver mode, third language, backend.
+
 ## Run
 
 ```
@@ -113,11 +120,11 @@ npm run signoff   # refresh the list below from the packs
 
 ## Known limits
 
-- Phases 0 to 3 (including written conditions) are built. Monitoring additions (photo angle, questionnaires), caregiver mode, third language, Supabase, FHIR and AI extraction are not.
+- Phases 0 to 4 are built. caregiver mode, third language, Supabase, FHIR and AI extraction are not.
 - The photo field stores the file name only. There is no upload yet.
 - The Overdue clock in the demo uses the demo calendar, not real time.
 - Adherence (A3) divides by the full 7-day window even in the first week after surgery, as in the previous build. A patient with few days of data can trip A3.
-- TSK-11 is used as in the previous build. Licensing and citation are still to be confirmed (Phase 4.3).
+- TSK-11 now carries its citation. Permission to use it is still to be confirmed by the physio (NEEDS_PHYSIO_SIGNOFF).
 
 ## Sources
 
@@ -131,7 +138,7 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 
 <!-- SIGNOFF:START -->
 
-#### acl-reconstruction (11 values)
+#### acl-reconstruction (13 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -145,9 +152,11 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | rule R3 pain stage weeks 0-2 | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
 | rule R3 pain stage weeks 2-6 | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
 | rule R3 pain stage weeks 6-end | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
+| rule S1 silence | 72 h | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
+| questionnaire tsk11 permission to use | Tampa Scale for Kinesiophobia, 11-item version (TSK-11): Woby SR, Roach NK, Urmston M, Watson PJ. Pain 2005;117:137-144. Permission to use in this app: to be confirmed by the physio. | NEEDS_PHYSIO_SIGNOFF |
 
-#### total-knee-replacement (25 values)
+#### total-knee-replacement (26 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -175,9 +184,10 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | rule A3 streak | 2 in a row; adherence < 60% | NEEDS_PHYSIO_SIGNOFF |
 | rule A6 (gateOverdue) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
 | rule C1 (belowCurve) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
+| rule S1 silence | 72 h | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 
-#### rotator-cuff-repair (21 values)
+#### rotator-cuff-repair (22 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -200,6 +210,7 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | rule A6 (gateOverdue) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
 | rule P1 (precautionBreach) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
 | rule C1 (belowCurve) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
+| rule S1 silence | 72 h | NEEDS_PHYSIO_SIGNOFF |
 | precaution sling-off restricted phases | p1 | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 

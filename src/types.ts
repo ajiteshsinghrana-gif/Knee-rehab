@@ -40,6 +40,8 @@ export interface Measure {
   scale?: { min: number; max: number };
   /** Input bounds/step for number capture. */
   input?: { min: number; max: number; step: number };
+  /** The angle can be measured on a photo by tapping three points (Phase 4.1). Points are [end of first line, joint, end of second line]. */
+  photoAngle?: { reading: 'between' | 'deviation'; points: [Bi, Bi, Bi] };
   /** Only asked once the patient is at or beyond this phase order. */
   fromPhaseOrder?: number;
   /** Set by the physio, never asked of the patient. */
@@ -147,6 +149,10 @@ export interface Questionnaire {
   options: { value: number; label: Bi }[];
   scoring: 'sum';
   source: SourceTag;
+  /** Who wrote the questionnaire and under what terms it may be used. Shown under the questions. Required. */
+  credit: string;
+  /** True once the physio has confirmed they have permission to use it (Phase 4.2). */
+  licenceConfirmed: boolean;
 }
 
 export interface Stage {
@@ -283,6 +289,8 @@ export interface PeriodicEntry {
   values: Record<string, Value>;
   /** measure id -> photo file name (upload arrives with the backend). */
   photos?: Record<string, string>;
+  /** measure id -> 'photo' when the number was measured on a photo in the app (Phase 4.1). */
+  methods?: Record<string, 'photo'>;
 }
 export interface Patient {
   id: string;
