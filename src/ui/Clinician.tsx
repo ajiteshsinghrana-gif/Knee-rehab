@@ -7,13 +7,14 @@ import { compareWorklist, stageFor, triage, weeksInPhase, weeksSince } from '../
 import { evaluateGate } from '../engine/gates';
 import { ACTION_LABELS, suggestedActions } from '../engine/actions';
 import { collectSignoffs } from '../engine/signoff';
-import { clockMs, getState, updatePatient, type AppState } from '../store';
+import { clockMs, getState, removeClinicCurve, setClinicCurve, updatePatient, type AppState } from '../store';
 import { LineChart } from './Charts';
 import { Onboarding } from './Onboarding';
 import { ImportProtocol } from './Import';
 import { NewCondition } from './Condition';
 import { applyAction, applyManual, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
-import { listOverridable } from '../engine/overrides';
+import { effectivePack, listOverridable } from '../engine/overrides';
+import { curveOrigin, PLACEHOLDER_NOTE } from '../engine/curves';
 import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
 
 const TIER_LABEL: Record<Tier, string> = { SAFETY: 'SAFETY', URGENT: 'URGENT', REVIEW: 'REVIEW', ON_PLAN: 'ON PLAN' };
@@ -124,7 +125,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
   const r3 = pack.rules.find((x) => x.type === 'threshold' && x.measure === 'pain');
   const painRef = r3 && r3.type === 'threshold' ? stageFor(r3.stages, wk) : undefined;
   const lastWeek = Array.from({ length: 7 }, (_, i) => addDays(r.asOf, i - 6));
-  const curves = pack.expectedCurves;
+  const curves = effectivePack(p, pack).expectedCurves; // protocol curve, clinic default or this patient's own
 
   return (
     <section className="detail">
@@ -200,6 +201,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
       <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} />
       <AdjustCard patient={p} pack={pack} now={now} />
       <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
+      <CurvesCard patient={p} pack={pack} now={now} />
 
       {pack.questionnaires.map((q) => {
         const rows = p.periodic.filter((e) => e.values[q.measure] !== undefined);
@@ -226,6 +228,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
               <LineChart title={`${L(m.short ?? m.label, 'en')} vs expected`} xLabel={`weeks ${pack.anchorLabel.en}`} yLabel={m.unit ?? ''}
                 series={[{ name: 'Measured', color: '#0a6b6b', points: pts, dots: true }, { name: 'Expected', color: '#6b7a80', dashed: true, points: c.points.map(([x, y]) => ({ x, y })) }]}
                 band={c.points.map(([x, y]) => ({ x, lo: y - c.tolerance, hi: y + c.tolerance }))} />
+              <CurveNote c={c} />
             </div>
           );
         })}
@@ -467,6 +470,98 @@ function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
       </div>
       {err && <p className="err" role="alert">{err}</p>}
       {done && <p className="okline" role="status" data-testid="adjust-done">{done}</p>}
+    </details>
+  );
+}
+
+// ------------------------------------------------------------------ expected-recovery curves (Phase 7.1)
+function CurveNote({ c }: { c: ProtocolPack['expectedCurves'][number] }) {
+  const o = curveOrigin(c);
+  const why = c.source.replace(/^PHYSIO_(CLINIC|OVERRIDE): /, '');
+  if (o === 'placeholder') return <p className="err curvenote" data-testid="curve-note" data-origin="placeholder">⚠ {PLACEHOLDER_NOTE}</p>;
+  if (o === 'clinic') return <p className="tiny curvenote" data-testid="curve-note" data-origin="clinic">Clinic default for every patient with this condition. Reason: {why}</p>;
+  if (o === 'patient') return <p className="tiny curvenote" data-testid="curve-note" data-origin="patient">Set for this patient. Reason: {why}</p>;
+  return <p className="tiny curvenote" data-testid="curve-note" data-origin="protocol">Source: {c.source}</p>;
+}
+
+function CurvesCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
+  const st = getState();
+  const eff = effectivePack(p, pack);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [rows, setRows] = useState<[string, string][]>([]);
+  const [tol, setTol] = useState('');
+  const [scope, setScope] = useState<'patient' | 'clinic'>('patient');
+  const [reason, setReason] = useState('');
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState('');
+  const same = st.patients.filter((x) => x.packId === pack.id).length;
+  const mine = (m: string) => (p.plan.curveOverrides ?? []).some((x) => x.measure === m);
+  const clinic = (m: string) => (st.clinicCurves?.[pack.id] ?? []).some((x) => x.measure === m);
+  if (eff.expectedCurves.length === 0) return null;
+  const edit = (m: string) => {
+    const c = eff.expectedCurves.find((x) => x.measure === m)!;
+    setEditing(m); setRows(c.points.map(([w, v]) => [String(w), String(v)])); setTol(String(c.tolerance)); setScope('patient'); setReason(''); setErr(''); setDone('');
+  };
+  const parsed = (): [number, number][] => rows.map(([w, v]) => [Number(w), Number(v)]);
+  const fail = (e: unknown) => { setErr((e as Error).message); setDone(''); };
+  const ok = (msg: string) => { setErr(''); setDone(msg); setEditing(null); setReason(''); };
+  const save = () => {
+    try {
+      const measure = editing!;
+      if (scope === 'clinic') setClinicCurve(pack.id, measure, parsed(), Number(tol), reason);
+      else updatePatient(p.id, (q) => applyAction(q, pack, { type: 'set-curve', measure, points: parsed(), tolerance: Number(tol), reason }, { nowMs: now, today: st.today }));
+      ok(scope === 'clinic' ? `Saved for all ${same} patient${same === 1 ? '' : 's'} with this condition. It is in each patient's audit log.` : 'Saved for this patient. It is in the audit log.');
+    } catch (e) { fail(e); }
+  };
+  const revert = (m: string, which: 'patient' | 'clinic') => {
+    try {
+      if (which === 'clinic') removeClinicCurve(pack.id, m, reason);
+      else updatePatient(p.id, (q) => applyAction(q, pack, { type: 'remove-curve', measure: m, reason }, { nowMs: now, today: st.today }));
+      ok(which === 'clinic' ? 'Clinic default removed.' : "This patient's own curve removed.");
+    } catch (e) { fail(e); }
+  };
+  return (
+    <details className="card curves" data-testid="curves" open>
+      <summary><b>Expected recovery curves</b></summary>
+      <p className="tiny">The shaded band on the charts is built from these. Replace a placeholder with your own protocol's numbers. A reason is required and is saved in the audit log.</p>
+      {eff.expectedCurves.map((c) => {
+        const m = pack.measures.find((x) => x.id === c.measure);
+        return (
+          <div key={c.measure} className="curverow" data-measure={c.measure}>
+            <b>{m ? L(m.short ?? m.label, 'en') : c.measure}</b> <small>({c.better} is better, allowed difference {c.tolerance})</small>
+            <CurveNote c={c} />
+            <div className="btnrow">
+              <button className="btn" onClick={() => edit(c.measure)}>Edit</button>
+              {mine(c.measure) && editing !== c.measure && <button className="btn" onClick={() => revert(c.measure, 'patient')} disabled={!reason.trim()} title="Write a reason first">Remove this patient's own curve</button>}
+              {clinic(c.measure) && editing !== c.measure && <button className="btn" onClick={() => revert(c.measure, 'clinic')} disabled={!reason.trim()} title="Write a reason first">Remove the clinic default</button>}
+            </div>
+            {editing === c.measure && (
+              <div className="curveedit" data-testid="curve-editor">
+                <table className="gate"><thead><tr><th>Week since {pack.anchorLabel.en}</th><th>Expected value</th><th /></tr></thead><tbody>
+                  {rows.map(([w, v], i) => (
+                    <tr key={i}>
+                      <td><input type="number" aria-label={`Week ${i + 1}`} value={w} onChange={(e) => setRows(rows.map((r, j) => (j === i ? [e.target.value, r[1]] : r)))} /></td>
+                      <td><input type="number" aria-label={`Value ${i + 1}`} value={v} onChange={(e) => setRows(rows.map((r, j) => (j === i ? [r[0], e.target.value] : r)))} /></td>
+                      <td><button className="btn" aria-label={`Remove point ${i + 1}`} onClick={() => setRows(rows.filter((_, j) => j !== i))}>Remove</button></td>
+                    </tr>))}
+                </tbody></table>
+                <div className="btnrow"><button className="btn" onClick={() => setRows([...rows, ['', '']])}>+ Add a point</button></div>
+                <label>Allowed difference either side <input type="number" aria-label="Allowed difference" value={tol} onChange={(e) => setTol(e.target.value)} /></label>
+                <fieldset className="scope"><legend>Use this curve for</legend>
+                  <label><input type="radio" name="scope" checked={scope === 'patient'} onChange={() => setScope('patient')} aria-label="This patient only" /> This patient only</label>
+                  <label><input type="radio" name="scope" checked={scope === 'clinic'} onChange={() => setScope('clinic')} aria-label="All patients with this condition" /> All {same} patient{same === 1 ? '' : 's'} with {pack.condition.en} (a patient's own curve still wins)</label>
+                </fieldset>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div className="fu">
+        <input aria-label="Reason for the curve change" placeholder="Reason (required): where these numbers come from" value={reason} onChange={(e) => setReason(e.target.value)} />
+        {editing && <><button className="btn primary" onClick={save} disabled={!reason.trim()}>Save curve</button><button className="btn" onClick={() => { setEditing(null); setErr(''); }}>Cancel</button></>}
+      </div>
+      {err && <p className="err" role="alert">{err}</p>}
+      {done && <p className="okline" role="status" data-testid="curves-done">{done}</p>}
     </details>
   );
 }

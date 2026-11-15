@@ -1,7 +1,9 @@
 import { isLang } from './types';
+import type { CurveEdit } from './types';
+import { setClinicCurves, validateCurve } from './engine/curves';
 import type { Patient, PeriodicEntry, ProtocolPack, Value } from './types';
 import { addDays } from './engine/dates';
-import { normalizePatient, planDefaults } from './engine/plan';
+import { normalizePatient, PHYSIO, planDefaults, withAuditNote } from './engine/plan';
 import { getPack } from './engine/packs';
 import { restoreAuthoredPack, type QuestionnaireDraft } from './author/condition';
 export interface SavedQuestionnaire { id: string; name: string; q: QuestionnaireDraft }
@@ -21,6 +23,8 @@ export interface AppState {
   customPacks?: ProtocolPack[];
   /** Questionnaires the physio saved for reuse across conditions (Phase 4.1). */
   questionnaires?: SavedQuestionnaire[];
+  /** Expected-recovery curves the physio set for every patient of a condition, by pack id (Phase 7.1). */
+  clinicCurves?: Record<string, CurveEdit[]>;
 }
 
 export function seedState(): AppState {
@@ -104,10 +108,14 @@ export function loadState(storage: Storage | null = typeof localStorage === 'und
 // ---------------- tiny external store ----------------
 let state: AppState | null = null;
 const subs = new Set<() => void>();
-export const getState = (): AppState => (state ??= loadState());
+export const getState = (): AppState => {
+  if (!state) { state = loadState(); setClinicCurves(state.clinicCurves); }
+  return state;
+};
 export const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
 export function setState(next: AppState): void {
   state = next;
+  setClinicCurves(next.clinicCurves);
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* offline demo still works in memory */ }
   subs.forEach((f) => f());
 }
@@ -118,3 +126,42 @@ export const updatePatient = (id: string, f: (p: Patient) => Patient) => {
 };
 /** Demo clock: 09:00 on the demo date. */
 export const clockMs = (s: AppState): number => Date.parse(s.today + 'T09:00:00Z');
+
+/**
+ * Set the expected-recovery curve for EVERY patient of a condition (Phase 7.1). A reason is required; each of those
+ * patients gets a line in their audit log. A patient's own curve still wins over this default.
+ */
+export function setClinicCurve(packId: string, measure: string, points: [number, number][], tolerance: number, reason: string): void {
+  const why = (reason ?? '').trim();
+  if (!why) throw new Error('A reason is required to change an expected-recovery curve');
+  const base = getPack(packId).expectedCurves.find((x) => x.measure === measure);
+  if (!base) throw new Error('This condition has no expected curve for that measure');
+  const bad = validateCurve(points, tolerance);
+  if (bad) throw new Error(bad);
+  const st = getState();
+  const nowMs = clockMs(st);
+  const prev = (st.clinicCurves?.[packId] ?? []).find((x) => x.measure === measure);
+  const edit: CurveEdit = { id: `${nowMs}-c`, measure, points: points.map(([w, v]) => [w, v] as [number, number]), tolerance, reason: why, by: PHYSIO, at: new Date(nowMs).toISOString() };
+  const mine = [...(st.clinicCurves?.[packId] ?? []).filter((x) => x.measure !== measure), edit];
+  setState({
+    ...st,
+    clinicCurves: { ...(st.clinicCurves ?? {}), [packId]: mine },
+    patients: st.patients.map((p) => (p.packId !== packId ? p : withAuditNote(p, 'set-clinic-curve', `Clinic default expected curve for ${measure} changed (applies to every ${getPack(packId).condition.en} patient)`, prev ? { points: prev.points, tolerance: prev.tolerance } : { points: base.points, tolerance: base.tolerance }, { points: edit.points, tolerance }, why, { nowMs, today: st.today }))),
+  });
+}
+
+/** Go back to the protocol's own curve for every patient of a condition. */
+export function removeClinicCurve(packId: string, measure: string, reason: string): void {
+  const why = (reason ?? '').trim();
+  if (!why) throw new Error('A reason is required to change an expected-recovery curve');
+  const st = getState();
+  const prev = (st.clinicCurves?.[packId] ?? []).find((x) => x.measure === measure);
+  if (!prev) throw new Error('There is no clinic default for that measure');
+  const nowMs = clockMs(st);
+  const left = (st.clinicCurves?.[packId] ?? []).filter((x) => x.measure !== measure);
+  setState({
+    ...st,
+    clinicCurves: { ...(st.clinicCurves ?? {}), [packId]: left },
+    patients: st.patients.map((p) => (p.packId !== packId ? p : withAuditNote(p, 'remove-clinic-curve', `Clinic default expected curve for ${measure} removed (back to the protocol curve)`, { points: prev.points, tolerance: prev.tolerance }, null, why, { nowMs, today: st.today }))),
+  });
+}

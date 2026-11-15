@@ -346,6 +346,16 @@ export interface Override {
   by: string;
   at: string;
 }
+/** A physio-set expected-recovery curve that replaces the protocol's curve (Phase 7.1). */
+export interface CurveEdit {
+  id: string;
+  measure: string;
+  points: [number, number][]; // [weekSinceSurgery, value]
+  tolerance: number;
+  reason: string;
+  by: string;
+  at: string;
+}
 export interface Plan {
   /** exercise id -> easier exercise it was swapped for. */
   swaps: Record<string, string>;
@@ -355,6 +365,8 @@ export interface Plan {
   hold: { at: string; by: string; note?: string } | null;
   followUp: FollowUp | null;
   overrides: Override[];
+  /** Curves set for this patient only; they win over a clinic default and the protocol's curve. */
+  curveOverrides?: CurveEdit[];
 }
 export interface AuditEntry {
   id: string;
