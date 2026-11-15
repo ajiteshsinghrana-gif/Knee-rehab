@@ -3,6 +3,7 @@ import { getState, resetState, setState, subscribe, updatePatient } from '../sto
 import { DEMO_STEPS, demoStepPatient } from '../demo/seed';
 import { addDays } from '../engine/dates';
 import { getPack } from '../engine/packs';
+import { decodeInvite } from '../onboarding';
 import { PatientView } from './Patient';
 import { Clinician } from './Clinician';
 
@@ -12,7 +13,17 @@ export function App() {
   const state = useSyncExternalStore(subscribe, getState);
   const [view, setView] = useState(route);
   useEffect(() => {
-    const f = () => setView(route());
+    // Invite link / QR code: #join=<code> adds the patient on this device and opens their phone view.
+    const join = () => {
+      const m = /^#join=(.+)$/.exec(window.location.hash);
+      if (!m) return;
+      const inv = decodeInvite(m[1]);
+      const st = getState();
+      if (inv) setState({ ...st, patients: st.patients.some((p) => p.id === inv.patient.id) ? st.patients : [...st.patients, inv.patient], customPacks: inv.pack && !(st.customPacks ?? []).some((c) => c.id === inv.pack!.id) ? [...(st.customPacks ?? []), inv.pack] : st.customPacks, activeId: inv.patient.id });
+      window.location.hash = 'patient';
+    };
+    join();
+    const f = () => { join(); setView(route()); };
     window.addEventListener('hashchange', f);
     return () => window.removeEventListener('hashchange', f);
   }, []);

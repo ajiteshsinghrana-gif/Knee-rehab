@@ -225,6 +225,10 @@ export type Rule =
 
 export interface ProtocolPack {
   id: string;
+  /** Set on packs the physio created by importing over a default pack (Phase 3.2). */
+  basedOn?: string;
+  /** The approved import this pack was built from, so an invite link can rebuild it on another device. */
+  imported?: { file: string; fields: { target: string; value: number | string[] }[] };
   condition: Bi;
   population: string;
   version: string;
@@ -287,6 +291,8 @@ export interface Patient {
   anchorDate: string; // surgery date
   currentPhase: string; // phase id
   phaseStartDate: string;
+  /** Day the patient joined the app, when later than the surgery date. Days before it are never counted as missed. */
+  enrolledOn?: string;
   sessionsPrescribedPerDay: number;
   daily: DailyCheckIn[];
   periodic: PeriodicEntry[];
@@ -324,6 +330,9 @@ export interface Override {
 export interface Plan {
   /** exercise id -> easier exercise it was swapped for. */
   swaps: Record<string, string>;
+  /** Exercises the physio added to / removed from the current phase list for this patient (Phase 3.1). */
+  added: string[];
+  removed: string[];
   hold: { at: string; by: string; note?: string } | null;
   followUp: FollowUp | null;
   overrides: Override[];

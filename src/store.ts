@@ -1,7 +1,7 @@
-import type { Patient, PeriodicEntry, Value } from './types';
+import type { Patient, PeriodicEntry, ProtocolPack, Value } from './types';
 import { addDays } from './engine/dates';
 import { normalizePatient, planDefaults } from './engine/plan';
-import { getPack } from './engine/packs';
+import { getPack, registerPack } from './engine/packs';
 import { DEMO_TODAY_LAST, makeAllPatients } from './demo/seed';
 
 export const STORAGE_KEY = 'rehabpath-v1';
@@ -14,6 +14,8 @@ export interface AppState {
   /** Demo calendar: the date the patient is checking in for. */
   today: string;
   demoStep: number;
+  /** Packs created by physio import (Phase 3.2). */
+  customPacks?: ProtocolPack[];
 }
 
 export function seedState(): AppState {
@@ -77,7 +79,12 @@ export function loadState(storage: Storage | null = typeof localStorage === 'und
     const cur = storage?.getItem(STORAGE_KEY);
     if (cur) {
       const s = JSON.parse(cur) as AppState;
-      if (s?.version === 1 && Array.isArray(s.patients)) return { ...s, patients: s.patients.map(normalizePatient) };
+      if (s?.version === 1 && Array.isArray(s.patients)) {
+        for (const cp of s.customPacks ?? []) { try { registerPack(cp); } catch { /* an invalid saved pack is ignored, never used */ } }
+        const known = (id: string) => { try { getPack(id); return true; } catch { return false; } };
+        const patients = s.patients.filter((x) => known(x.packId)).map(normalizePatient);
+        if (patients.length) return { ...s, patients, activeId: patients.some((x) => x.id === s.activeId) ? s.activeId : patients[0].id };
+      }
     }
     const legacy = storage?.getItem(LEGACY_KEY);
     if (legacy) {

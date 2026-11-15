@@ -26,26 +26,31 @@ export function listOverridable(pack: ProtocolPack, p?: Patient): Overridable[] 
   return out;
 }
 
+/** Set one numeric value in a pack (mutates the pack passed in) and replace its source tag. */
+export function setPackValue(pack: ProtocolPack, target: string, value: number, tag: string, appendTag = true): boolean {
+  const [kind, id, field, idx] = target.split(':');
+  if (kind === 'gate') {
+    let hit = false;
+    for (const g of pack.gates) for (const c of g.criteria) if (c.id === id) { c.value = value; c.source = tag; hit = true; }
+    return hit;
+  }
+  const r = pack.rules.find((x) => x.id === id) as any;
+  if (!r) return false;
+  if (field === 'stage') { if (!r.stages[Number(idx)]) return false; r.stages[Number(idx)].value = value; r.stages[Number(idx)].source = tag; }
+  else if (field === 'delta') { r.delta = value; r.deltaSource = tag; }
+  else if (field === 'count') { r.count = value; r.countSource = tag; }
+  else if (field === 'adherence') r.orAdherenceBelowPct = value;
+  else if (field === 'minDistinct') { r.minDistinct = value; r.countSource = tag; }
+  else if (field === 'hours') { r.hours = value; r.hoursSource = tag; }
+  else return false;
+  r.source = appendTag ? `${r.source}; ${tag}` : tag;
+  return true;
+}
+
 /** The pack as it applies to this patient. Overridden values are tagged PHYSIO_OVERRIDE with the reason. */
 export function effectivePack(p: Patient, pack: ProtocolPack): ProtocolPack {
   if (!p.plan?.overrides?.length) return pack;
   const eff: ProtocolPack = JSON.parse(JSON.stringify(pack));
-  for (const o of p.plan.overrides) {
-    const tag = `PHYSIO_OVERRIDE: ${o.reason}`;
-    const [kind, id, field, idx] = o.target.split(':');
-    if (kind === 'gate') {
-      for (const g of eff.gates) for (const c of g.criteria) if (c.id === id) { c.value = o.value; c.source = tag; }
-      continue;
-    }
-    const r = eff.rules.find((x) => x.id === id) as any;
-    if (!r) continue;
-    if (field === 'stage') { r.stages[Number(idx)].value = o.value; r.stages[Number(idx)].source = tag; }
-    else if (field === 'delta') r.delta = o.value;
-    else if (field === 'count') r.count = o.value;
-    else if (field === 'adherence') r.orAdherenceBelowPct = o.value;
-    else if (field === 'minDistinct') r.minDistinct = o.value;
-    else if (field === 'hours') r.hours = o.value;
-    r.source = `${r.source}; ${tag}`;
-  }
+  for (const o of p.plan.overrides) setPackValue(eff, o.target, o.value, `PHYSIO_OVERRIDE: ${o.reason}`);
   return eff;
 }

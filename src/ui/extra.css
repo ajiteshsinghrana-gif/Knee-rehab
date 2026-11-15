@@ -37,3 +37,16 @@
 .err{color:#b3261e;font-weight:600}
 .holdtag{color:#b36b00}
 .audit{margin:6px 0;padding-left:18px;font-size:.9rem}
+
+/* Phase 3 */
+.onboard,.import{display:grid;gap:10px;max-width:760px}
+.formgrid{display:grid;gap:10px}
+.formgrid label,.import label{display:grid;gap:4px;font-weight:600}
+.formgrid input,.formgrid select,.import select,.import textarea,.fu input,.fu select{padding:8px;border:1px solid #9aa7b3;border-radius:8px;font:inherit}
+.exchecks{columns:2;list-style:none;padding:0;margin:0}
+.exchecks li{break-inside:avoid;padding:2px 0}
+.qr{display:flex;justify-content:center;background:#fff;padding:8px;border-radius:12px}
+.qr svg{max-width:100%;height:auto}
+.linkbox{display:flex;gap:8px;align-items:center}
+.linkbox input{flex:1;min-width:0;padding:8px;border:1px solid #9aa7b3;border-radius:8px;font-size:.8rem}
+.importtable td,.importtable th{padding:4px 6px;vertical-align:top;text-align:left}

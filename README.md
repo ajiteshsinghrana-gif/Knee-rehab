@@ -80,6 +80,15 @@ Copy a pack in `src/packs/`, register it in `src/engine/packs.ts`, run `npm test
 - **Patient notice**: after any plan change the home screen says, in the patient's language, "Your physio reviewed this on <date> and changed <X>", with a read-aloud button (browser speech synthesis).
 - **Per-patient threshold overrides** (`src/engine/overrides.ts`): the physio can change any rule or gate number for one patient. A reason is required, it is logged, and the rule's evidence shows `PHYSIO_OVERRIDE: <reason>`. The shared pack is never modified. Warning-sign tiers cannot be overridden.
 
+## Onboarding and protocol import (Phase 3)
+
+- **Add patient** (physio dashboard): details, exercises, follow-up and optional per-patient thresholds, then a review step. Nothing is created until the physio approves. Adjustments go through the same audited plan actions as Phase 2. A new patient is never counted as missing days before `enrolledOn`.
+- **Invite**: a link (`#join=...`) and a QR code carrying the patient and plan. Opening it on the patient's phone adds the patient. For a patient on an imported protocol the link also carries the changed fields so the other device rebuilds the same pack. The QR is a small built-in encoder (`src/qr.ts`), checked against OpenCV; very large plans fall back to link only.
+- **Import protocol** (`src/import/`): the physio types or pastes the protocol, or uploads a PDF, text, CSV or JSON file. A deterministic reader (no AI) matches lines to known fields (gates, rule thresholds, response hours, phase follow-up, sessions, exercise lists). "Download template" gives lines like `Label [target]: value`. Ambiguous lines are chosen by the physio; values outside range and unknown exercises are reported, not guessed.
+- **The physio approves each field.** Untouched fields keep the base pack's defaults. Changed values are tagged `PHYSIO_IMPORTED: <file name>`, the new pack records `basedOn` and the changed fields, and it passes the same validator as built-in packs.
+- AI-assisted extraction is deferred to Phase 6 (needs a backend). Scanned PDFs have no text layer: paste the text instead.
+- The invite link carries the patient's name and plan, so share it privately. Until Phase 6, a patient's answers stay on the phone that opened the link.
+
 ## Run
 
 ```
@@ -91,9 +100,8 @@ npm run signoff   # refresh the list below from the packs
 
 ## Known limits
 
-- Only Phases 0 and 1 are built so far. Exercise library, real plan changes on approval, physio onboarding, protocol import, caregiver mode, read-aloud, Supabase and FHIR are not.
+- Phases 0 to 3 are built. Monitoring additions (photo angle, questionnaires), caregiver mode, third language, Supabase, FHIR and AI extraction are not.
 - The photo field stores the file name only. There is no upload yet.
-- Approve / Modify records a decision and marks the flag reviewed. It does not edit the plan yet.
 - The Overdue clock in the demo uses the demo calendar, not real time.
 - Adherence (A3) divides by the full 7-day window even in the first week after surgery, as in the previous build. A patient with few days of data can trip A3.
 - TSK-11 is used as in the previous build. Licensing and citation are still to be confirmed (Phase 4.3).
