@@ -127,6 +127,17 @@ Patients can use English, Hindi or Bengali (the language button cycles through t
 - Caregiver mode changes only who is recorded as answering. Triage, thresholds and the plan are identical, and a warning sign reported by a carer is treated the same as one the patient reports.
 - Not built yet: asking the carer's name or relationship, and treating a carer's answers with different thresholds. Neither has a clinical source, so both would be NEEDS_PHYSIO_SIGNOFF decisions for you.
 
+## Physio-initiated changes (Phase 5.4)
+
+The physio can change a patient's treatment on his own, without waiting for a suggested action. On each patient, "Adjust the treatment yourself" can: add an exercise, remove an exercise, make an exercise easier, put progression on hold or remove the hold, and move the patient to any phase (forward, back or skipping), including before the gate criteria are met.
+
+- **A written reason is required for every change** (the button stays disabled without one; the engine refuses too). It is saved in the audit log, marked "physio-initiated".
+- **The patient is told what changed**, in their language, on their home screen with a read-aloud button: "your exercises: added Swimming", "your stage: you are now in ...". The reason is for the audit log only; it is not shown to the patient.
+- **Overriding the protocol is allowed but visible.** If a phase move goes against the protocol (gate criteria not met, a hold is on, a phase is skipped, or the move is backwards), the screen lists why and the physio ticks "I understand this overrides the protocol". The audit log records the direction, the unmet criteria and that the protocol was overridden.
+- Moving phase resets that patient's exercise swaps and additions to the new phase's list.
+- Triage does not change: these are physio actions through `applyManual` in `src/engine/plan.ts`, the only way the plan changes (safety rule 2). The physio can still choose any change; the app only makes sure it is deliberate, explained and told to the patient.
+- Not built: showing the reason to the patient, or free-text patient messages. Reasons are typed in English and could not be translated safely.
+
 ## Run
 
 ```

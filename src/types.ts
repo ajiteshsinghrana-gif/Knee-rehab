@@ -365,6 +365,8 @@ export interface AuditEntry {
   before: unknown;
   after: unknown;
   note?: string;
+  /** A change the physio made on his own, not from a suggested action (Phase 5.4). A reason is always recorded in `note`. */
+  manual?: boolean;
 }
 export type NoticeChange =
   | { kind: 'regress'; from: string; to: string }
@@ -372,7 +374,8 @@ export type NoticeChange =
   | { kind: 'hold' }
   | { kind: 'release' }
   | { kind: 'followUp'; nextReviewDate: string | null; checkInEveryDays: number }
-  | { kind: 'phase'; phaseId: string };
+  | { kind: 'phase'; phaseId: string }
+  | { kind: 'exercises'; added: string[]; removed: string[] };
 export interface Notice {
   id: string;
   at: string;

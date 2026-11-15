@@ -14,6 +14,13 @@ export function changeText(c: NoticeChange, lang: Lang, pack: ProtocolPack): str
     case 'followUp': return c.nextReviewDate
       ? t(lang, 'change_followUp', { n: c.checkInEveryDays, date: fmtDate(c.nextReviewDate) })
       : t(lang, 'change_followUp_nodate', { n: c.checkInEveryDays });
+    case 'exercises': {
+      const parts = [
+        ...(c.added.length ? [t(lang, 'change_exAdded', { list: c.added.map((id) => exerciseName(id, lang)).join(', ') })] : []),
+        ...(c.removed.length ? [t(lang, 'change_exRemoved', { list: c.removed.map((id) => exerciseName(id, lang)).join(', ') })] : []),
+      ];
+      return t(lang, 'change_exercises', { parts: parts.join('; ') });
+    }
     case 'phase': return t(lang, 'change_phase', { phase: L(pack.phases.find((x) => x.id === c.phaseId)?.name, lang) || c.phaseId });
   }
 }
