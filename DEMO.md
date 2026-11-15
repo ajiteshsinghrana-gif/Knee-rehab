@@ -38,7 +38,7 @@ Physio dashboard, **+ Add a condition**: the physio writes a protocol for any co
 ## If asked
 - **Why not an AI chatbot?** Safety. Triage is rules only, so every flag can be explained and checked.
 - **What is not clinically signed off?** Every `NEEDS_PHYSIO_SIGNOFF` value, including all three conditions' expected recovery curves; the README lists them. The Bengali wording also needs a native reader.
-- **What is not built yet?** Backend, login and live sync (Phase 6). Photos are not uploaded; they stay on the phone.
+- **What is not built yet?** Real login and consent (live sync uses a secret link per patient, so only fake patients for now), and photo upload (photos stay on the phone).
 
 ## Optional: live sync (only if Supabase is set up)
-Add a patient, open the invite link on a phone, do a check-in. The physio screen shows it within about 10 seconds ("Live sync on" chip). Change the plan on the physio screen: the patient sees the notice, but not your reason.
+On the physio device, add a patient (past surgery date, fake name), open the invite link on a phone (it becomes a patient-only phone), do a check-in. Avoid Fast-forward during this part. The physio screen shows it within about 10 seconds ("Live sync on" chip). Change the plan on the physio screen: the patient sees the notice, but not your reason.
