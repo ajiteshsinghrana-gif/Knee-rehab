@@ -13,7 +13,7 @@ export async function loadConfig(fetchFn: FetchFn = fetch, path = 'sync.json'): 
   } catch { return null; }
 }
 
-const headers = (c: SyncConfig, key: string, extra: Record<string, string> = {}) => ({ apikey: c.anonKey, Authorization: `Bearer ${c.anonKey}`, 'x-sync-key': key, 'Content-Type': 'application/json', ...extra });
+const headers = (c: SyncConfig, key: string, extra: Record<string, string> = {}) => ({ apikey: c.anonKey, ...(c.anonKey.startsWith('eyJ') ? { Authorization: `Bearer ${c.anonKey}` } : {}), 'x-sync-key': key, 'Content-Type': 'application/json', ...extra });
 
 /** Write one slice. The database only accepts it when the x-sync-key header matches the row's key. */
 export async function pushSlice(c: SyncConfig, key: string, slice: Slice, data: unknown, fetchFn: FetchFn = fetch): Promise<void> {
