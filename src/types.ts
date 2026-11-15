@@ -1,9 +1,14 @@
 // Core types. Nothing in here is condition-specific: all clinical content lives in packs/*.json.
 
-export type Lang = 'en' | 'hi';
+export type Lang = 'en' | 'hi' | 'bn';
+export const LANGS: Lang[] = ['en', 'hi', 'bn'];
+export const LANG_NAME: Record<Lang, string> = { en: 'English', hi: 'हिन्दी', bn: 'বাংলা' };
+export const isLang = (x: unknown): x is Lang => x === 'en' || x === 'hi' || x === 'bn';
+/** English + Hindi are always present; Bengali is optional and falls back to the built-in wording, then English. */
 export interface Bi {
   en: string;
   hi: string;
+  bn?: string;
 }
 
 /** Four triage tiers. Order = severity (index 0 is most severe). */

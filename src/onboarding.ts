@@ -1,4 +1,5 @@
 /** Phase 3.1: create a patient from a pack, with the physio's adjustments applied through the same audited actions. */
+import { isLang } from './types';
 import type { Lang, Patient, Plan } from './types';
 import { getPack, PACKS } from './engine/packs';
 import { buildImportedPack } from './import/apply';
@@ -110,7 +111,7 @@ export function decodeInvite(code: string): { patient: Patient; pack?: ProtocolP
     const pack = PACKS[x.p];
     if (!pack.phases.some((ph) => ph.id === x.ph)) return null;
     const patient = normalizePatient({
-      id: x.i, name: x.n.slice(0, 80), age: Number(x.a) || 0, packId: x.p, language: x.l === 'hi' ? 'hi' : 'en', anchorDate: x.d, ...(isDate(x.e) ? { enrolledOn: x.e } : {}), currentPhase: x.ph, phaseStartDate: x.ps,
+      id: x.i, name: x.n.slice(0, 80), age: Number(x.a) || 0, packId: x.p, language: isLang(x.l) ? x.l : 'en', anchorDate: x.d, ...(isDate(x.e) ? { enrolledOn: x.e } : {}), currentPhase: x.ph, phaseStartDate: x.ps,
       sessionsPrescribedPerDay: Number(x.s) || 2, daily: [], periodic: [], reviewed: {}, decisions: [], ...planDefaults(), plan: { ...planDefaults().plan, ...x.plan },
     });
     return { patient, ...(built ? { pack: built } : {}) };

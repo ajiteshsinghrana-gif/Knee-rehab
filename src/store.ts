@@ -1,3 +1,4 @@
+import { isLang } from './types';
 import type { Patient, PeriodicEntry, ProtocolPack, Value } from './types';
 import { addDays } from './engine/dates';
 import { normalizePatient, planDefaults } from './engine/plan';
@@ -54,7 +55,7 @@ export function migrateLegacyPatient(old: any): Patient {
   for (const m of old.monthly ?? []) periodic.push({ date: m.date, values: { tsk11: m.tsk11 } });
   periodic.sort((a, b) => a.date.localeCompare(b.date));
   return {
-    id: old.id, name: old.name, age: old.age, packId: pack.id, language: old.language === 'hi' ? 'hi' : 'en',
+    id: old.id, name: old.name, age: old.age, packId: pack.id, language: isLang(old.language) ? old.language : 'en',
     anchorDate: old.surgeryDate, currentPhase: `p${old.currentPhase}`, phaseStartDate: old.phaseStartDate,
     sessionsPrescribedPerDay: old.sessionsPrescribedPerDay ?? 2, daily, periodic, reviewed: {}, decisions: [], ...planDefaults(),
   };

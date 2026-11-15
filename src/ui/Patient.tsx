@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { LANGS, LANG_NAME } from '../types';
 import type { Lang, Patient, ProtocolPack, Value } from '../types';
 import { L, t } from '../i18n';
 import { getPack } from '../engine/packs';
@@ -30,10 +31,10 @@ export function PatientView({ patient }: { patient: Patient }) {
   const [screen, setScreen] = useState<Screen>('home');
   const setLang = (l: Lang) => updatePatient(patient.id, (p) => ({ ...p, language: l }));
   return (
-    <div className="app" lang={lang === 'hi' ? 'hi' : 'en'}>
+    <div className="app" lang={lang}>
       <header className="top">
         <h1>{T('appName')}</h1>
-        <button className="lang" onClick={() => setLang(lang === 'en' ? 'hi' : 'en')} aria-label="Language">{T('language')}</button>
+        <button className="lang" onClick={() => setLang(LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length])} aria-label="Language">{LANG_NAME[LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length]]}</button>
       </header>
       {screen === 'home' && <Home patient={patient} pack={pack} lang={lang} go={setScreen} />}
       {screen === 'checkin' && <CheckIn key={patient.id} patient={patient} pack={pack} lang={lang} onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
@@ -114,7 +115,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
 function ReadAloud({ text, lang }: { text: string; lang: Lang }) {
   const [on, setOn] = useState(false);
   const stopRef = useRef<null | (() => void)>(null);
-  if (!speakSupported()) return null;
+  if (!speakSupported(lang)) return null;
   return (
     <button className="readaloud" aria-pressed={on} onClick={() => {
       if (on) { stopRef.current?.(); setOn(false); return; }
@@ -234,7 +235,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
   return (
     <>
       <Progress i={idx} n={order.length} />
-      {listening && <div className="voice" role="status">🎙️ {T('listening')}<br /><small>{pack.checkIn.voiceExample[lang]}</small></div>}
+      {listening && <div className="voice" role="status">🎙️ {T('listening')}<br /><small>{L(pack.checkIn.voiceExample, lang)}</small></div>}
       <main>
         <button className="back" onClick={() => { stop.current?.(); (fromReview && step !== 'review') ? setStep('review') : idx === 0 || step === 'review' ? onBack() : setStep(order[idx - 1]); }}>← {T('back')}</button>
 
@@ -262,7 +263,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
                   <button className="big secondary" onClick={startVoice}>🎙️ {T('speak')}</button>
                 ) : (
                   <div className="card">
-                    <p className="hint">{T('voiceUnsupported')}<br />{pack.checkIn.voiceExample[lang]}</p>
+                    <p className="hint">{T('voiceUnsupported')}<br />{L(pack.checkIn.voiceExample, lang)}</p>
                     <textarea className="vtext" value={typed} onChange={(e) => setTyped(e.target.value)} aria-label={T('speak')} />
                     <button className="big secondary" disabled={!typed.trim()} onClick={() => applyText(typed)}>{T('speak')}</button>
                   </div>
