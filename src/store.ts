@@ -1,5 +1,6 @@
 import type { Patient, PeriodicEntry, Value } from './types';
 import { addDays } from './engine/dates';
+import { normalizePatient, planDefaults } from './engine/plan';
 import { getPack } from './engine/packs';
 import { DEMO_TODAY_LAST, makeAllPatients } from './demo/seed';
 
@@ -19,6 +20,7 @@ export function seedState(): AppState {
   return { version: 1, patients: makeAllPatients(), activeId: 'ravi', today: addDays(DEMO_TODAY_LAST, 1), demoStep: 0 };
 }
 
+const LEGACY_MOVE: Record<string, string> = { squat: 'squats', stairs: 'step-ups', bending: 'gentle-rom', straightening: 'gentle-rom' };
 const LEGACY_SIGNS = ['givingWay', 'locking', 'calfPainOrRedness', 'fever', 'woundDischarge', 'spreadingRedness', 'numbness'];
 
 /** Convert one patient from the acl-rehab-v1 shape. */
@@ -32,7 +34,7 @@ export function migrateLegacyPatient(old: any): Patient {
     sessionsPrescribed: e.sessionsPrescribed,
     sessionsDone: e.sessionsDone,
     ...(e.skipReason ? { skipReason: e.skipReason } : {}),
-    hardMovement: e.hardMovement ?? 'none',
+    hardMovement: LEGACY_MOVE[e.hardMovement] ?? e.hardMovement ?? 'none',
     // chest pain / breathlessness did not exist in v1: it stays false, never guessed.
     warnings: { ...signs, ...Object.fromEntries(LEGACY_SIGNS.map((k) => [k, !!e[k]])) },
     answeredBy: 'patient',
@@ -48,7 +50,7 @@ export function migrateLegacyPatient(old: any): Patient {
   return {
     id: old.id, name: old.name, age: old.age, packId: pack.id, language: old.language === 'hi' ? 'hi' : 'en',
     anchorDate: old.surgeryDate, currentPhase: `p${old.currentPhase}`, phaseStartDate: old.phaseStartDate,
-    sessionsPrescribedPerDay: old.sessionsPrescribedPerDay ?? 2, daily, periodic, reviewed: {}, decisions: [],
+    sessionsPrescribedPerDay: old.sessionsPrescribedPerDay ?? 2, daily, periodic, reviewed: {}, decisions: [], ...planDefaults(),
   };
 }
 
@@ -75,7 +77,7 @@ export function loadState(storage: Storage | null = typeof localStorage === 'und
     const cur = storage?.getItem(STORAGE_KEY);
     if (cur) {
       const s = JSON.parse(cur) as AppState;
-      if (s?.version === 1 && Array.isArray(s.patients)) return s;
+      if (s?.version === 1 && Array.isArray(s.patients)) return { ...s, patients: s.patients.map(normalizePatient) };
     }
     const legacy = storage?.getItem(LEGACY_KEY);
     if (legacy) {

@@ -3,9 +3,12 @@
  */
 import type { DailyCheckIn, Exercises, Patient, ProtocolPack, Value } from './types';
 import type { VoiceResult } from './voice/parser';
+import { currentExercises } from './engine/plan';
 
 export interface Draft {
   values: Record<string, Value | null>;
+  /** Per prescribed exercise: done / couldn't, and why (Phase 2.2). */
+  results: Record<string, { done: boolean | null; reason: string | null }>;
   exercises: Exercises | null;
   skipReason: string | null;
   hardMovement: string | null;
@@ -22,6 +25,7 @@ export const activePrecautions = (pack: ProtocolPack, p: Patient) => pack.precau
 export function newDraft(pack: ProtocolPack, p: Patient): Draft {
   return {
     values: Object.fromEntries(pack.checkIn.dailyMeasures.map((id) => [id, null])),
+    results: Object.fromEntries(currentExercises(p, pack).map((id) => [id, { done: null, reason: null }])),
     exercises: null,
     skipReason: null,
     hardMovement: null,
@@ -36,6 +40,13 @@ export function draftFromEntry(pack: ProtocolPack, p: Patient, e: DailyCheckIn):
   for (const id of pack.checkIn.dailyMeasures) d.values[id] = e.values[id] ?? null;
   d.exercises = e.exercises;
   d.skipReason = e.skipReason ?? null;
+  if (e.exerciseResults) for (const r of e.exerciseResults) d.results[r.id] = { done: r.done, reason: r.reason ?? null };
+  else {
+    // Older entries only recorded all / some / none for the day.
+    const ids = Object.keys(d.results);
+    const doneCount = e.exercises === 'all' ? ids.length : e.exercises === 'none' ? 0 : Math.ceil(ids.length / 2);
+    ids.forEach((id, i) => (d.results[id] = i < doneCount ? { done: true, reason: null } : { done: false, reason: e.skipReason ?? 'time' }));
+  }
   d.hardMovement = e.hardMovement;
   for (const s of pack.warningSigns) d.warnings[s.id] = e.warnings[s.id] ?? null;
   for (const k of Object.keys(d.precautionBreaches)) d.precautionBreaches[k] = e.precautionBreaches?.[k] ?? null;
@@ -47,10 +58,15 @@ export function draftFromEntry(pack: ProtocolPack, p: Patient, e: DailyCheckIn):
  * The patient must tap every sign (see isComplete).
  */
 export function applyVoice(d: Draft, v: VoiceResult, pack: ProtocolPack, heard: string): Draft {
-  const out: Draft = { ...d, values: { ...d.values }, warnings: { ...d.warnings }, suggested: {}, precautionBreaches: { ...d.precautionBreaches }, heard };
+  const out: Draft = { ...d, results: { ...d.results }, values: { ...d.values }, warnings: { ...d.warnings }, suggested: {}, precautionBreaches: { ...d.precautionBreaches }, heard };
   if (v.pain !== undefined && 'pain' in out.values) out.values.pain = v.pain;
   if (v.swelling !== undefined && 'swelling' in out.values) out.values.swelling = v.swelling;
-  if (v.exercises) out.exercises = v.exercises;
+  if (v.exercises) {
+    out.exercises = v.exercises;
+    // Voice can say "all done" for the whole list; "none" still needs a tapped reason for each.
+    if (v.exercises === 'all') for (const id of Object.keys(out.results)) out.results[id] = { done: true, reason: null };
+    if (v.exercises === 'none') for (const id of Object.keys(out.results)) out.results[id] = { done: false, reason: null };
+  }
   if (v.hardMovement) out.hardMovement = v.hardMovement;
   for (const s of pack.warningSigns) if (v.warnings[s.id] !== undefined) out.suggested[s.id] = v.warnings[s.id];
   // Voice never confirms a sign: any previously tapped answer is cleared so the patient re-confirms.
@@ -62,8 +78,13 @@ export const unansweredSigns = (d: Draft): string[] => Object.entries(d.warnings
 
 export function isComplete(d: Draft): boolean {
   if (Object.values(d.values).some((v) => v === null)) return false;
-  if (d.exercises === null || d.hardMovement === null) return false;
-  if (d.exercises !== 'all' && d.skipReason === null) return false;
+  if (d.hardMovement === null) return false;
+  if (Object.keys(d.results).length) {
+    for (const r of Object.values(d.results)) if (r.done === null || (r.done === false && r.reason === null)) return false;
+  } else {
+    if (d.exercises === null) return false;
+    if (d.exercises !== 'all' && d.skipReason === null) return false;
+  }
   if (unansweredSigns(d).length) return false;
   if (Object.values(d.precautionBreaches).some((v) => v === null)) return false;
   return true;
@@ -72,14 +93,17 @@ export function isComplete(d: Draft): boolean {
 export function toDaily(d: Draft, p: Patient, date: string, opts: { answeredBy?: 'patient' | 'caregiver'; recordedAt?: number } = {}): DailyCheckIn {
   if (!isComplete(d)) throw new Error('Check-in incomplete');
   const per = p.sessionsPrescribedPerDay;
-  const ex = d.exercises!;
+  const rs = Object.entries(d.results);
+  const ex: Exercises = rs.length ? (rs.every(([, r]) => r.done) ? 'all' : rs.every(([, r]) => !r.done) ? 'none' : 'some') : d.exercises!;
+  const firstReason = rs.find(([, r]) => r.done === false)?.[1].reason ?? d.skipReason;
   return {
     date,
     values: Object.fromEntries(Object.entries(d.values).map(([k, v]) => [k, v as Value])),
     exercises: ex,
     sessionsPrescribed: per,
     sessionsDone: ex === 'all' ? per : ex === 'some' ? Math.max(1, per - 1) : 0,
-    ...(ex !== 'all' && d.skipReason ? { skipReason: d.skipReason } : {}),
+    ...(ex !== 'all' && firstReason ? { skipReason: firstReason } : {}),
+    ...(rs.length ? { exerciseResults: rs.map(([id, r]) => ({ id, done: r.done === true, ...(r.done === false && r.reason ? { reason: r.reason } : {}) })) } : {}),
     hardMovement: d.hardMovement!,
     warnings: Object.fromEntries(Object.entries(d.warnings).map(([k, v]) => [k, v === true])),
     ...(Object.keys(d.precautionBreaches).length ? { precautionBreaches: Object.fromEntries(Object.entries(d.precautionBreaches).map(([k, v]) => [k, v === true])) } : {}),

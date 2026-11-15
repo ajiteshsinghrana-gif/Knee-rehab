@@ -9,6 +9,9 @@ import { ACTION_LABELS, suggestedActions } from '../engine/actions';
 import { collectSignoffs } from '../engine/signoff';
 import { clockMs, getState, updatePatient, type AppState } from '../store';
 import { LineChart } from './Charts';
+import { applyAction, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
+import { listOverridable } from '../engine/overrides';
+import { exerciseName, getExercise } from '../exercises/library';
 
 const TIER_LABEL: Record<Tier, string> = { SAFETY: 'SAFETY', URGENT: 'URGENT', REVIEW: 'REVIEW', ON_PLAN: 'ON PLAN' };
 const srcClass = (s: string) => s.split(/[;( ]/)[0].replace(/[^A-Z_]/g, '');
@@ -71,13 +74,40 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
   const signoffs = useMemo(() => collectSignoffs(pack).filter((x) => x.needsSignoff), [pack]);
   const [note, setNote] = useState<Record<string, string>>({});
   const [modifying, setModifying] = useState<string | null>(null);
+  const [err, setErr] = useState('');
+  const st = getState();
+  const exs = currentExercises(p, pack);
+  const [pick, setPick] = useState('');
+  const [fuDate, setFuDate] = useState(addDays(st.today, 2));
+  const [fuEvery, setFuEvery] = useState(1);
+  const PLAN_ACTIONS = ['regress-exercise', 'hold-progression', 'reassess-bring-visit-forward'];
 
-  const decide = (action: string, status: 'approved' | 'modified') =>
-    updatePatient(p.id, (q) => ({
-      ...q,
-      reviewed: r.flagKey ? { ...q.reviewed, [r.flagKey]: new Date(now).toISOString() } : q.reviewed,
-      decisions: [...q.decisions, { at: new Date(now).toISOString(), flagKey: r.flagKey, action, status, ...(note[action] ? { note: note[action] } : {}) }],
-    }));
+  /** Apply a plan action (physio only). Errors are shown, never swallowed. */
+  const apply = (a: PlanAction, label?: { action: string; status: 'approved' | 'modified' }): boolean => {
+    try {
+      const iso = new Date(now).toISOString();
+      updatePatient(p.id, (q) => {
+        let out = applyAction(q, pack, a, { nowMs: now, today: st.today });
+        if (r.flagKey && label) out = { ...out, reviewed: { ...out.reviewed, [r.flagKey]: iso } };
+        if (label) out = { ...out, decisions: [...out.decisions, { at: iso, flagKey: r.flagKey, action: label.action, status: label.status, ...(note[label.action] ? { note: note[label.action] } : {}) }] };
+        return out;
+      });
+      setErr('');
+      return true;
+    } catch (e) { setErr((e as Error).message); return false; }
+  };
+  const start = (a: string) => {
+    if (!PLAN_ACTIONS.includes(a)) { apply({ type: 'record', action: ACTION_LABELS[a]?.en ?? a, status: 'approved', ...(note[a] ? { note: note[a] } : {}) }, { action: a, status: 'approved' }); return; }
+    setErr(''); setModifying(a);
+  };
+  const confirm = (a: string) => {
+    const n = note[a];
+    let act: PlanAction | null = null;
+    if (a === 'regress-exercise') { if (!pick) { setErr('Choose which exercise to make easier'); return; } act = { type: 'regress-exercise', exerciseId: pick, note: n }; }
+    if (a === 'hold-progression') act = { type: 'hold-progression', note: n };
+    if (a === 'reassess-bring-visit-forward') act = { type: 'change-follow-up', checkInEveryDays: fuEvery, nextReviewDate: fuDate, note: n };
+    if (act && apply(act, { action: a, status: 'approved' })) setModifying(null);
+  };
   const markReviewed = () => r.flagKey && updatePatient(p.id, (q) => ({ ...q, reviewed: { ...q.reviewed, [r.flagKey!]: new Date(now).toISOString() } }));
 
   // charts
@@ -115,37 +145,52 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             {r.triggers.map((t) => (
               <li key={t.ruleId}>
                 <span className={`rid ${t.tier}`}>{t.ruleId}</span>
-                <div><b>{t.label.en}</b> <Tier tier={t.tier} /> <Src s={t.source} /><p>{t.evidence}</p>{t.combinedFrom && <small>Combined from: {t.combinedFrom.join(', ')}</small>}</div>
+                <div><b>{t.label.en}</b> <Tier tier={t.tier} /> <Src s={t.source} />{t.source.includes('PHYSIO_OVERRIDE') && <span className="src" data-testid="override-tag">PHYSIO_OVERRIDE: {t.source.split('PHYSIO_OVERRIDE:')[1]?.trim()}</span>}<p>{t.evidence}</p>{t.combinedFrom && <small>Combined from: {t.combinedFrom.join(', ')}</small>}</div>
               </li>
             ))}
           </ul>
         </div>
       )}
 
+      <ProposalCard patient={p} pack={pack} r={r} now={now} />
+
       <div className="card">
-        <h3>Suggested actions <small>(never applied automatically)</small></h3>
+        <h3>Suggested actions <small>(never applied until you approve)</small></h3>
         {r.reviewedAt && <p className="reviewed">Reviewed {r.reviewedAt.slice(0, 16).replace('T', ' ')}</p>}
         {actions.length === 0 && <p className="tiny">No action suggested. Weekly summary only.</p>}
+        {err && <p className="err" role="alert">{err}</p>}
         {actions.map((a) => (
-          <div className="actrow" key={a}>
+          <div className="actrow" key={a} data-action={a}>
             <span className="name">{ACTION_LABELS[a]?.en ?? a}</span>
-            {modifying === a && <input aria-label="Note" placeholder="What did you change?" value={note[a] ?? ''} onChange={(e) => setNote({ ...note, [a]: e.target.value })} />}
+            {modifying === a && a === 'regress-exercise' && (
+              <select aria-label="Exercise to make easier" value={pick} onChange={(e) => setPick(e.target.value)}>
+                <option value="">Choose exercise…</option>
+                {exs.map((id) => <option key={id} value={id} disabled={!getExercise(id)?.regressionId}>{exerciseName(id, 'en')}{getExercise(id)?.regressionId ? ` → ${exerciseName(getExercise(id)!.regressionId!, 'en')}` : ' (no easier version defined)'}</option>)}
+              </select>
+            )}
+            {modifying === a && a === 'reassess-bring-visit-forward' && (
+              <span className="fu">
+                <label>Next review <input type="date" value={fuDate} onChange={(e) => setFuDate(e.target.value)} /></label>
+                <label>Check in every <input type="number" min={1} max={14} value={fuEvery} onChange={(e) => setFuEvery(Number(e.target.value))} /> day(s)</label>
+              </span>
+            )}
+            {modifying === a && <input aria-label="Note" placeholder="Note (optional)" value={note[a] ?? ''} onChange={(e) => setNote({ ...note, [a]: e.target.value })} />}
             {modifying === a ? (
-              <button className="btn primary" onClick={() => { decide(a, 'modified'); setModifying(null); }}>Save change</button>
-            ) : (
               <>
-                <button className="btn primary" onClick={() => decide(a, 'approved')}>Approve</button>
-                <button className="btn" onClick={() => setModifying(a)}>Modify</button>
+                <button className="btn primary" onClick={() => confirm(a)}>Confirm and apply</button>
+                <button className="btn" onClick={() => setModifying(null)}>Cancel</button>
               </>
+            ) : (
+              <button className="btn primary" onClick={() => start(a)}>{PLAN_ACTIONS.includes(a) ? 'Approve…' : 'Approve'}</button>
             )}
           </div>
         ))}
-        {p.decisions.length > 0 && (
-          <ul className="decisions">{p.decisions.slice(-4).map((d, i) => <li key={i}>{d.at.slice(0, 16).replace('T', ' ')}: {ACTION_LABELS[d.action]?.en ?? d.action} {d.status}{d.note ? ` (${d.note})` : ''}</li>)}</ul>
-        )}
-        <p className="tiny">Recording a decision marks the flag as reviewed. Automatic plan changes are not wired up yet; you edit the plan yourself.</p>
+        <p className="tiny">Approving a plan action changes the patient's plan and is written to the audit log. The patient is told in their own language.</p>
         {r.tier !== 'ON_PLAN' && !r.reviewedAt && <div className="btnrow"><button className="btn" onClick={markReviewed}>Mark as reviewed</button></div>}
       </div>
+
+      <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} />
+      <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
 
       <div className="charts">
         <div className="card">
@@ -187,7 +232,11 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
       {gate && (
         <>
           {gate.allMet && (
-            <div className="card ready"><div><b>Ready for {pack.phases.find((x) => x.id === gate.toPhase)?.name.en}</b><p>All criteria met. For physio sign-off. The app never advances a patient by itself.</p></div></div>
+            <div className="card ready" data-testid="gate-ready"><div><b>Ready for {pack.phases.find((x) => x.id === gate.toPhase)?.name.en}</b>
+              {gate.held
+                ? <p className="err">All criteria met, but progression is on hold. Sign-off is blocked until the hold is removed.</p>
+                : <p>All criteria met. For physio sign-off. The app never advances a patient by itself.</p>}
+              <button className="btn primary" disabled={!gate.canSignOff} onClick={() => apply({ type: 'sign-off-phase' })}>Sign off phase change</button></div></div>
           )}
           <details className="card">
             <summary><b>{pack.phases.find((x) => x.id === gate.fromPhase)?.name.en} to {pack.phases.find((x) => x.id === gate.toPhase)?.name.en}: gate criteria</b> ({gate.criteria.filter((c) => c.met).length}/{gate.criteria.length} met)</summary>
@@ -197,5 +246,111 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
         </>
       )}
     </section>
+  );
+}
+
+// ---------------- Phase 2 panels ----------------
+type ApplyFn = (a: PlanAction, label?: { action: string; status: 'approved' | 'modified' }) => boolean;
+
+function ProposalCard({ patient: p, pack, r, now }: { patient: Patient; pack: ProtocolPack; r: TriageResult; now: number }) {
+  const st = getState();
+  const prop = pendingProposal(p, pack, r, st.today, now);
+  const [editing, setEditing] = useState(false);
+  const [days, setDays] = useState(pack.followUpProposal.checkInEveryDays);
+  const [review, setReview] = useState('');
+  const [note, setNote] = useState('');
+  if (!prop) return null;
+  const run = (a: PlanAction, status: 'approved' | 'modified') => updatePatient(p.id, (q) => {
+    const out = applyAction(q, pack, a, { nowMs: now, today: st.today });
+    return { ...out, reviewed: { ...out.reviewed, [prop.flagKey]: new Date(now).toISOString() }, decisions: [...out.decisions, { at: new Date(now).toISOString(), flagKey: prop.flagKey, action: 'reassess-bring-visit-forward', status, ...(note ? { note } : {}) }] };
+  });
+  const b = prop.before, a = prop.after;
+  const reviewDate = review || a.teleReviewBy;
+  return (
+    <div className="card proposal" data-testid="proposal">
+      <h3>Proposed follow-up <small>(flag raised by a combination of rules; nothing changes until you approve)</small></h3>
+      <table className="gate beforeafter"><thead><tr><th></th><th>Now</th><th>Proposed</th></tr></thead><tbody>
+        <tr><td>Tele-review</td><td>{b.nextReviewDate ?? `every ${b.reviewEveryDays} days`}</td><td><b>by {a.teleReviewBy}</b> (within {a.teleReviewWithinHours} h)</td></tr>
+        <tr><td>Check-ins</td><td>every {b.checkInEveryDays} day(s)</td><td><b>every {a.checkInEveryDays} day(s) for {a.forDays} days</b> (until {a.until})</td></tr>
+      </tbody></table>
+      <p className="tiny">Source: {pack.followUpProposal.source}</p>
+      {editing && (
+        <p className="fu">
+          <label>Tele-review by <input type="date" value={reviewDate} onChange={(e) => setReview(e.target.value)} /></label>
+          <label>Check in every <input type="number" min={1} max={14} value={days} onChange={(e) => setDays(Number(e.target.value))} /> day(s)</label>
+        </p>
+      )}
+      <input aria-label="Note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <div className="btnrow">
+        {!editing ? (
+          <>
+            <button className="btn primary" onClick={() => run({ type: 'change-follow-up', checkInEveryDays: a.checkInEveryDays, nextReviewDate: a.teleReviewBy, until: a.until, flagKey: prop.flagKey, proposalStatus: 'approved', note }, 'approved')}>Approve</button>
+            <button className="btn" onClick={() => setEditing(true)}>Edit</button>
+            <button className="btn" onClick={() => updatePatient(p.id, (q) => ({ ...applyAction(q, pack, { type: 'reject-proposal', flagKey: prop.flagKey, note }, { nowMs: now, today: st.today }), reviewed: { ...q.reviewed, [prop.flagKey]: new Date(now).toISOString() } }))}>Reject</button>
+          </>
+        ) : (
+          <>
+            <button className="btn primary" onClick={() => run({ type: 'change-follow-up', checkInEveryDays: days, nextReviewDate: reviewDate, until: a.until, flagKey: prop.flagKey, proposalStatus: 'modified', note }, 'modified')}>Save edited plan</button>
+            <button className="btn" onClick={() => setEditing(false)}>Cancel</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlanCard({ patient: p, pack, now, onApply, err }: { patient: Patient; pack: ProtocolPack; now: number; onApply: ApplyFn; err: string }) {
+  const st = getState();
+  const exs = currentExercises(p, pack);
+  const fu = currentFollowUp(p, pack, st.today);
+  const swapped = Object.entries(p.plan.swaps);
+  return (
+    <div className="card plan" data-testid="plan">
+      <h3>Current plan</h3>
+      <ul className="planlist">
+        {exs.map((id) => {
+          const orig = swapped.find(([, v]) => v === id)?.[0];
+          return <li key={id}>{exerciseName(id, 'en')}{orig && <> <small>(easier version of {exerciseName(orig, 'en')})</small> <button className="btn" onClick={() => onApply({ type: 'restore-exercise', exerciseId: id })}>Restore</button></>}</li>;
+        })}
+      </ul>
+      <p>Check-ins: every <b>{fu.checkInEveryDays}</b> day(s) · Next review: <b>{fu.nextReviewDate ?? 'not set'}</b>{p.plan.followUp?.until && <> <small>(until {p.plan.followUp.until})</small></>}</p>
+      <p>Progression: {p.plan.hold ? <b className="holdtag">On hold since {p.plan.hold.at.slice(0, 10)}</b> : 'not on hold'} {p.plan.hold && <button className="btn" onClick={() => onApply({ type: 'release-hold' })}>Remove hold</button>}</p>
+      {err && <p className="err" role="alert">{err}</p>}
+      <details>
+        <summary>Audit log ({p.audit.length})</summary>
+        {p.audit.length === 0 ? <p className="tiny">No plan changes yet.</p> : (
+          <ul className="audit">{[...p.audit].reverse().map((a) => (
+            <li key={a.id}><b>{a.at.slice(0, 16).replace('T', ' ')}</b> · {a.who}: {a.summary}{a.note ? <> <i>“{a.note}”</i></> : null}</li>))}</ul>
+        )}
+      </details>
+    </div>
+  );
+}
+
+function OverridesCard({ patient: p, pack, onApply, err }: { patient: Patient; pack: ProtocolPack; onApply: ApplyFn; err: string }) {
+  const list = listOverridable(pack, p);
+  const [target, setTarget] = useState('');
+  const [value, setValue] = useState('');
+  const [reason, setReason] = useState('');
+  const cur = list.find((x) => x.target === target);
+  return (
+    <details className="card overrides" data-testid="overrides">
+      <summary><b>Thresholds for this patient</b> ({p.plan.overrides.length} overridden)</summary>
+      {p.plan.overrides.length > 0 && (
+        <ul className="audit">{p.plan.overrides.map((o) => (
+          <li key={o.id}>{o.label}: <s>{o.original}</s> <b>{o.value}</b> <span className="src">PHYSIO_OVERRIDE</span> · {o.by}, {o.at.slice(0, 10)} · “{o.reason}” <button className="btn" onClick={() => onApply({ type: 'remove-override', id: o.id })}>Remove</button></li>))}</ul>
+      )}
+      <div className="fu">
+        <select aria-label="Threshold" value={target} onChange={(e) => { setTarget(e.target.value); setValue(''); }}>
+          <option value="">Choose a threshold…</option>
+          {list.map((x) => <option key={x.target} value={x.target}>{x.label} (now {x.current})</option>)}
+        </select>
+        <input aria-label="New value" type="number" placeholder={cur ? String(cur.current) : 'value'} value={value} onChange={(e) => setValue(e.target.value)} />
+        <input aria-label="Reason (required)" placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <button className="btn primary" disabled={!target || value === '' || !reason.trim()} onClick={() => { if (onApply({ type: 'set-override', target, value: Number(value), reason })) { setTarget(''); setValue(''); setReason(''); } }}>Override for this patient</button>
+      </div>
+      {err && <p className="err" role="alert">{err}</p>}
+      <p className="tiny">Applies to this patient only. The pack is unchanged. The reason is logged and shown on the evidence line whenever the rule fires.</p>
+    </details>
   );
 }

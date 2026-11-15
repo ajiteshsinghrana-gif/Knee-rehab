@@ -67,12 +67,23 @@ export interface Gate {
 export interface Exercise {
   id: string;
   name: Bi;
+  /** Path under the site root (placeholder pictures until the physio supplies real ones). */
+  picture: string;
+  dose: { sets: number | null; reps: number | null; holdSec: number | null; text: Bi; source: SourceTag };
+  /** Easier version used by "Regress exercise". null = none defined yet. */
+  regressionId: string | null;
+  regressionSource: SourceTag | null;
+  /** Voice keywords (regex sources) for "hardest movement". */
+  voice: string[];
+  /** pack id -> phase ids that prescribe it (checked against the packs by the validator). */
+  usedIn: Record<string, string[]>;
 }
 export interface Phase {
   id: string;
   order: number;
   name: Bi;
-  exercises: Exercise[];
+  /** Exercise ids from the library. */
+  exercises: string[];
   sessionsPerDay: number;
   followUpEveryDays: number;
   /** Time spent IN this phase, in weeks [min, max]. Criteria-driven protocols have no calendar windows. */
@@ -117,20 +128,12 @@ export interface WarningSign {
   voice?: string[];
 }
 
-export interface HardMovement {
-  id: string;
-  label: Bi;
-  /** Exercise id this option corresponds to (Phase 2.3 uses prescribed exercises). */
-  exerciseId?: string;
-  voice?: string[];
-}
 
 export interface CheckInConfig {
   /** Example sentence shown for the voice check-in. */
   voiceExample: Bi;
   /** Measure ids asked every day, in order. */
   dailyMeasures: string[];
-  hardMovements: HardMovement[];
   skipReasons: string[];
 }
 
@@ -237,6 +240,8 @@ export interface ProtocolPack {
   rules: Rule[];
   checkIn: CheckInConfig;
   questionnaires: Questionnaire[];
+  /** Proposed follow-up when a patient reaches URGENT through a combination of rules (Phase 2.5). */
+  followUpProposal: { teleReviewWithinHours: number; checkInEveryDays: number; forDays: number; source: SourceTag };
   /** rule id -> suggested clinician action ids. Never auto-applied. */
   suggestedActions: Record<string, string[]>;
   /** Response time (hours) per tier. Placeholders are tagged. */
@@ -260,6 +265,8 @@ export interface DailyCheckIn {
   hardMovement: string; // movement id or 'none'
   /** warning sign id -> true/false. Every sign must be present on save. */
   warnings: Record<string, boolean>;
+  /** Per-exercise result for the day (Phase 2.2). */
+  exerciseResults?: { id: string; done: boolean; reason?: string }[];
   precautionBreaches?: Record<string, boolean>;
   answeredBy?: AnsweredBy;
   /** Epoch ms of when the check-in was recorded (for silence rules). Optional for seeded data. */
@@ -287,6 +294,62 @@ export interface Patient {
   reviewed: Record<string, string>;
   /** Physio decisions on suggested actions. Recorded only; plan changes arrive with Phase 2.4. */
   decisions: Decision[];
+  plan: Plan;
+  /** Append-only record of every change to the plan. */
+  audit: AuditEntry[];
+  /** What the patient is told after a physio review. */
+  notices: Notice[];
+  /** flagKey -> what the physio did with the follow-up proposal. */
+  proposalStatus: Record<string, { status: 'approved' | 'modified' | 'rejected'; at: string; note?: string }>;
+}
+
+export interface FollowUp {
+  checkInEveryDays: number;
+  reviewEveryDays: number;
+  nextReviewDate: string | null;
+  /** If set, the plan reverts to `revertTo` after this date. */
+  until: string | null;
+  revertTo?: { checkInEveryDays: number; reviewEveryDays: number; nextReviewDate: string | null };
+}
+export interface Override {
+  id: string;
+  target: string; // rule:R3:stage:0 | rule:A1:delta | gate:g1.flexion ...
+  label: string;
+  original: number;
+  value: number;
+  reason: string;
+  by: string;
+  at: string;
+}
+export interface Plan {
+  /** exercise id -> easier exercise it was swapped for. */
+  swaps: Record<string, string>;
+  hold: { at: string; by: string; note?: string } | null;
+  followUp: FollowUp | null;
+  overrides: Override[];
+}
+export interface AuditEntry {
+  id: string;
+  at: string;
+  who: string;
+  action: string;
+  summary: string;
+  before: unknown;
+  after: unknown;
+  note?: string;
+}
+export type NoticeChange =
+  | { kind: 'regress'; from: string; to: string }
+  | { kind: 'restore'; exercise: string }
+  | { kind: 'hold' }
+  | { kind: 'release' }
+  | { kind: 'followUp'; nextReviewDate: string | null; checkInEveryDays: number }
+  | { kind: 'phase'; phaseId: string };
+export interface Notice {
+  id: string;
+  at: string;
+  changes: NoticeChange[];
+  seen: boolean;
 }
 
 export interface Decision {
@@ -324,3 +387,6 @@ export interface TriageResult {
   /** Response time passed and the flag has not been reviewed. */
   overdue: boolean;
 }
+
+/** Reasons a patient can give when they could not do an exercise (Phase 2.2). */
+export const SKIP_REASONS = ['pain', 'fear', 'time', 'access', 'understand'];

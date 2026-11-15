@@ -6,6 +6,7 @@
  * warning-sign keyword after it (within 2 tokens), otherwise to the nearest one before it.
  * Only signs the patient actually mentioned are returned; the rest stay unanswered.
  */
+import { getExercise } from '../exercises/library';
 import type { Exercises, ProtocolPack } from '../types';
 
 export interface VoiceResult {
@@ -51,7 +52,8 @@ function matchTokens(clause: string[], re: RegExp): { start: number; end: number
   return { start, end };
 }
 
-export function parseVoice(text: string, pack: ProtocolPack): VoiceResult {
+/** `exerciseIds` = the patient's prescribed exercises; their library keywords decide "hardest movement". */
+export function parseVoice(text: string, pack: ProtocolPack, exerciseIds: string[] = []): VoiceResult {
   const t = text.toLowerCase();
   const res: VoiceResult = { warnings: {} };
 
@@ -79,8 +81,8 @@ export function parseVoice(text: string, pack: ProtocolPack): VoiceResult {
 
   // hardest movement, options come from the pack
   if (/hard|difficult|tough|painful|struggl|mushkil|kathin|मुश्किल|कठिन/.test(t)) {
-    for (const h of pack.checkIn.hardMovements) {
-      if ((h.voice ?? []).some((v) => new RegExp(v, 'i').test(t))) { res.hardMovement = h.id; break; }
+    for (const id of exerciseIds) {
+      if ((getExercise(id)?.voice ?? []).some((v) => new RegExp(v, 'i').test(t))) { res.hardMovement = id; break; }
     }
   }
 

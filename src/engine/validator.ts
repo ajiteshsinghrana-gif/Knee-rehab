@@ -1,8 +1,39 @@
-import type { ProtocolPack, Rule, Stage } from '../types';
-import { TIER_ORDER } from '../types';
+import type { Exercise, ProtocolPack, Rule, Stage } from '../types';
+import { getExercise } from '../exercises/library';
+import { TIER_ORDER, SKIP_REASONS } from '../types';
 
 const hasSource = (s: unknown): boolean => typeof s === 'string' && s.trim().length > 0;
 const bi = (b: any): boolean => !!b && hasSource(b.en) && hasSource(b.hi);
+
+/** Library-level checks (Phase 2.1): names in both languages, regressions exist, no loops, usedIn matches packs. */
+export function validateLibrary(lib: Exercise[], packs: ProtocolPack[]): string[] {
+  const errors: string[] = [];
+  const ids = new Set<string>();
+  for (const e of lib) {
+    if (ids.has(e.id)) errors.push(`duplicate exercise id ${e.id}`);
+    ids.add(e.id);
+    if (!bi(e.name)) errors.push(`exercise ${e.id} needs en and hi name`);
+    if (!e.picture) errors.push(`exercise ${e.id} has no picture path`);
+    if (!e.dose || !bi(e.dose.text) || !hasSource(e.dose.source)) errors.push(`exercise ${e.id} dose needs en/hi text and a source tag`);
+  }
+  for (const e of lib) {
+    if (e.regressionId !== null) {
+      if (!ids.has(e.regressionId)) errors.push(`exercise ${e.id} regression ${e.regressionId} does not exist`);
+      if (e.regressionId === e.id) errors.push(`exercise ${e.id} regresses to itself`);
+      if (!hasSource(e.regressionSource)) errors.push(`exercise ${e.id} regression has no source tag`);
+    }
+    // a regression chain must end (no loops)
+    const seen = new Set<string>([e.id]);
+    let cur = e.regressionId;
+    while (cur) { if (seen.has(cur)) { errors.push(`regression loop at ${e.id}`); break; } seen.add(cur); cur = lib.find((x) => x.id === cur)?.regressionId ?? null; }
+    for (const [pid, phs] of Object.entries(e.usedIn ?? {})) {
+      const pk = packs.find((x) => x.id === pid);
+      if (!pk) { errors.push(`exercise ${e.id} usedIn unknown pack ${pid}`); continue; }
+      for (const ph of phs) if (!pk.phases.find((x) => x.id === ph)?.exercises.includes(e.id)) errors.push(`exercise ${e.id} says it is in ${pid}/${ph} but that phase does not prescribe it`);
+    }
+  }
+  return errors;
+}
 
 /** Returns a list of problems. Empty list = valid. */
 export function validatePack(p: ProtocolPack): string[] {
@@ -43,7 +74,11 @@ export function validatePack(p: ProtocolPack): string[] {
     const [mn, mx] = ph.expectedWeeks ?? [NaN, NaN];
     if (!(mn >= 0) || (mx !== null && !(mx >= mn))) err(`phase ${ph.id} expectedWeeks must be [min, max] with min <= max`);
     if (!hasSource(ph.source)) err(`phase ${ph.id} has no source tag`);
-    for (const x of ph.exercises ?? []) if (!bi(x.name)) err(`exercise ${x.id} in ${ph.id} needs en and hi name`);
+    for (const x of ph.exercises ?? []) {
+      const ex = getExercise(x);
+      if (!ex) err(`phase ${ph.id} prescribes unknown exercise ${x}`);
+      else if (!(ex.usedIn?.[p.id] ?? []).includes(ph.id)) err(`exercise ${x} is used in ${ph.id} but its library record does not list this pack and phase`);
+    }
   }
 
   // --- measures ---
@@ -110,7 +145,10 @@ export function validatePack(p: ProtocolPack): string[] {
     if (m && !bi(m.question)) err(`daily measure ${id} needs a question in en and hi`);
   }
   if (!bi(p.checkIn?.voiceExample)) err('checkIn.voiceExample needs en and hi');
-  for (const h of p.checkIn?.hardMovements ?? []) if (!bi(h.label)) err(`hardMovement ${h.id} needs en and hi label`);
+  for (const sr of p.checkIn?.skipReasons ?? []) if (!SKIP_REASONS.includes(sr)) err(`unknown skip reason ${sr}`);
+  const fu = p.followUpProposal;
+  if (!fu || !(fu.teleReviewWithinHours > 0) || !(fu.checkInEveryDays >= 1) || !(fu.forDays > 0)) err('followUpProposal is missing or invalid');
+  else if (!hasSource(fu.source)) err('followUpProposal has no source tag');
 
   // --- response hours ---
   for (const t of ['SAFETY', 'URGENT', 'REVIEW'] as const) {

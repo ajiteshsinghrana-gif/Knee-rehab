@@ -24,6 +24,8 @@ function mk(actual: any, neg = false) {
     toEqual: (e: any) => chk(eq(actual, e), `expected ${JSON.stringify(actual)} to equal ${JSON.stringify(e)}`),
     toMatchObject: (e: any) => chk(matches(actual, e), `expected ${JSON.stringify(actual)} to match ${JSON.stringify(e)}`),
     toContain: (e: any) => chk(actual.includes(e), `expected ${JSON.stringify(actual)} to contain ${JSON.stringify(e)}`),
+    toMatch: (re: RegExp | string) => chk(typeof re === 'string' ? String(actual).includes(re) : re.test(String(actual)), `expected ${JSON.stringify(actual)} to match ${re}`),
+    toBeNull: () => chk(actual === null, `expected ${JSON.stringify(actual)} null`),
     toBeTruthy: () => chk(!!actual, `expected ${JSON.stringify(actual)} truthy`),
     toBeFalsy: () => chk(!actual, `expected ${JSON.stringify(actual)} falsy`),
     toBeUndefined: () => chk(actual === undefined, `expected ${JSON.stringify(actual)} undefined`),
