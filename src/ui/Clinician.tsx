@@ -206,7 +206,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
         return (
           <div className="card" key={q.id} data-testid="questionnaire-card">
             <h3>{q.title.en} <small>{q.items.length} question{q.items.length === 1 ? "" : "s"}, scored by adding the answers</small></h3>
-            {last ? <p>Latest score <b>{String(last.values[q.measure])}</b> on {last.date}{rows.length > 1 ? `; before that ${rows.slice(0, -1).map((e) => `${String(e.values[q.measure])} (${e.date})`).join(', ')}` : ''}.</p> : <p>Not answered yet.</p>}
+            {last ? <p>Latest score <b>{String(last.values[q.measure])}</b> on {last.date}{last.answeredBy === 'caregiver' ? ' (answered by a caregiver)' : ''}{rows.length > 1 ? `; before that ${rows.slice(0, -1).map((e) => `${String(e.values[q.measure])} (${e.date})`).join(', ')}` : ''}.</p> : <p>Not answered yet.</p>}
             <p className="tiny">{q.credit}{q.licenceConfirmed ? '' : ' (permission to use: NEEDS_PHYSIO_SIGNOFF)'}</p>
           </div>);
       })}
@@ -232,6 +232,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
 
       <div className="card">
         <h3>Last 7 days</h3>
+        {(() => { const n = lastWeek.filter((d) => p.daily.find((x) => x.date === d)?.answeredBy === 'caregiver').length; return n > 0 || p.caregiverMode ? <p className="tiny" data-testid="caregiver-note">{n} of the last 7 check-ins were answered by a caregiver, not the patient. Answers a carer gives for the patient are a second-hand report.</p> : null; })()}
         <table className="gate"><tbody>
           {lastWeek.map((d) => {
             const e = p.daily.find((x) => x.date === d);

@@ -296,6 +296,8 @@ export interface PeriodicEntry {
   photos?: Record<string, string>;
   /** measure id -> 'photo' when the number was measured on a photo in the app (Phase 4.1). */
   methods?: Record<string, 'photo'>;
+  /** Who typed the answers. Absent means the patient (Phase 5.3). */
+  answeredBy?: AnsweredBy;
 }
 export interface Patient {
   id: string;
@@ -303,6 +305,8 @@ export interface Patient {
   age: number;
   packId: string;
   language: Lang;
+  /** True when a family member or carer usually answers on this phone (Phase 5.3). Changes only who is recorded as answering. */
+  caregiverMode?: boolean;
   anchorDate: string; // surgery date
   currentPhase: string; // phase id
   phaseStartDate: string;
