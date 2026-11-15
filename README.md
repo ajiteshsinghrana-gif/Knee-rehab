@@ -109,6 +109,8 @@ Copy a pack in `src/packs/`, register it in `src/engine/packs.ts`, run `npm test
 - **Silence (4.3)**: all three shipped conditions and every written condition raise a REVIEW alert when a patient has not checked in for a set time. It is labelled "No check-in for N days" in English and Hindi with the real number of days. The hours are placeholders (72 h) tagged NEEDS_PHYSIO_SIGNOFF.
 - Still to come in later phases: caregiver mode, third language, backend.
 
+**Phase 4.1.** Written conditions can mark a weekly measure as "measured on a photo": the physio names the three points to tap (English and Hindi) and picks the reading (angle between, or deviation from straight). The photo stays on the patient's phone. A physio can also load a questionnaire from a JSON file, save it for reuse in other conditions, or download it. A loaded file never confirms permission: "permission to use" is always unticked until the physio ticks it, and it stays on the sign-off list.
+
 ## Run
 
 ```

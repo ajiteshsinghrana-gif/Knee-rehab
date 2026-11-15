@@ -18,7 +18,11 @@ export const CUSTOM_PICTURE = 'media/custom.svg';
 export interface ExerciseDraft { id: string; name: Bi; doseText?: Bi }
 export interface PhaseDraft { name: Bi; exercises: string[]; sessionsPerDay: number; followUpEveryDays: number; weeksMin: number; weeksMax: number | null }
 /** A number the patient enters at their weekly self-test (angle, distance, a score, a weight ...). */
-export interface MeasureDraft { id: string; label: Bi; unit: string; min: number; max: number; step: number }
+export interface MeasureDraft {
+  id: string; label: Bi; unit: string; min: number; max: number; step: number;
+  /** The patient can measure this angle on a photo by tapping three points (Phase 4.1). */
+  photo?: { reading: 'between' | 'deviation'; points: [Bi, Bi, Bi] };
+}
 export interface CriterionDraft { measure: string; operator: Operator; value: number }
 /** Criteria to leave phase `from` (0-based index) for the next one. */
 export interface GateDraft { from: number; criteria: CriterionDraft[] }
@@ -129,6 +133,7 @@ export function validateDraft(d: ConditionDraft): string[] {
   d.measures.forEach((m, i) => {
     if (!bi(m.label)) e.push(`Measure ${i + 1}: name it in English and Hindi (this is what the patient is asked)`);
     if (!m.unit.trim()) e.push(`Measure ${i + 1}: enter a unit`);
+    if (m.photo && (!['between', 'deviation'].includes(m.photo.reading) || m.photo.points?.length !== 3 || m.photo.points.some((x) => !bi(x)))) e.push(`Measure ${i + 1}: name the three points to tap on the photo in English and Hindi`);
     if (![m.min, m.max, m.step].every(num) || !(m.max > m.min) || !(m.step > 0)) e.push(`Measure ${i + 1}: needs a minimum below the maximum and a step above 0`);
     mids.add(m.id);
   });
@@ -275,7 +280,7 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
     phases: d.phases.map((p, i) => ({ id: phaseId(i), order: i + 1, name: { en: p.name.en.trim(), hi: p.name.hi.trim() }, exercises: [...p.exercises], sessionsPerDay: p.sessionsPerDay, followUpEveryDays: p.followUpEveryDays, expectedWeeks: [p.weeksMin, p.weeksMax], source: AUTHORED_TAG })),
     measures: [
       { id: PAIN_ID, label: { en: 'Pain', hi: 'दर्द' }, question: { en: 'How much pain do you have today?', hi: 'आज आपको कितना दर्द है?' }, unit: '0-10', capture: 'tap', frequency: 'daily', valueType: 'number', scale: { min: 0, max: 10 } },
-      ...d.measures.map((m) => ({ id: m.id, label: { en: m.label.en.trim(), hi: m.label.hi.trim() }, short: { en: m.label.en.trim(), hi: m.label.hi.trim() }, unit: m.unit.trim(), capture: 'number' as const, frequency: 'weekly' as const, valueType: 'number' as const, input: { min: m.min, max: m.max, step: m.step } })),
+      ...d.measures.map((m) => ({ id: m.id, label: { en: m.label.en.trim(), hi: m.label.hi.trim() }, short: { en: m.label.en.trim(), hi: m.label.hi.trim() }, unit: m.unit.trim(), capture: m.photo ? ('photo' as const) : ('number' as const), frequency: 'weekly' as const, valueType: 'number' as const, input: { min: m.min, max: m.max, step: m.step }, ...(m.photo ? { photoAngle: { reading: m.photo.reading, points: m.photo.points.map((x) => ({ en: x.en.trim(), hi: x.hi.trim() })) as [Bi, Bi, Bi] } } : {}) })),
       ...(q ? [{ id: QSCORE_ID, label: { en: q.title.en.trim(), hi: q.title.hi.trim() }, unit: 'score', capture: 'tap' as const, frequency: 'monthly' as const, valueType: 'number' as const }] : []),
     ],
     gates: gates.map((g) => ({ fromPhase: phaseId(g.from), toPhase: phaseId(g.from + 1), criteria: g.criteria.map((c, k) => ({ id: `g${g.from + 1}.${k + 1}`, label: mlabel(c.measure), measure: c.measure, operator: c.operator, value: c.value, source: AUTHORED_TAG })) })),
@@ -343,4 +348,18 @@ export function fatDraft(x: any): ConditionDraft {
   else if (d.alerts && typeof d.alerts === 'object' && !(d.alerts as any).silence) d.alerts = { ...d.alerts, silence: { hours: 72 }, source: { ...d.alerts.source, silence: 'placeholder' } };
   for (const k of ['phases', 'exercises', 'measures', 'gates', 'rules', 'precautions', 'signs', 'curves'] as const) if (!Array.isArray(d[k])) throw new Error(`${k} must be a list`);
   return d;
+}
+
+// ---------- reusable questionnaires (Phase 4.1) ----------
+/** Reads a questionnaire file. A file can never confirm permission: the physio ticks that themselves. */
+export function questionnaireFromFile(text: string): QuestionnaireDraft {
+  let x: any;
+  try { x = JSON.parse(text); } catch { throw new Error('That file is not a questionnaire (it is not valid JSON)'); }
+  if (x?.questionnaire && typeof x.questionnaire === 'object') x = x.questionnaire; // a saved condition draft also works
+  const isBi = (b: any) => b && typeof b.en === 'string' && typeof b.hi === 'string';
+  if (!isBi(x?.title) || !isBi(x?.intro)) throw new Error('The file needs a title and an introduction in en and hi');
+  if (!Array.isArray(x.items) || !x.items.length || !x.items.every(isBi)) throw new Error('The file needs a list of questions, each in en and hi');
+  if (!Array.isArray(x.options) || x.options.length < 2 || !x.options.every((o: any) => typeof o?.value === 'number' && isBi(o.label))) throw new Error('The file needs at least two answer options, each with a score and en and hi wording');
+  const alert = x.alert && OPS.includes(x.alert.operator) && num(x.alert.value) ? { operator: x.alert.operator as Operator, value: x.alert.value as number } : undefined;
+  return { title: x.title, intro: x.intro, items: x.items, options: x.options, credit: typeof x.credit === 'string' ? x.credit : '', permission: false, ...(alert ? { alert } : {}) };
 }
