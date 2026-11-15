@@ -4,13 +4,14 @@ import baseHi from './hi.base.json';
 import { extraEn, extraHi } from './extra';
 import { p2En, p2Hi } from './phase2';
 import { p4En, p4Hi } from './phase4';
+import { p5En, p5Hi } from './phase5';
 import { bnDict } from './bn';
 import { BN_CONTENT } from './bn-content';
 
 /** Neutral app name replaces "Knee Rehab Buddy" (Phase 1.7). */
 export const DICT: Record<Lang, Record<string, string>> = {
-  en: { ...(baseEn as Record<string, string>), ...extraEn, ...p2En, ...p4En },
-  hi: { ...(baseHi as Record<string, string>), ...extraHi, ...p2Hi, ...p4Hi },
+  en: { ...(baseEn as Record<string, string>), ...extraEn, ...p2En, ...p4En, ...p5En },
+  hi: { ...(baseHi as Record<string, string>), ...extraHi, ...p2Hi, ...p4Hi, ...p5Hi },
   bn: bnDict,
 };
 

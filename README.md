@@ -120,6 +120,13 @@ Patients can use English, Hindi or Bengali (the language button cycles through t
 - Read aloud and voice input use the browser's Bengali voice (`bn-IN`). The read-aloud button hides itself on phones with no Bengali voice. Voice input does not pre-fill answers in Bengali yet; the patient taps instead, and the tapped warning-sign step is unchanged.
 - The physio screens stay English-only.
 
+## Read aloud and caregiver mode (Phase 5.2, 5.3)
+
+- **Read aloud on every question.** Each check-in step, each weekly test card, each questionnaire sentence, the "seek care now" screen and the thank-you screen has a "Read aloud" button. It reads the question and its choices in the patient's language using the phone's own voice (no network, no AI). Reading stops when the patient moves on. It never answers for the patient: they still tap every answer, including every warning sign.
+- **Caregiver mode.** A tick box on the patient's home screen, "I am answering for {name}". The physio can also tick "a family member or carer will usually answer" when adding the patient; this travels in the invite. While it is on, a banner shows on every answering screen, and new check-ins, weekly tests and questionnaires are saved with `answeredBy: caregiver`. The physio screen shows "(caregiver)" on those days, how many of the last 7 check-ins a carer answered, and notes that these are second-hand reports.
+- Caregiver mode changes only who is recorded as answering. Triage, thresholds and the plan are identical, and a warning sign reported by a carer is treated the same as one the patient reports.
+- Not built yet: asking the carer's name or relationship, and treating a carer's answers with different thresholds. Neither has a clinical source, so both would be NEEDS_PHYSIO_SIGNOFF decisions for you.
+
 ## Run
 
 ```

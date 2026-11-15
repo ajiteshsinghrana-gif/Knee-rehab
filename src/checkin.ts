@@ -1,7 +1,7 @@
 /**
  * Pure check-in logic, generated from the patient's pack (Phase 1.4). No React here so it is unit-tested.
  */
-import type { DailyCheckIn, Exercises, Patient, ProtocolPack, Value } from './types';
+import type { AnsweredBy, DailyCheckIn, Exercises, Patient, ProtocolPack, Value } from './types';
 import type { VoiceResult } from './voice/parser';
 import { currentExercises } from './engine/plan';
 
@@ -142,20 +142,20 @@ export function withDerived(pack: ProtocolPack, vals: Record<string, Value>): Re
   return out;
 }
 
-export function saveWeekly(pack: ProtocolPack, p: Patient, date: string, vals: Record<string, Value | null>, photos: Record<string, string> = {}, methods: Record<string, 'photo'> = {}): Patient {
+export function saveWeekly(pack: ProtocolPack, p: Patient, date: string, vals: Record<string, Value | null>, photos: Record<string, string> = {}, methods: Record<string, 'photo'> = {}, answeredBy: AnsweredBy = 'patient'): Patient {
   if (!weeklyComplete(pack, p, vals)) throw new Error('Weekly test incomplete');
   const clean = Object.fromEntries(Object.entries(vals).filter(([, v]) => v !== null && v !== undefined)) as Record<string, Value>;
   // a method is only kept for a number that was actually saved
   const kept = Object.fromEntries(Object.entries(methods).filter(([k]) => clean[k] !== undefined));
-  const entry = { date, values: withDerived(pack, clean), ...(Object.keys(photos).length ? { photos } : {}), ...(Object.keys(kept).length ? { methods: kept } : {}) };
+  const entry = { date, values: withDerived(pack, clean), ...(Object.keys(photos).length ? { photos } : {}), ...(Object.keys(kept).length ? { methods: kept } : {}), ...(answeredBy === 'caregiver' ? { answeredBy } : {}) };
   return { ...p, periodic: [...p.periodic.filter((x) => !(x.date === date && x.values.tsk11 === undefined)), entry].sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
-export function saveQuestionnaire(pack: ProtocolPack, p: Patient, qid: string, date: string, answers: (number | null)[]): Patient {
+export function saveQuestionnaire(pack: ProtocolPack, p: Patient, qid: string, date: string, answers: (number | null)[], answeredBy: AnsweredBy = 'patient'): Patient {
   const q = pack.questionnaires.find((x) => x.id === qid);
   if (!q || answers.length !== q.items.length || answers.some((a) => a === null)) throw new Error('Questionnaire incomplete');
   const total = (answers as number[]).reduce((a, b) => a + b, 0);
-  return { ...p, periodic: [...p.periodic.filter((x) => !(x.date === date && x.values[q.measure] !== undefined)), { date, values: { [q.measure]: total } }].sort((a, b) => a.date.localeCompare(b.date)) };
+  return { ...p, periodic: [...p.periodic.filter((x) => !(x.date === date && x.values[q.measure] !== undefined)), { date, values: { [q.measure]: total }, ...(answeredBy === 'caregiver' ? { answeredBy } : {}) }].sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
 /** Due state for the weekly self-test and each questionnaire. */
