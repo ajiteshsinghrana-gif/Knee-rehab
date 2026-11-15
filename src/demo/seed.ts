@@ -98,12 +98,13 @@ function makeKamla(last: string): Patient {
   const pack = getPack('total-knee-replacement');
   const days = 35;
   const t0 = addDays(last, -days);
-  const daily = Array.from({ length: days }, (_, n) => dailyEntry(pack, {
+  // Kamla's daughter answers on her phone (Phase 5.3): every check-in is recorded as given by a caregiver.
+  const daily = Array.from({ length: days }, (_, n) => ({ ...dailyEntry(pack, {
     date: addDays(t0, n + 1), pain: Math.max(2, 5 - Math.floor(n / 9)), swelling: n % 6 === 5 ? 'same' : 'less', ex: n % 9 === 8 ? 'some' : 'all', per: 2,
     hard: ['heel-slides', 'none', 'quad-set', 'none', 'walking-aid', 'none', 'straight-leg-raise'][n % 7],
-  }));
+  }), answeredBy: 'caregiver' as const }));
   return {
-    id: 'kamla', name: 'Kamla', age: 67, packId: pack.id, language: 'hi', anchorDate: t0, currentPhase: 'p1', phaseStartDate: t0,
+    id: 'kamla', name: 'Kamla', age: 67, packId: pack.id, language: 'hi', caregiverMode: true, anchorDate: t0, currentPhase: 'p1', phaseStartDate: t0,
     sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(),
     periodic: [
       // Tracks the expected knee-bend curve for four weeks, then drifts below the band at week 5.
@@ -119,12 +120,13 @@ function makeImran(last: string): Patient {
   const pack = getPack('rotator-cuff-repair');
   const days = 12;
   const t0 = addDays(last, -days);
+  // Sling phase. On the last day he took his arm out of the sling, which the protocol's precaution rule flags for review.
   const daily = Array.from({ length: days }, (_, n) => ({
     ...dailyEntry(pack, { date: addDays(t0, n + 1), pain: Math.max(2, 5 - Math.floor(n / 4)), ex: 'all', per: 2, hard: ['pendulum', 'hand-wrist-elbow', 'none'][n % 3] }),
-    precautionBreaches: { 'sling-off': false },
+    precautionBreaches: { 'sling-off': n === days - 1 },
   }));
   return {
-    id: 'imran', name: 'Imran', age: 52, packId: pack.id, language: 'en', anchorDate: t0, currentPhase: 'p1', phaseStartDate: t0,
+    id: 'imran', name: 'Imran', age: 52, packId: pack.id, language: 'bn', anchorDate: t0, currentPhase: 'p1', phaseStartDate: t0,
     sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(), periodic: [{ date: addDays(t0, 7), values: { armRaiseDeg: 30 } }],
   };
 }
