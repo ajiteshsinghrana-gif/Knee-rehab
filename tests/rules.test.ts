@@ -304,7 +304,9 @@ describe('generic rule types in other packs', () => {
   });
   it('precautionBreach: sling breach in phase 1 only (rotator cuff)', () => {
     const rc = getPack('rotator-cuff-repair');
-    const imran = makeAllPatients().find((x) => x.id === 'imran')!;
+    const imran = clone(makeAllPatients().find((x) => x.id === 'imran')!);
+    // the demo patient took his arm out of the sling on the last day; with that undone there is no flag
+    imran.daily[imran.daily.length - 1].precautionBreaches = { 'sling-off': false };
     expect(ids(triage(imran, rc))).not.toContain('P1');
     const breach = clone(imran);
     breach.daily[breach.daily.length - 1].precautionBreaches = { 'sling-off': true };

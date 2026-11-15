@@ -138,6 +138,10 @@ The physio can change a patient's treatment on his own, without waiting for a su
 - Triage does not change: these are physio actions through `applyManual` in `src/engine/plan.ts`, the only way the plan changes (safety rule 2). The physio can still choose any change; the app only makes sure it is deliberate, explained and told to the patient.
 - Not built: showing the reason to the patient, or free-text patient messages. Reasons are typed in English and could not be translated safely.
 
+## Demo (Phase 7)
+
+Six demo patients: Ravi, Meera, Arjun, Sana (ACL), Kamla (knee replacement, Hindi, answered by her carer, below the expected curve) and Imran (rotator cuff, sling phase, Bengali, took the arm out of the sling). `DEMO.md` has a four-minute walk-through. Ravi's fast-forward and Meera's SAFETY flag are unchanged and tested.
+
 ## Run
 
 ```
