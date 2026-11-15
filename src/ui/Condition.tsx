@@ -3,7 +3,7 @@ import type { Bi, Operator } from '../types';
 import { LIBRARY } from '../exercises/library';
 import { PACKS } from '../engine/packs';
 import {
-  PAIN_ID, draftAsNewVersion, fatDraft, blankBi, blankDraft, buildConditionPack, newConditionId, placeholderAlerts, validateDraft,
+  PAIN_ID, draftAsNewVersion, fatDraft, questionnaireFromFile, blankBi, blankDraft, buildConditionPack, newConditionId, placeholderAlerts, validateDraft,
   type AlertGroup, type Alerts, type ConditionDraft,
 } from '../author/condition';
 import { clockMs, getState, setState } from '../store';
@@ -39,6 +39,24 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
   const [saved, setSaved] = useState('');
   const [msg, setMsg] = useState('');
   const up = (fn: (c: ConditionDraft) => void) => setD((x) => { const c: ConditionDraft = JSON.parse(JSON.stringify(x)); fn(c); return c; });
+  const saved_q = getState().questionnaires ?? [];
+  const loadQuestionnaire = async (f?: File) => {
+    if (!f) return;
+    try { const q = questionnaireFromFile(await f.text()); up((c) => { c.questionnaire = q; }); setMsg(`Loaded ${f.name}. Tick the permission box yourself once you have confirmed you may use it.`); }
+    catch (e) { setMsg(`Could not use that file: ${(e as Error).message}`); }
+  };
+  const saveQuestionnaire = () => {
+    const q = d.questionnaire; if (!q) return;
+    if (!q.title.en.trim()) { setMsg('Give the questionnaire an English title before saving it for reuse'); return; }
+    const st = getState();
+    const others = (st.questionnaires ?? []).filter((x) => x.name !== q.title.en.trim());
+    setState({ ...st, questionnaires: [...others, { id: `sq-${Date.now().toString(36)}`, name: q.title.en.trim(), q: JSON.parse(JSON.stringify(q)) }] });
+    setMsg(`Saved "${q.title.en.trim()}" for reuse in other conditions.`);
+  };
+  const downloadQuestionnaire = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(d.questionnaire, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = `${(d.questionnaire?.title.en || 'questionnaire').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`; a.click(); URL.revokeObjectURL(url);
+  };
   const written = Object.values(PACKS).filter((p) => p.authored);
   const problems = useMemo(() => validateDraft(d), [d]);
   const measureOptions = [{ id: PAIN_ID, label: 'Pain (daily, 0-10)' }, ...d.measures.map((m) => ({ id: m.id, label: m.label.en || m.id }))];
@@ -105,7 +123,7 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
     <section className="card condition" data-testid="condition">
       <div className="btnrow"><h2>Add a condition</h2><button className="btn" onClick={onClose}>Close</button></div>
       <p className="tiny">Write the protocol yourself. Every clinical value is typed or approved by you. The app only runs it and flags drift. Patient-facing text must be written in English and Hindi. A saved condition cannot be edited; save a new version instead.</p>
-      {msg && <p className={msg.startsWith('Loaded') ? 'reviewed' : 'err'} role="alert">{msg}</p>}
+      {msg && <p className={/^(Loaded|Saved|Added)/.test(msg) ? 'reviewed' : 'err'} role="alert">{msg}</p>}
       <div className="fu"><button className="btn" onClick={download}>Download draft</button><label className="filebtn">Load a draft file<input type="file" accept=".json,application/json" aria-label="Draft file" onChange={(e) => void load(e.target.files?.[0])} /></label></div>
 
       {written.length > 0 && (
@@ -159,6 +177,11 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
             <label>Largest<input type="number" value={m.max} onChange={(e) => up((c) => { c.measures[i].max = Number(e.target.value); })} /></label>
             <label>Step<input type="number" min={0} step="any" value={m.step} onChange={(e) => up((c) => { c.measures[i].step = Number(e.target.value); })} /></label>
           </div>
+          <label className="check"><input type="checkbox" aria-label={`Measure ${i + 1} can be measured on a photo`} checked={!!m.photo} onChange={(e) => up((c) => { c.measures[i].photo = e.target.checked ? { reading: 'between', points: [blankBi(), blankBi(), blankBi()] } : undefined; })} /> The patient can measure this angle on a photo</label>
+          {m.photo && <>
+            <label>How the angle is read<select aria-label={`Measure ${i + 1} photo reading`} value={m.photo.reading} onChange={(e) => up((c) => { c.measures[i].photo!.reading = e.target.value as 'between' | 'deviation'; })}><option value="between">The angle at the middle point (for example arm raise)</option><option value="deviation">How far a straight line is bent at the middle point (for example knee bend)</option></select></label>
+            {[0, 1, 2].map((k) => <BiField key={k} label={`Tap ${k === 1 ? 'the joint' : k === 0 ? 'the first point' : 'the last point'}: what is it called?`} value={m.photo!.points[k]} onChange={(b) => up((c) => { c.measures[i].photo!.points[k] = b; })} hint={k === 1 ? 'Middle point: the angle is measured here.' : undefined} />)}
+          </>}
           <button className="btn" onClick={() => removeMeasure(m.id)}>Remove measure</button>
         </div>))}
       <button className="btn" onClick={addMeasure}>+ Add a weekly measure</button>
@@ -184,6 +207,10 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
 
       <h3>4c. Monthly questionnaire <small>(optional)</small></h3>
       <p className="tiny">Enter a questionnaire you are allowed to use. The app does not include licensed questionnaires such as the Oxford Knee Score or Oxford Shoulder Score; get a licence from the publisher and type the questions here. The patient answers monthly and the total is the sum of the option scores.</p>
+      <div className="fu">
+        <label className="filebtn">Load a questionnaire file<input type="file" accept=".json,application/json" aria-label="Questionnaire file" onChange={(e) => void loadQuestionnaire(e.target.files?.[0])} /></label>
+        {saved_q.length > 0 && <select aria-label="Use a saved questionnaire" value="" onChange={(e) => { const sq = saved_q.find((x) => x.id === e.target.value); if (sq) { up((c) => { c.questionnaire = JSON.parse(JSON.stringify(sq.q)); }); setMsg(`Added "${sq.name}". Check the permission box and the credit line.`); } }}><option value="">Use a saved questionnaire</option>{saved_q.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
+      </div>
       {d.questionnaire ? (
         <div className="subcard" data-testid="questionnaire-form">
           <BiField label="Title" value={d.questionnaire.title} onChange={(b) => up((c) => { c.questionnaire!.title = b; })} />
@@ -206,7 +233,11 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
               <select aria-label="Questionnaire alert comparison" value={d.questionnaire.alert.operator} onChange={(e) => up((c) => { c.questionnaire!.alert!.operator = e.target.value as Operator; })}>{OPS.map((o) => <option key={o}>{o}</option>)}</select>
               <input type="number" aria-label="Questionnaire alert value" value={d.questionnaire.alert.value} onChange={(e) => up((c) => { c.questionnaire!.alert!.value = Number(e.target.value); })} /></>}
           </div>
-          <button className="btn" onClick={() => up((c) => { delete c.questionnaire; })}>Remove questionnaire</button>
+          <div className="btnrow">
+            <button className="btn" onClick={saveQuestionnaire}>Save for reuse</button>
+            <button className="btn" onClick={downloadQuestionnaire}>Download as a file</button>
+            <button className="btn" onClick={() => up((c) => { delete c.questionnaire; })}>Remove questionnaire</button>
+          </div>
         </div>
       ) : <button className="btn" onClick={() => up((c) => { c.questionnaire = { title: blankBi(), intro: blankBi(), items: [blankBi()], options: [{ value: 0, label: blankBi() }, { value: 1, label: blankBi() }], credit: '', permission: false }; })}>+ Add a questionnaire</button>}
 

@@ -2,7 +2,8 @@ import type { Patient, PeriodicEntry, ProtocolPack, Value } from './types';
 import { addDays } from './engine/dates';
 import { normalizePatient, planDefaults } from './engine/plan';
 import { getPack } from './engine/packs';
-import { restoreAuthoredPack } from './author/condition';
+import { restoreAuthoredPack, type QuestionnaireDraft } from './author/condition';
+export interface SavedQuestionnaire { id: string; name: string; q: QuestionnaireDraft }
 import { DEMO_TODAY_LAST, makeAllPatients } from './demo/seed';
 
 export const STORAGE_KEY = 'rehabpath-v1';
@@ -17,6 +18,8 @@ export interface AppState {
   demoStep: number;
   /** Packs created by physio import (Phase 3.2). */
   customPacks?: ProtocolPack[];
+  /** Questionnaires the physio saved for reuse across conditions (Phase 4.1). */
+  questionnaires?: SavedQuestionnaire[];
 }
 
 export function seedState(): AppState {

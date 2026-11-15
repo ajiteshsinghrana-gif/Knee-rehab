@@ -6,7 +6,7 @@ import { triage } from '../src/engine/triage';
 import { validatePack } from '../src/engine/validator';
 import { collectSignoffs } from '../src/engine/signoff';
 import { PACK_LIST, PACKS, getPack } from '../src/engine/packs';
-import { blankDraft, buildConditionPack, placeholderAlerts, validateDraft, type ConditionDraft } from '../src/author/condition';
+import { blankDraft, buildConditionPack, placeholderAlerts, questionnaireFromFile, validateDraft, type ConditionDraft } from '../src/author/condition';
 import { buildPatient } from '../src/onboarding';
 import { dailyEntry } from '../src/demo/seed';
 import { addDays, toMs } from '../src/engine/dates';
@@ -132,6 +132,52 @@ describe('questionnaires (Phase 4.2)', () => {
   });
   it('the app does not bundle licensed questionnaires', () => {
     for (const p of PACK_LIST) for (const q of p.questionnaires) expect(q.id).not.toMatch(/oxford|oks|oss/i);
+  });
+  it('a questionnaire file loads but can never confirm permission by itself', () => {
+    const file = JSON.stringify({ title: { en: 'Score', hi: 'स्कोर' }, intro: { en: 'Answer', hi: 'उत्तर' }, items: [{ en: 'One', hi: 'एक' }], options: [{ value: 0, label: { en: 'No', hi: 'नहीं' } }, { value: 4, label: { en: 'Yes', hi: 'हाँ' } }], credit: 'By the clinic', permission: true, alert: { operator: '<=', value: 20 } });
+    const q = questionnaireFromFile(file);
+    expect(q.permission).toBe(false);
+    expect(q.alert).toEqual({ operator: '<=', value: 20 });
+    expect(q.items).toHaveLength(1);
+    const d = { ...qdraft('custom-q3'), questionnaire: q };
+    expect(validateDraft(d).join()).toMatch(/tick that you have permission/);
+    expect(validateDraft({ ...d, questionnaire: { ...q, permission: true } })).toEqual([]);
+  });
+  it('a damaged questionnaire file is refused in plain words', () => {
+    expect(() => questionnaireFromFile('not json')).toThrow(/not valid JSON/);
+    expect(() => questionnaireFromFile('{"title":{"en":"x","hi":"य"},"intro":{"en":"x","hi":"य"},"items":[],"options":[]}')).toThrow(/list of questions/);
+    expect(() => questionnaireFromFile('{"title":{"en":"x"}}')).toThrow(/title and an introduction/);
+  });
+  it('cleanup', () => { for (const e of [...LIBRARY]) if (e.id.startsWith('custom-')) unregisterExercise(e.id); });
+});
+
+describe('photo angle for written conditions (Phase 4.1)', () => {
+  const pdraft = (id: string): ConditionDraft => ({
+    ...blankDraft(id), condition: { en: 'Test', hi: 'परीक्षण' },
+    phases: [{ name: { en: 'P1', hi: 'च1' }, exercises: ['ankle-pumps'], sessionsPerDay: 2, followUpEveryDays: 7, weeksMin: 0, weeksMax: null }],
+    measures: [{ id: 'm1', label: { en: 'Elbow bend', hi: 'कोहनी मोड़ना' }, unit: 'deg', min: 0, max: 150, step: 5, photo: { reading: 'deviation', points: [{ en: 'shoulder', hi: 'कंधा' }, { en: 'elbow', hi: 'कोहनी' }, { en: 'wrist', hi: 'कलाई' }] } }],
+    alerts: placeholderAlerts(),
+  });
+  it('a measure can be measured on a photo, and the pack says which three points to tap', () => {
+    const d = pdraft('custom-ph1');
+    expect(validateDraft(d)).toEqual([]);
+    const m = buildConditionPack(d).measures.find((x) => x.id === 'm1')!;
+    expect(m.capture).toBe('photo');
+    expect(m.photoAngle?.reading).toBe('deviation');
+    expect(m.photoAngle?.points.map((x) => x.hi)).toEqual(['कंधा', 'कोहनी', 'कलाई']);
+    delete PACKS['custom-ph1'];
+  });
+  it('refuses a photo measure with a missing point name', () => {
+    const d = pdraft('custom-ph2');
+    d.measures[0].photo!.points[2].hi = '';
+    expect(validateDraft(d).join()).toMatch(/three points to tap on the photo in English and Hindi/);
+  });
+  it('without the tick box a measure stays a typed number', () => {
+    const d = pdraft('custom-ph3'); delete d.measures[0].photo;
+    const m = buildConditionPack(d).measures.find((x) => x.id === 'm1')!;
+    expect(m.capture).toBe('number');
+    expect(m.photoAngle).toBeUndefined();
+    delete PACKS['custom-ph3'];
   });
   it('cleanup', () => { for (const e of [...LIBRARY]) if (e.id.startsWith('custom-')) unregisterExercise(e.id); });
 });
