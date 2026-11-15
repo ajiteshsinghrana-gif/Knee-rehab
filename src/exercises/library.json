@@ -1,0 +1,905 @@
+[
+ {
+  "id": "ankle-pumps",
+  "name": {
+   "en": "Ankle pumps",
+   "hi": "टखने की पंपिंग"
+  },
+  "picture": "media/ankle-pumps.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "ankle"
+  ],
+  "usedIn": {
+   "total-knee-replacement": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "assisted-arm-raise",
+  "name": {
+   "en": "Arm raise helped by the other hand",
+   "hi": "दूसरे हाथ की मदद से बांह उठाना"
+  },
+  "picture": "media/assisted-arm-raise.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "arm raise",
+   "overhead",
+   "ऊपर"
+  ],
+  "usedIn": {
+   "rotator-cuff-repair": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "balance",
+  "name": {
+   "en": "Balance exercises",
+   "hi": "संतुलन की कसरत"
+  },
+  "picture": "media/balance.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "balance"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ],
+   "total-knee-replacement": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "band-rotation",
+  "name": {
+   "en": "Resistance band rotation",
+   "hi": "रबर बैंड से घुमाव"
+  },
+  "picture": "media/band-rotation.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "band"
+  ],
+  "usedIn": {
+   "rotator-cuff-repair": [
+    "p3"
+   ]
+  }
+ },
+ {
+  "id": "bridging",
+  "name": {
+   "en": "Bridging",
+   "hi": "ब्रिजिंग (कूल्हे उठाना)"
+  },
+  "picture": "media/bridging.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "bridge"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "calf-raises",
+  "name": {
+   "en": "Calf raises",
+   "hi": "पंजों पर उठना"
+  },
+  "picture": "media/calf-raises.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "calf raise"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "core",
+  "name": {
+   "en": "Core exercises",
+   "hi": "पेट और कमर की कसरत"
+  },
+  "picture": "media/core.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "core"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "cycling",
+  "name": {
+   "en": "Cycling",
+   "hi": "साइकिल चलाना"
+  },
+  "picture": "media/cycling.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "cycl"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "gait-drills",
+  "name": {
+   "en": "Gait drills",
+   "hi": "चलने की कसरत"
+  },
+  "picture": "media/gait-drills.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "gait"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "gentle-rom",
+  "name": {
+   "en": "Gentle knee bend and straighten",
+   "hi": "घुटने को हल्का मोड़ना और सीधा करना"
+  },
+  "picture": "media/gentle-rom.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "bend",
+   "straighten",
+   "मोड़",
+   "सीधा"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "hand-wrist-elbow",
+  "name": {
+   "en": "Hand, wrist and elbow movement",
+   "hi": "हाथ, कलाई और कोहनी की हरकत"
+  },
+  "picture": "media/hand-wrist-elbow.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "wrist",
+   "elbow"
+  ],
+  "usedIn": {
+   "rotator-cuff-repair": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "heel-slides",
+  "name": {
+   "en": "Heel slides",
+   "hi": "एड़ी खिसकाना"
+  },
+  "picture": "media/heel-slides.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "heel"
+  ],
+  "usedIn": {
+   "total-knee-replacement": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "hip-abduction",
+  "name": {
+   "en": "Hip abduction",
+   "hi": "कूल्हे को बाहर की ओर उठाना"
+  },
+  "picture": "media/hip-abduction.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "hip"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "ice-compression",
+  "name": {
+   "en": "Ice and compression",
+   "hi": "बर्फ और कंप्रेशन"
+  },
+  "picture": "media/ice-compression.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "ice"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "ice-elevation",
+  "name": {
+   "en": "Ice and leg elevation",
+   "hi": "बर्फ और पैर ऊंचा रखना"
+  },
+  "picture": "media/ice-elevation.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "ice"
+  ],
+  "usedIn": {
+   "total-knee-replacement": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "lunges",
+  "name": {
+   "en": "Lunges",
+   "hi": "लंजेज़"
+  },
+  "picture": "media/lunges.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": "mini-squats",
+  "regressionSource": "NEEDS_PHYSIO_SIGNOFF",
+  "voice": [
+   "lunge"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "mini-squats",
+  "name": {
+   "en": "Mini squats",
+   "hi": "छोटे स्क्वैट"
+  },
+  "picture": "media/mini-squats.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "mini squat",
+   "squat"
+  ],
+  "usedIn": {
+   "total-knee-replacement": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "pendulum",
+  "name": {
+   "en": "Pendulum swings",
+   "hi": "पेंडुलम (हाथ झुलाना)"
+  },
+  "picture": "media/pendulum.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "pendulum"
+  ],
+  "usedIn": {
+   "rotator-cuff-repair": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "quad-set",
+  "name": {
+   "en": "Quad setting (tighten the thigh)",
+   "hi": "जांघ कसना (क्वाड सेटिंग)"
+  },
+  "picture": "media/quad-set.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "quad",
+   "thigh"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p1"
+   ],
+   "total-knee-replacement": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "shoulder-blade-squeeze",
+  "name": {
+   "en": "Shoulder blade squeeze",
+   "hi": "कंधे के ब्लेड सिकोड़ना"
+  },
+  "picture": "media/shoulder-blade-squeeze.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "shoulder blade"
+  ],
+  "usedIn": {
+   "rotator-cuff-repair": [
+    "p3"
+   ]
+  }
+ },
+ {
+  "id": "sit-to-stand",
+  "name": {
+   "en": "Sit to stand",
+   "hi": "बैठकर उठना"
+  },
+  "picture": "media/sit-to-stand.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "chair",
+   "sit to stand",
+   "कुर्सी"
+  ],
+  "usedIn": {
+   "total-knee-replacement": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "squats",
+  "name": {
+   "en": "Squats",
+   "hi": "स्क्वैट (बैठना)"
+  },
+  "picture": "media/squats.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": "mini-squats",
+  "regressionSource": "NEEDS_PHYSIO_SIGNOFF",
+  "voice": [
+   "squat",
+   "बैठ",
+   "स्क्वैट"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "stairs-practice",
+  "name": {
+   "en": "Stairs practice",
+   "hi": "सीढ़ी का अभ्यास"
+  },
+  "picture": "media/stairs-practice.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "stair",
+   "सीढ़ी"
+  ],
+  "usedIn": {
+   "total-knee-replacement": [
+    "p3"
+   ]
+  }
+ },
+ {
+  "id": "stationary-cycling",
+  "name": {
+   "en": "Stationary cycling",
+   "hi": "स्थिर साइकिल"
+  },
+  "picture": "media/stationary-cycling.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "cycl"
+  ],
+  "usedIn": {
+   "total-knee-replacement": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "step-ups",
+  "name": {
+   "en": "Step-ups",
+   "hi": "स्टेप-अप (सीढ़ी चढ़ना)"
+  },
+  "picture": "media/step-ups.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": "mini-squats",
+  "regressionSource": "NEEDS_PHYSIO_SIGNOFF",
+  "voice": [
+   "step",
+   "stair",
+   "सीढ़ी",
+   "seedhi"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ],
+   "total-knee-replacement": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "straight-leg-raise",
+  "name": {
+   "en": "Straight leg raise",
+   "hi": "सीधा पैर उठाना"
+  },
+  "picture": "media/straight-leg-raise.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "straight leg",
+   "leg raise",
+   "सीधा पैर"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p1"
+   ],
+   "total-knee-replacement": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "swimming",
+  "name": {
+   "en": "Swimming",
+   "hi": "तैराकी"
+  },
+  "picture": "media/swimming.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "swim"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "walking",
+  "name": {
+   "en": "Walking",
+   "hi": "टहलना"
+  },
+  "picture": "media/walking.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "walk",
+   "चलन"
+  ],
+  "usedIn": {
+   "acl-reconstruction": [
+    "p2"
+   ],
+   "total-knee-replacement": [
+    "p2"
+   ]
+  }
+ },
+ {
+  "id": "walking-aid",
+  "name": {
+   "en": "Walking with your walking aid",
+   "hi": "सहारे (वॉकर/छड़ी) के साथ चलना"
+  },
+  "picture": "media/walking-aid.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "walker",
+   "stick"
+  ],
+  "usedIn": {
+   "total-knee-replacement": [
+    "p1"
+   ]
+  }
+ },
+ {
+  "id": "walking-programme",
+  "name": {
+   "en": "Walking programme",
+   "hi": "टहलने का कार्यक्रम"
+  },
+  "picture": "media/walking-programme.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "walk"
+  ],
+  "usedIn": {
+   "total-knee-replacement": [
+    "p3"
+   ]
+  }
+ },
+ {
+  "id": "wall-slide",
+  "name": {
+   "en": "Wall slide",
+   "hi": "दीवार पर हाथ सरकाना"
+  },
+  "picture": "media/wall-slide.svg",
+  "dose": {
+   "sets": null,
+   "reps": null,
+   "holdSec": null,
+   "text": {
+    "en": "Sets and repetitions: as shown by your physio",
+    "hi": "सेट और बार: जैसा आपके फिज़ियो ने दिखाया"
+   },
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "regressionId": null,
+  "regressionSource": null,
+  "voice": [
+   "wall"
+  ],
+  "usedIn": {
+   "rotator-cuff-repair": [
+    "p2"
+   ]
+  }
+ }
+]

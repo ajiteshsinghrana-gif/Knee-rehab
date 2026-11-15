@@ -22,48 +22,12 @@
     "hi": "चरण 1: शुरुआती रिकवरी (सूजन, मोड़ना, चलना)"
    },
    "exercises": [
-    {
-     "id": "ice-elevation",
-     "name": {
-      "en": "Ice and leg elevation",
-      "hi": "बर्फ और पैर ऊंचा रखना"
-     }
-    },
-    {
-     "id": "ankle-pumps",
-     "name": {
-      "en": "Ankle pumps",
-      "hi": "टखने की पंपिंग"
-     }
-    },
-    {
-     "id": "quad-set",
-     "name": {
-      "en": "Quad setting (tighten the thigh)",
-      "hi": "जांघ कसना (क्वाड सेटिंग)"
-     }
-    },
-    {
-     "id": "heel-slides",
-     "name": {
-      "en": "Heel slides",
-      "hi": "एड़ी खिसकाना"
-     }
-    },
-    {
-     "id": "straight-leg-raise",
-     "name": {
-      "en": "Straight leg raise",
-      "hi": "सीधा पैर उठाना"
-     }
-    },
-    {
-     "id": "walking-aid",
-     "name": {
-      "en": "Walking with your walking aid",
-      "hi": "सहारे (वॉकर/छड़ी) के साथ चलना"
-     }
-    }
+    "ice-elevation",
+    "ankle-pumps",
+    "quad-set",
+    "heel-slides",
+    "straight-leg-raise",
+    "walking-aid"
    ],
    "sessionsPerDay": 2,
    "followUpEveryDays": 7,
@@ -81,48 +45,12 @@
     "hi": "चरण 2: ताकत और रोज़मर्रा के काम"
    },
    "exercises": [
-    {
-     "id": "sit-to-stand",
-     "name": {
-      "en": "Sit to stand",
-      "hi": "बैठकर उठना"
-     }
-    },
-    {
-     "id": "mini-squats",
-     "name": {
-      "en": "Mini squats",
-      "hi": "छोटे स्क्वैट"
-     }
-    },
-    {
-     "id": "step-ups",
-     "name": {
-      "en": "Step-ups",
-      "hi": "स्टेप-अप (सीढ़ी चढ़ना)"
-     }
-    },
-    {
-     "id": "stationary-cycling",
-     "name": {
-      "en": "Stationary cycling",
-      "hi": "स्थिर साइकिल"
-     }
-    },
-    {
-     "id": "balance",
-     "name": {
-      "en": "Balance exercises",
-      "hi": "संतुलन की कसरत"
-     }
-    },
-    {
-     "id": "walking",
-     "name": {
-      "en": "Walking",
-      "hi": "टहलना"
-     }
-    }
+    "sit-to-stand",
+    "mini-squats",
+    "step-ups",
+    "stationary-cycling",
+    "balance",
+    "walking"
    ],
    "sessionsPerDay": 2,
    "followUpEveryDays": 7,
@@ -140,20 +68,8 @@
     "hi": "चरण 3: रोज़ की गतिविधियों में वापसी"
    },
    "exercises": [
-    {
-     "id": "walking-programme",
-     "name": {
-      "en": "Walking programme",
-      "hi": "टहलने का कार्यक्रम"
-     }
-    },
-    {
-     "id": "stairs-practice",
-     "name": {
-      "en": "Stairs practice",
-      "hi": "सीढ़ी का अभ्यास"
-     }
-    }
+    "walking-programme",
+    "stairs-practice"
    ],
    "sessionsPerDay": 2,
    "followUpEveryDays": 7,
@@ -752,69 +668,14 @@
    "pain",
    "fear",
    "time",
-   "access"
-  ],
-  "hardMovements": [
-   {
-    "id": "bending",
-    "label": {
-     "en": "Bending",
-     "hi": "घुटना मोड़ना"
-    },
-    "voice": [
-     "bend",
-     "मोड़"
-    ]
-   },
-   {
-    "id": "straightening",
-    "label": {
-     "en": "Straightening",
-     "hi": "घुटना सीधा करना"
-    },
-    "voice": [
-     "straighten",
-     "सीधा करना",
-     "सीधा"
-    ]
-   },
-   {
-    "id": "sit-to-stand",
-    "exerciseId": "sit-to-stand",
-    "label": {
-     "en": "Getting up from a chair",
-     "hi": "कुर्सी से उठना"
-    },
-    "voice": [
-     "chair",
-     "sit to stand",
-     "कुर्सी"
-    ]
-   },
-   {
-    "id": "walking",
-    "label": {
-     "en": "Walking",
-     "hi": "चलना"
-    },
-    "voice": [
-     "walk",
-     "चलन"
-    ]
-   },
-   {
-    "id": "stairs",
-    "label": {
-     "en": "Stairs",
-     "hi": "सीढ़ियां"
-    },
-    "voice": [
-     "stair",
-     "सीढ़ी",
-     "सीढ़ि",
-     "seedhi"
-    ]
-   }
+   "access",
+   "understand"
   ]
+ },
+ "followUpProposal": {
+  "teleReviewWithinHours": 48,
+  "checkInEveryDays": 1,
+  "forDays": 7,
+  "source": "NEEDS_PHYSIO_SIGNOFF"
  }
 }

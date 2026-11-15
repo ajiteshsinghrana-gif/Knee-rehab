@@ -23,34 +23,10 @@
     "hi": "चरण 1: घुटना सीधा, सूजन कम, जांघ की मांसपेशी सक्रिय"
    },
    "exercises": [
-    {
-     "id": "ice-compression",
-     "name": {
-      "en": "Ice and compression",
-      "hi": "बर्फ और कंप्रेशन"
-     }
-    },
-    {
-     "id": "quad-set",
-     "name": {
-      "en": "Quad setting (tighten the thigh)",
-      "hi": "जांघ कसना (क्वाड सेटिंग)"
-     }
-    },
-    {
-     "id": "gentle-rom",
-     "name": {
-      "en": "Gentle knee bend and straighten",
-      "hi": "घुटने को हल्का मोड़ना और सीधा करना"
-     }
-    },
-    {
-     "id": "straight-leg-raise",
-     "name": {
-      "en": "Straight leg raise",
-      "hi": "सीधा पैर उठाना"
-     }
-    }
+    "ice-compression",
+    "quad-set",
+    "gentle-rom",
+    "straight-leg-raise"
    ],
    "sessionsPerDay": 2,
    "followUpEveryDays": 7,
@@ -68,90 +44,18 @@
     "hi": "चरण 2: संतुलन, ताकत, एक पैर पर नियंत्रण"
    },
    "exercises": [
-    {
-     "id": "lunges",
-     "name": {
-      "en": "Lunges",
-      "hi": "लंजेज़"
-     }
-    },
-    {
-     "id": "step-ups",
-     "name": {
-      "en": "Step-ups",
-      "hi": "स्टेप-अप (सीढ़ी चढ़ना)"
-     }
-    },
-    {
-     "id": "squats",
-     "name": {
-      "en": "Squats",
-      "hi": "स्क्वैट (बैठना)"
-     }
-    },
-    {
-     "id": "bridging",
-     "name": {
-      "en": "Bridging",
-      "hi": "ब्रिजिंग (कूल्हे उठाना)"
-     }
-    },
-    {
-     "id": "calf-raises",
-     "name": {
-      "en": "Calf raises",
-      "hi": "पंजों पर उठना"
-     }
-    },
-    {
-     "id": "hip-abduction",
-     "name": {
-      "en": "Hip abduction",
-      "hi": "कूल्हे को बाहर की ओर उठाना"
-     }
-    },
-    {
-     "id": "core",
-     "name": {
-      "en": "Core exercises",
-      "hi": "पेट और कमर की कसरत"
-     }
-    },
-    {
-     "id": "balance",
-     "name": {
-      "en": "Balance exercises",
-      "hi": "संतुलन की कसरत"
-     }
-    },
-    {
-     "id": "gait-drills",
-     "name": {
-      "en": "Gait drills",
-      "hi": "चलने की कसरत"
-     }
-    },
-    {
-     "id": "cycling",
-     "name": {
-      "en": "Cycling",
-      "hi": "साइकिल चलाना"
-     }
-    },
-    {
-     "id": "swimming",
-     "name": {
-      "en": "Swimming",
-      "hi": "तैराकी"
-     }
-    },
-    {
-     "id": "walking",
-     "name": {
-      "en": "Walking",
-      "hi": "टहलना"
-     }
-    }
+    "lunges",
+    "step-ups",
+    "squats",
+    "bridging",
+    "calf-raises",
+    "hip-abduction",
+    "core",
+    "balance",
+    "gait-drills",
+    "cycling",
+    "swimming",
+    "walking"
    ],
    "sessionsPerDay": 2,
    "followUpEveryDays": 7,
@@ -1448,81 +1352,14 @@
    "pain",
    "fear",
    "time",
-   "access"
-  ],
-  "hardMovements": [
-   {
-    "id": "straightening",
-    "label": {
-     "en": "Straightening",
-     "hi": "घुटना सीधा करना"
-    },
-    "voice": [
-     "straighten",
-     "सीधा करना",
-     "सीधा"
-    ]
-   },
-   {
-    "id": "bending",
-    "label": {
-     "en": "Bending",
-     "hi": "घुटना मोड़ना"
-    },
-    "voice": [
-     "bend",
-     "मोड़"
-    ]
-   },
-   {
-    "id": "straight-leg-raise",
-    "exerciseId": "straight-leg-raise",
-    "label": {
-     "en": "Leg raise",
-     "hi": "सीधा पैर उठाना"
-    },
-    "voice": [
-     "straight leg",
-     "leg raise",
-     "सीधा पैर"
-    ]
-   },
-   {
-    "id": "walking",
-    "label": {
-     "en": "Walking",
-     "hi": "चलना"
-    },
-    "voice": [
-     "walk",
-     "चलन"
-    ]
-   },
-   {
-    "id": "stairs",
-    "label": {
-     "en": "Stairs",
-     "hi": "सीढ़ियां"
-    },
-    "voice": [
-     "stair",
-     "सीढ़ी",
-     "सीढ़ि",
-     "seedhi"
-    ]
-   },
-   {
-    "id": "squat",
-    "label": {
-     "en": "Squat",
-     "hi": "स्क्वैट (बैठना)"
-    },
-    "voice": [
-     "squat",
-     "बैठ",
-     "स्क्वैट"
-    ]
-   }
+   "access",
+   "understand"
   ]
+ },
+ "followUpProposal": {
+  "teleReviewWithinHours": 48,
+  "checkInEveryDays": 1,
+  "forDays": 7,
+  "source": "NEEDS_PHYSIO_SIGNOFF"
  }
 }

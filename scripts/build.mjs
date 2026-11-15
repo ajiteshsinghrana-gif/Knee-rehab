@@ -1,6 +1,6 @@
 // Builds the static site into docs/ (GitHub Pages serves this folder only).
 import { build } from 'esbuild';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync } from 'node:fs';
 
 mkdirSync('docs', { recursive: true });
 await build({
@@ -8,3 +8,5 @@ await build({
   jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'info',
 });
 copyFileSync('index.html', 'docs/index.html');
+mkdirSync('docs/media', { recursive: true });
+for (const f of readdirSync('public/media')) copyFileSync(`public/media/${f}`, `docs/media/${f}`);

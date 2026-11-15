@@ -1,4 +1,4 @@
-import type { ProtocolPack } from '../types';
+import type { Exercise, ProtocolPack } from '../types';
 import { NEEDS_SIGNOFF } from '../types';
 
 export interface SignoffItem {
@@ -31,6 +31,17 @@ export function collectSignoffs(p: ProtocolPack): SignoffItem[] {
     }
   }
   for (const pr of p.precautions) add(`precaution ${pr.id} restricted phases`, pr.phases.join(', '), pr.source);
+  add('followUpProposal', `tele-review within ${p.followUpProposal.teleReviewWithinHours} h, check-ins every ${p.followUpProposal.checkInEveryDays} d for ${p.followUpProposal.forDays} d`, p.followUpProposal.source);
   for (const q of p.questionnaires) add(`questionnaire ${q.id}`, `${q.items.length} items`, q.source);
+  return out;
+}
+
+/** Exercise doses and regressions are clinical content too (Phase 2.1). */
+export function collectLibrarySignoffs(lib: Exercise[]): SignoffItem[] {
+  const out: SignoffItem[] = [];
+  for (const e of lib) {
+    out.push({ where: `exercise ${e.id} dose`, value: e.dose.text.en, source: e.dose.source, needsSignoff: e.dose.source.includes(NEEDS_SIGNOFF) });
+    if (e.regressionId) out.push({ where: `exercise ${e.id} easier version`, value: e.regressionId, source: e.regressionSource ?? '', needsSignoff: (e.regressionSource ?? '').includes(NEEDS_SIGNOFF) });
+  }
   return out;
 }

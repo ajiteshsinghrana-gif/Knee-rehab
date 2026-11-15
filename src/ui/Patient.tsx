@@ -10,9 +10,13 @@ import {
   unansweredSigns, weeklyComplete, weeklyMeasures, type Draft,
 } from '../checkin';
 import { listen, parseVoice, voiceSupported } from '../voice/parser';
+import { speak, speakSupported } from '../voice/speak';
+import { currentExercises } from '../engine/plan';
+import { exerciseName, getExercise } from '../exercises/library';
+import { noticeText } from '../notices';
 
 const FACES = ['😀', '🙂', '🙂', '😐', '😐', '😕', '😟', '😣', '😣', '😫', '😭'];
-const SKIP_EMOJI: Record<string, string> = { pain: '😣', fear: '😨', time: '⏰', access: '🚫' };
+const SKIP_EMOJI: Record<string, string> = { pain: '😣', fear: '😨', time: '⏰', access: '🚫', understand: '❓' };
 const EXS = [['all', '✅'], ['some', '🟡'], ['none', '❌']] as const;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -58,6 +62,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
   const day = diffDays(today, patient.anchorDate);
   const phase = pack.phases.find((x) => x.id === patient.currentPhase)!;
   const tri = useMemo(() => triage(patient, pack), [patient, pack]);
+  const exs = currentExercises(patient, pack);
   const due = dueState(pack, patient, today, diffDays);
   const last7 = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6));
   const sym = { all: ['ok', '✓'], some: ['part', '½'], none: ['miss', '✕'] } as const;
@@ -68,6 +73,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
         <div className="hello">{T('hello')}, {patient.name}</div>
         <p className="sub">{T('dayAfter', { n: day })} · {L(phase.name, lang)}</p>
       </div>
+      <Notices patient={patient} pack={pack} lang={lang} />
       {doneToday && <p className="okline">{T('doneToday')}</p>}
       <button className="big primary" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('startCheckIn')}</button>
       <div>
@@ -80,10 +86,10 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
           })}
         </div>
       </div>
-      {phase.exercises.length > 0 && (
+      {exs.length > 0 && (
         <div>
           <h3>{T('yourExercises')}</h3>
-          <ul className="exlist">{phase.exercises.map((x) => <li key={x.id}>{L(x.name, lang)}</li>)}</ul>
+          <ul className="exlist">{exs.map((id) => <li key={id}>{exerciseName(id, lang)}</li>)}</ul>
         </div>
       )}
       <div className="homecards">
@@ -100,6 +106,33 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
       </div>
       <p className="disclaimer">{T('noticeLong')}</p>
     </main>
+  );
+}
+
+function ReadAloud({ text, lang }: { text: string; lang: Lang }) {
+  const [on, setOn] = useState(false);
+  const stopRef = useRef<null | (() => void)>(null);
+  if (!speakSupported()) return null;
+  return (
+    <button className="readaloud" aria-pressed={on} onClick={() => {
+      if (on) { stopRef.current?.(); setOn(false); return; }
+      setOn(true);
+      stopRef.current = speak(text, lang, () => setOn(false));
+    }}>🔊 {t(lang, on ? 'stopReading' : 'readAloud')}</button>
+  );
+}
+
+/** What the physio changed, in the patient's language, with a read-aloud button (Phase 2.6). */
+function Notices({ patient, pack, lang }: { patient: Patient; pack: ProtocolPack; lang: Lang }) {
+  const unseen = patient.notices.filter((n) => !n.seen);
+  if (!unseen.length) return null;
+  const mark = () => updatePatient(patient.id, (p) => ({ ...p, notices: p.notices.map((n) => ({ ...n, seen: true })) }));
+  return (
+    <div className="notice-card" role="status" data-testid="physio-notice">
+      <strong>🩺 {t(lang, 'noticeTitle')}</strong>
+      {unseen.map((n) => { const text = noticeText(n, lang, pack); return <p key={n.id} className="noticeline">{text} <ReadAloud text={text} lang={lang} /></p>; })}
+      <button className="btn" onClick={mark}>{t(lang, 'gotIt')}</button>
+    </div>
   );
 }
 
@@ -122,16 +155,18 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
   const [typed, setTyped] = useState('');
   const stop = useRef<null | (() => void)>(null);
   const precs = activePrecautions(pack, patient);
+  const exIds = Object.keys(draft.results);
+  const hasList = exIds.length > 0;
 
   const order: Step[] = useMemo(() => [
-    ...pack.checkIn.dailyMeasures.map((m) => `m:${m}`), 'exercises', ...(draft.exercises && draft.exercises !== 'all' ? ['why'] : []), 'hard',
+    ...pack.checkIn.dailyMeasures.map((m) => `m:${m}`), 'exercises', ...(!hasList && draft.exercises && draft.exercises !== 'all' ? ['why'] : []), 'hard',
     ...(precs.length ? ['precautions'] : []), 'warnings', 'review',
   ], [pack, draft.exercises, precs.length]);
   const idx = Math.max(0, order.indexOf(step));
   const next = (cur: Step, d: Draft = draft) => {
     if (fromReview && cur !== 'warnings') { setStep('review'); return; }
     const o = [
-      ...pack.checkIn.dailyMeasures.map((m) => `m:${m}`), 'exercises', ...(d.exercises && d.exercises !== 'all' ? ['why'] : []), 'hard',
+      ...pack.checkIn.dailyMeasures.map((m) => `m:${m}`), 'exercises', ...(!hasList && d.exercises && d.exercises !== 'all' ? ['why'] : []), 'hard',
       ...(precs.length ? ['precautions'] : []), 'warnings', 'review',
     ];
     setStep(o[Math.min(o.indexOf(cur) + 1, o.length - 1)]);
@@ -144,7 +179,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
   };
 
   const applyText = (text: string) => {
-    const v = parseVoice(text, pack);
+    const v = parseVoice(text, pack, currentExercises(patient, pack));
     setDraft((d) => applyVoice(d, v, pack, text));
     setVoiceMsg('');
     setFromReview(false);
@@ -176,9 +211,13 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
       const shown = v === null ? '—' : m.options ? L(m.options.find((o) => o.id === v)?.label, lang) : m.scale ? `${FACES[Number(v)] ?? ''} ${v}/10` : String(v);
       return { label: L(m.label, lang), value: shown, step: `m:${id}` };
     }),
-    { label: T('exercises'), value: draft.exercises ? T(`ex_${draft.exercises}`) : '—', step: 'exercises' },
-    ...(draft.exercises && draft.exercises !== 'all' ? [{ label: T('reason'), value: draft.skipReason ? T(`skip_${draft.skipReason}`) : '—', step: 'why' }] : []),
-    { label: T('hardest'), value: draft.hardMovement === null ? '—' : draft.hardMovement === 'none' ? T('hm_none') : L(pack.checkIn.hardMovements.find((h) => h.id === draft.hardMovement)?.label, lang), step: 'hard' },
+    ...(hasList
+      ? exIds.map((id) => { const r = draft.results[id]; return { label: exerciseName(id, lang), value: r.done === null ? '—' : r.done ? `✓ ${T('exDone')}` : `✕ ${r.reason ? T(`skip_${r.reason}`) : T('exCouldnt')}`, step: 'exercises' }; })
+      : [
+        { label: T('exercises'), value: draft.exercises ? T(`ex_${draft.exercises}`) : '—', step: 'exercises' },
+        ...(draft.exercises && draft.exercises !== 'all' ? [{ label: T('reason'), value: draft.skipReason ? T(`skip_${draft.skipReason}`) : '—', step: 'why' }] : []),
+      ]),
+    { label: T('hardest'), value: draft.hardMovement === null ? '—' : draft.hardMovement === 'none' ? T('hm_none') : exerciseName(draft.hardMovement, lang), step: 'hard' },
     ...(precs.length ? [{ label: T('q_precautions'), value: Object.values(draft.precautionBreaches).some((v) => v === null) ? '—' : precs.filter((x) => draft.precautionBreaches[x.id]).map((x) => L(x.label, lang)).join(', ') || T('none'), step: 'precautions' }] : []),
     { label: T('warnings'), value: unanswered.length ? '—' : pack.warningSigns.filter((x) => draft.warnings[x.id]).map((x) => L(x.label, lang)).join(', ') || T('none'), step: 'warnings' },
   ];
@@ -232,7 +271,39 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
           );
         })()}
 
-        {step === 'exercises' && (
+        {step === 'exercises' && hasList && (
+          <>
+            <h2>{T('exTodayTitle')}</h2>
+            <p className="sub">{T('exTodaySub')}</p>
+            <div className="excards">{exIds.map((id) => {
+              const ex = getExercise(id);
+              const r = draft.results[id];
+              const setR = (v: { done: boolean | null; reason: string | null }) => setDraft({ ...draft, results: { ...draft.results, [id]: v } });
+              return (
+                <div className="excard" key={id} data-ex={id}>
+                  <div className="exhead">
+                    {ex && <img src={ex.picture} alt="" width={64} height={64} />}
+                    <div><b>{exerciseName(id, lang)}</b>{ex && <small>{T('exDose')}: {L(ex.dose.text, lang)}</small>}</div>
+                  </div>
+                  <div className="yn">
+                    <button className={r.done === true ? 'sel yes' : ''} aria-pressed={r.done === true} onClick={() => setR({ done: true, reason: null })}>✓ {T('exDone')}</button>
+                    <button className={r.done === false ? 'sel no' : ''} aria-pressed={r.done === false} onClick={() => setR({ done: false, reason: r.reason })}>✕ {T('exCouldnt')}</button>
+                  </div>
+                  {r.done === false && (
+                    <div className="why">
+                      <p>{T('exWhy')}</p>
+                      <div className="grid2">{pack.checkIn.skipReasons.map((k) => (
+                        <button key={k} className={`tile ${r.reason === k ? 'sel' : ''}`} aria-pressed={r.reason === k} onClick={() => setR({ done: false, reason: k })}><span className="emoji">{SKIP_EMOJI[k]}</span><span>{T(`skip_${k}`)}</span></button>))}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}</div>
+            <button className="big primary" disabled={exIds.some((id) => draft.results[id].done === null || (draft.results[id].done === false && draft.results[id].reason === null))} onClick={() => next('exercises')}>{T('next')}</button>
+          </>
+        )}
+
+        {step === 'exercises' && !hasList && (
           <>
             <h2>{T('q_exercises')}</h2>
             <p className="sub">{T('sessionsToday', { n: patient.sessionsPrescribedPerDay })}</p>
@@ -253,7 +324,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
           <>
             <h2>{T('q_hard')}</h2>
             <div className="grid2">
-              {[...pack.checkIn.hardMovements.map((h) => ({ id: h.id, label: L(h.label, lang) })), { id: 'none', label: T('hm_none') }].map((h) => (
+              {[...exIds.map((id) => ({ id, label: exerciseName(id, lang) })), { id: 'none', label: T('hm_none') }].map((h) => (
                 <button key={h.id} className={`tile ${draft.hardMovement === h.id ? 'sel' : ''}`} aria-pressed={draft.hardMovement === h.id} onClick={() => set({ hardMovement: h.id }, 'hard')}><span>{h.label}</span></button>))}
             </div>
           </>

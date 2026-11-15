@@ -1,3 +1,4 @@
+import { effectivePack } from './overrides';
 import type { Operator, Patient, ProtocolPack, Value } from '../types';
 import { latestMeasure } from './measures';
 
@@ -27,10 +28,14 @@ export interface GateResult {
   toPhase: string;
   criteria: GateRow[];
   allMet: boolean;
+  /** Physio put progression on hold: sign-off is blocked until the hold is removed. */
+  held: boolean;
+  canSignOff: boolean;
 }
 
 /** Gate for the patient's current phase (null if the pack has no gate out of it). */
-export function evaluateGate(p: Patient, pack: ProtocolPack, asOf: string): GateResult | null {
+export function evaluateGate(p: Patient, basePack: ProtocolPack, asOf: string): GateResult | null {
+  const pack = effectivePack(p, basePack);
   const g = pack.gates.find((x) => x.fromPhase === p.currentPhase);
   if (!g) return null;
   const criteria: GateRow[] = g.criteria.map((c) => {
@@ -47,5 +52,6 @@ export function evaluateGate(p: Patient, pack: ProtocolPack, asOf: string): Gate
       source: c.source,
     };
   });
-  return { fromPhase: g.fromPhase, toPhase: g.toPhase, criteria, allMet: criteria.every((c) => c.met) };
+  const allMet = criteria.every((c) => c.met);
+  return { fromPhase: g.fromPhase, toPhase: g.toPhase, criteria, allMet, held: !!p.plan?.hold, canSignOff: allMet && !p.plan?.hold };
 }

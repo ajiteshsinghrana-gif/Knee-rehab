@@ -6,6 +6,7 @@
  *  2. Nothing here changes a plan. It only returns flags and suggestions.
  *  3. No condition-specific code: every number and measure id comes from the patient's pack.
  */
+import { effectivePack } from './overrides';
 import type {
   CombinationRule, DailyCheckIn, Patient, ProtocolPack, Rule, StreakRule, Stage, ThresholdRule, Tier, TriageResult, Trigger,
 } from '../types';
@@ -228,7 +229,8 @@ const tierOf = (triggers: Trigger[]): Tier => (triggers.length ? triggers.map((t
  * Triage a patient. Highest tier wins: SAFETY > URGENT > REVIEW > ON_PLAN.
  * Returns every triggered rule with plain-language evidence, the response deadline and the overdue state.
  */
-export function triage(patient: Patient, pack: ProtocolPack, opts: TriageOptions = {}): TriageResult {
+export function triage(patient: Patient, basePack: ProtocolPack, opts: TriageOptions = {}): TriageResult {
+  const pack = effectivePack(patient, basePack); // per-patient physio overrides (Phase 2.7)
   const asOf = opts.asOf ?? lastCheckInDate(patient);
   const triggers = evaluateTriggers(patient, pack, asOf, opts.nowMs);
   const tier = tierOf(triggers);

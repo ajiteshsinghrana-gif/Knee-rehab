@@ -6,6 +6,8 @@ import { makeAllPatients } from '../src/demo/seed';
 import { diffDays } from '../src/engine/dates';
 import { triage } from '../src/engine/triage';
 import { DICT, t } from '../src/i18n';
+import { currentExercises } from '../src/engine/plan';
+import { getExercise } from '../src/exercises/library';
 
 const patients = makeAllPatients();
 const get = (id: string) => patients.find((p) => p.id === id)!;
@@ -14,13 +16,14 @@ const pack = getPack('acl-reconstruction');
 
 function fill(d: ReturnType<typeof newDraft>, tapAllSigns = true) {
   d.values.pain = 3; d.values.swelling = 'same'; d.exercises = 'all'; d.hardMovement = 'none';
+  for (const k of Object.keys(d.results)) d.results[k] = { done: true, reason: null };
   if (tapAllSigns) for (const k of Object.keys(d.warnings)) d.warnings[k] = false;
   return d;
 }
 
 describe('mandatory warning-sign step after voice (Phase 0.2)', () => {
   it('voice pre-fills measures but never answers a warning sign', () => {
-    const v = parseVoice('pain 4, swelling same, did all my exercises, squat was hard, no fever', pack);
+    const v = parseVoice('pain 4, swelling same, did all my exercises, squat was hard, no fever', pack, currentExercises(ravi, pack));
     const d = applyVoice(newDraft(pack, ravi), v, pack, 'x');
     expect(d.values.pain).toBe(4);
     expect(d.suggested.fever).toBe(false);
@@ -28,7 +31,7 @@ describe('mandatory warning-sign step after voice (Phase 0.2)', () => {
     expect(unansweredSigns(d)).toHaveLength(pack.warningSigns.length);
   });
   it('save stays disabled until every sign has been answered by a tap', () => {
-    const v = parseVoice('pain 4, swelling same, did all my exercises, squat was hard, no fever', pack);
+    const v = parseVoice('pain 4, swelling same, did all my exercises, squat was hard, no fever', pack, currentExercises(ravi, pack));
     const d = applyVoice(newDraft(pack, ravi), v, pack, 'x');
     expect(isComplete(d)).toBe(false);
     const ids = Object.keys(d.warnings);
@@ -55,10 +58,15 @@ describe('mandatory warning-sign step after voice (Phase 0.2)', () => {
   });
   it('skipping exercises requires a reason', () => {
     const d = fill(newDraft(pack, ravi));
-    d.exercises = 'none';
+    const [first, ...rest] = Object.keys(d.results);
+    d.results[first] = { done: false, reason: null };
     expect(isComplete(d)).toBe(false);
-    d.skipReason = 'time';
+    d.results[first] = { done: false, reason: 'fear' };
     expect(isComplete(d)).toBe(true);
+    const e = toDaily(d, ravi, '2026-11-15');
+    expect(e.exercises).toBe(rest.length ? 'some' : 'none');
+    expect(e.skipReason).toBe('fear');
+    expect(e.exerciseResults?.find((r) => r.id === first)).toEqual({ id: first, done: false, reason: 'fear' });
   });
 });
 
@@ -66,7 +74,8 @@ describe('check-in is generated from the patient pack (Phase 1.4)', () => {
   it('a shoulder patient never sees knee movements', () => {
     const imran = get('imran');
     const rc = getPack(imran.packId);
-    const labels = JSON.stringify(rc.checkIn.hardMovements) + JSON.stringify(rc.measures) + JSON.stringify(rc.checkIn.voiceExample) + JSON.stringify(rc.phases);
+    const exs = rc.phases.flatMap((ph) => ph.exercises).map((id) => getExercise(id));
+    const labels = JSON.stringify(exs) + JSON.stringify(rc.measures) + JSON.stringify(rc.checkIn.voiceExample);
     expect(/stairs|squat|\bknee\b|घुटने/i.test(labels)).toBe(false);
     expect(rc.checkIn.dailyMeasures).toEqual(['pain']);
     const d = newDraft(rc, imran);
@@ -78,8 +87,10 @@ describe('check-in is generated from the patient pack (Phase 1.4)', () => {
   });
   it('knee replacement shows its own movements and questions', () => {
     const tk = getPack('total-knee-replacement');
-    expect(tk.checkIn.hardMovements.map((h) => h.id)).toContain('sit-to-stand');
-    expect(tk.checkIn.hardMovements.map((h) => h.id)).not.toContain('squat');
+    const kam = get('kamla');
+    const p2 = { ...kam, currentPhase: 'p2' };
+    expect(currentExercises(p2, tk)).toContain('sit-to-stand');
+    expect(currentExercises(p2, tk)).not.toContain('squats');
   });
   it('an edit round-trips through a draft', () => {
     const e = ravi.daily[ravi.daily.length - 1];

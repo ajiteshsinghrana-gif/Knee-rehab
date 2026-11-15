@@ -1,6 +1,7 @@
 import type { DailyCheckIn, Patient, PeriodicEntry, ProtocolPack, Value } from '../types';
 import { addDays } from '../engine/dates';
 import { getPack } from '../engine/packs';
+import { planDefaults } from '../engine/plan';
 
 export const DEMO_TODAY_LAST = '2026-11-14';
 
@@ -33,7 +34,7 @@ const RAVI_SW = 'SSMSSLSSMSLLSLLSLLLSLLLLLLSLLLLLSLL'.split('');
 const SW = { S: 'same', M: 'more', L: 'less' } as const;
 const RAVI_SOME = new Set([4, 10, 17, 26]);
 const RAVI_NONE = new Set([12]);
-const RAVI_HARD = ['straightening', 'straightening', 'bending', 'none', 'walking', 'bending', 'none', 'straightening', 'walking', 'none', 'bending', 'none', 'stairs', 'walking', 'none', 'stairs', 'bending', 'none', 'walking', 'squat', 'stairs', 'none', 'bending', 'squat', 'none', 'walking', 'walking', 'none', 'squat', 'stairs', 'none', 'stairs', 'none', 'squat', 'none'];
+const RAVI_HARD = ['gentle-rom', 'gentle-rom', 'gentle-rom', 'none', 'walking', 'gentle-rom', 'none', 'gentle-rom', 'walking', 'none', 'gentle-rom', 'none', 'step-ups', 'walking', 'none', 'step-ups', 'gentle-rom', 'none', 'walking', 'squats', 'step-ups', 'none', 'gentle-rom', 'squats', 'none', 'walking', 'walking', 'none', 'squats', 'step-ups', 'none', 'step-ups', 'none', 'squats', 'none'];
 
 export function makeRavi(last = DEMO_TODAY_LAST): Patient {
   const pack = getPack('acl-reconstruction');
@@ -45,7 +46,7 @@ export function makeRavi(last = DEMO_TODAY_LAST): Patient {
   });
   return {
     id: 'ravi', name: 'Ravi', age: 24, packId: pack.id, language: 'en', anchorDate: t0, currentPhase: 'p2', phaseStartDate: addDays(t0, 28),
-    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [],
+    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(),
     periodic: [
       wk(t0, 7, 3, 70, 3, true), wk(t0, 14, 2, 92, 2, true), wk(t0, 21, 1, 112, 1.5, false), wk(t0, 28, 0.5, 126, 1, false),
       wk(t0, 35, 0, 134, 0.5, false, {
@@ -58,7 +59,7 @@ export function makeRavi(last = DEMO_TODAY_LAST): Patient {
 }
 
 // ---------------- generic ACL builder for the supporting patients ----------------
-const RP = ['bending', 'none', 'walking', 'none', 'stairs', 'none', 'squat'];
+const RP = ['gentle-rom', 'none', 'walking', 'none', 'step-ups', 'none', 'squats'];
 function zf(o: {
   id: string; name: string; age: number; last: string; days: number; phase: 'p1' | 'p2'; phaseStartDay: number;
   pain: (i: number) => number; ex?: (i: number) => Ex; skip?: (i: number) => string | undefined;
@@ -81,7 +82,7 @@ function zf(o: {
   });
   return {
     id: o.id, name: o.name, age: o.age, packId: pack.id, language: 'en', anchorDate: t0, currentPhase: o.phase, phaseStartDate: addDays(t0, o.phaseStartDay),
-    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [],
+    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(),
     periodic: [
       ...o.weekly.map(([d, v]) => ({ date: addDays(t0, d), values: v })),
       ...(o.tsk ?? []).map(([d, v]) => ({ date: addDays(t0, d), values: { tsk11: v } })),
@@ -99,11 +100,11 @@ function makeKamla(last: string): Patient {
   const t0 = addDays(last, -days);
   const daily = Array.from({ length: days }, (_, n) => dailyEntry(pack, {
     date: addDays(t0, n + 1), pain: Math.max(2, 5 - Math.floor(n / 9)), swelling: n % 6 === 5 ? 'same' : 'less', ex: n % 9 === 8 ? 'some' : 'all', per: 2,
-    hard: ['bending', 'none', 'sit-to-stand', 'none', 'walking', 'none', 'stairs'][n % 7],
+    hard: ['heel-slides', 'none', 'quad-set', 'none', 'walking-aid', 'none', 'straight-leg-raise'][n % 7],
   }));
   return {
     id: 'kamla', name: 'Kamla', age: 67, packId: pack.id, language: 'hi', anchorDate: t0, currentPhase: 'p1', phaseStartDate: t0,
-    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [],
+    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(),
     periodic: [
       // Tracks the expected knee-bend curve for four weeks, then drifts below the band at week 5.
       { date: addDays(t0, 7), values: { flexionDeg: 50, extensionDeficitDeg: 12, kneeCircumferenceDiffCm: 3 } },
@@ -119,12 +120,12 @@ function makeImran(last: string): Patient {
   const days = 12;
   const t0 = addDays(last, -days);
   const daily = Array.from({ length: days }, (_, n) => ({
-    ...dailyEntry(pack, { date: addDays(t0, n + 1), pain: Math.max(2, 5 - Math.floor(n / 4)), ex: 'all', per: 2, hard: ['sleeping', 'dressing', 'none'][n % 3] }),
+    ...dailyEntry(pack, { date: addDays(t0, n + 1), pain: Math.max(2, 5 - Math.floor(n / 4)), ex: 'all', per: 2, hard: ['pendulum', 'hand-wrist-elbow', 'none'][n % 3] }),
     precautionBreaches: { 'sling-off': false },
   }));
   return {
     id: 'imran', name: 'Imran', age: 52, packId: pack.id, language: 'en', anchorDate: t0, currentPhase: 'p1', phaseStartDate: t0,
-    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], periodic: [{ date: addDays(t0, 7), values: { armRaiseDeg: 30 } }],
+    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(), periodic: [{ date: addDays(t0, 7), values: { armRaiseDeg: 30 } }],
   };
 }
 
@@ -166,8 +167,8 @@ export interface DemoStep {
 }
 export const DEMO_STEPS: DemoStep[] = [
   { title: 'Day 1: a slightly worse day', narration: 'Ravi reports pain 3 and does only one of two sessions. Still within normal variation.', patch: { pain: 3, ex: 'some', hard: 'walking' } },
-  { title: 'Day 2: pain keeps rising, he skips', narration: 'Pain 4 (up 2 over three check-ins). He skips today and says it hurt. Squat is hard again.', patch: { pain: 4, ex: 'none', skip: 'pain', hard: 'squat' } },
-  { title: 'Day 3: second missed day, same movement', narration: 'Pain 5, second skipped day in a row, and squat is hard a third time this week.', patch: { pain: 5, ex: 'none', skip: 'pain', hard: 'squat' } },
+  { title: 'Day 2: pain keeps rising, he skips', narration: 'Pain 4 (up 2 over three check-ins). He skips today and says it hurt. Squat is hard again.', patch: { pain: 4, ex: 'none', skip: 'pain', hard: 'squats' } },
+  { title: 'Day 3: second missed day, same movement', narration: 'Pain 5, second skipped day in a row, and squat is hard a third time this week.', patch: { pain: 5, ex: 'none', skip: 'pain', hard: 'squats' } },
 ];
 
 /** Appends the next demo day to Ravi. Pure; returns a new patient. */

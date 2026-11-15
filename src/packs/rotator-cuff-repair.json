@@ -22,20 +22,8 @@
     "hi": "चरण 1: स्लिंग और सुरक्षा"
    },
    "exercises": [
-    {
-     "id": "hand-wrist-elbow",
-     "name": {
-      "en": "Hand, wrist and elbow movement",
-      "hi": "हाथ, कलाई और कोहनी की हरकत"
-     }
-    },
-    {
-     "id": "pendulum",
-     "name": {
-      "en": "Pendulum swings",
-      "hi": "पेंडुलम (हाथ झुलाना)"
-     }
-    }
+    "hand-wrist-elbow",
+    "pendulum"
    ],
    "sessionsPerDay": 2,
    "followUpEveryDays": 7,
@@ -53,20 +41,8 @@
     "hi": "चरण 2: हल्की सहायता वाली हरकत"
    },
    "exercises": [
-    {
-     "id": "assisted-arm-raise",
-     "name": {
-      "en": "Arm raise helped by the other hand",
-      "hi": "दूसरे हाथ की मदद से बांह उठाना"
-     }
-    },
-    {
-     "id": "wall-slide",
-     "name": {
-      "en": "Wall slide",
-      "hi": "दीवार पर हाथ सरकाना"
-     }
-    }
+    "assisted-arm-raise",
+    "wall-slide"
    ],
    "sessionsPerDay": 2,
    "followUpEveryDays": 7,
@@ -84,20 +60,8 @@
     "hi": "चरण 3: मज़बूती"
    },
    "exercises": [
-    {
-     "id": "band-rotation",
-     "name": {
-      "en": "Resistance band rotation",
-      "hi": "रबर बैंड से घुमाव"
-     }
-    },
-    {
-     "id": "shoulder-blade-squeeze",
-     "name": {
-      "en": "Shoulder blade squeeze",
-      "hi": "कंधे के ब्लेड सिकोड़ना"
-     }
-    }
+    "band-rotation",
+    "shoulder-blade-squeeze"
    ],
    "sessionsPerDay": 2,
    "followUpEveryDays": 7,
@@ -533,64 +497,14 @@
    "pain",
    "fear",
    "time",
-   "access"
-  ],
-  "hardMovements": [
-   {
-    "id": "reaching-overhead",
-    "label": {
-     "en": "Reaching overhead",
-     "hi": "सिर के ऊपर हाथ ले जाना"
-    },
-    "voice": [
-     "overhead",
-     "ऊपर"
-    ]
-   },
-   {
-    "id": "reaching-behind",
-    "label": {
-     "en": "Reaching behind the back",
-     "hi": "पीठ के पीछे हाथ ले जाना"
-    },
-    "voice": [
-     "behind",
-     "पीछे"
-    ]
-   },
-   {
-    "id": "dressing",
-    "label": {
-     "en": "Dressing",
-     "hi": "कपड़े पहनना"
-    },
-    "voice": [
-     "dress",
-     "कपड़े"
-    ]
-   },
-   {
-    "id": "lifting",
-    "label": {
-     "en": "Lifting",
-     "hi": "कुछ उठाना"
-    },
-    "voice": [
-     "lift",
-     "उठान"
-    ]
-   },
-   {
-    "id": "sleeping",
-    "label": {
-     "en": "Sleeping position",
-     "hi": "सोने की स्थिति"
-    },
-    "voice": [
-     "sleep",
-     "सोन"
-    ]
-   }
+   "access",
+   "understand"
   ]
+ },
+ "followUpProposal": {
+  "teleReviewWithinHours": 48,
+  "checkInEveryDays": 1,
+  "forDays": 7,
+  "source": "NEEDS_PHYSIO_SIGNOFF"
  }
 }

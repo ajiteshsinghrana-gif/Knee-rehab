@@ -1,3 +1,4 @@
+import { planDefaults } from '../src/engine/plan';
 import type { Patient, PeriodicEntry, ProtocolPack, Value } from '../src/types';
 import { addDays } from '../src/engine/dates';
 import { dailyEntry } from '../src/demo/seed';
@@ -21,7 +22,7 @@ export function mk(days: number, f: (day: number) => Over = () => ({}), opts: { 
   });
   return {
     id: 't', name: 'T', age: 30, packId: pack.id, language: 'en', anchorDate: ANCHOR, currentPhase: opts.phase ?? 'p1', phaseStartDate: addDays(ANCHOR, opts.phaseStart ?? 0),
-    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], periodic: opts.periodic ?? [],
+    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(), periodic: opts.periodic ?? [],
   };
 }
 export const wk = (day: number, values: Record<string, Value>): PeriodicEntry => ({ date: addDays(ANCHOR, day), values });

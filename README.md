@@ -66,6 +66,20 @@ Copy a pack in `src/packs/`, register it in `src/engine/packs.ts`, run `npm test
 
 "Overlapping phases" in a criteria-driven protocol means duplicate phase ids or order numbers, or two gates for the same transition. Phases have no calendar windows, only expected time in phase.
 
+## Personalised plan (Phase 2)
+
+- **Exercise library** (`src/exercises/library.json`): one record per exercise with English and Hindi names, a picture path, a dose, the packs and phases that use it, and an easier version (`regressionId`). Packs list exercise ids only. The validator rejects unknown ids, regression loops and `usedIn` that disagrees with the packs.
+- **Pictures are placeholders** (`public/media/*.svg`, emoji). Replace them with the physio's real pictures or clips under the same file names. Doses and regressions are tagged `NEEDS_PHYSIO_SIGNOFF` (see the list below).
+- **Patient check-in** shows today's exercises as picture cards with Done / Could not do. "Could not do" asks why (pain, scared, no time, can't access, didn't understand). "Hardest movement" lists the prescribed exercises.
+- **Approving an action changes the plan, and only the physio can do it** (`src/engine/plan.ts` is the only code that writes the plan; triage never does):
+  - Regress exercise: the physio picks an exercise, it is swapped for its easier version (can be restored).
+  - Hold progression: blocks phase sign-off until the hold is removed.
+  - Change follow-up: updates check-in frequency and next review date; optional end date after which the old frequency returns.
+  - Every change goes to a per-patient audit log: who, when, before and after, note.
+- **URGENT through a combination of rules** proposes a follow-up (`followUpProposal` in the pack: tele-review within 48 h, daily check-ins for 7 days; all `NEEDS_PHYSIO_SIGNOFF`) as a before/after table with Approve / Edit / Reject. Rejecting leaves the plan unchanged.
+- **Patient notice**: after any plan change the home screen says, in the patient's language, "Your physio reviewed this on <date> and changed <X>", with a read-aloud button (browser speech synthesis).
+- **Per-patient threshold overrides** (`src/engine/overrides.ts`): the physio can change any rule or gate number for one patient. A reason is required, it is logged, and the rule's evidence shows `PHYSIO_OVERRIDE: <reason>`. The shared pack is never modified. Warning-sign tiers cannot be overridden.
+
 ## Run
 
 ```
@@ -96,7 +110,7 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 
 <!-- SIGNOFF:START -->
 
-#### acl-reconstruction (10 values)
+#### acl-reconstruction (11 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -110,8 +124,9 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | rule R3 pain stage weeks 0-2 | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
 | rule R3 pain stage weeks 2-6 | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
 | rule R3 pain stage weeks 6-end | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
+| followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 
-#### total-knee-replacement (24 values)
+#### total-knee-replacement (25 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -139,8 +154,9 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | rule A3 streak | 2 in a row; adherence < 60% | NEEDS_PHYSIO_SIGNOFF |
 | rule A6 (gateOverdue) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
 | rule C1 (belowCurve) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
+| followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 
-#### rotator-cuff-repair (20 values)
+#### rotator-cuff-repair (21 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -164,5 +180,45 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | rule P1 (precautionBreach) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
 | rule C1 (belowCurve) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
 | precaution sling-off restricted phases | p1 | NEEDS_PHYSIO_SIGNOFF |
+| followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
+
+#### exercise library (34 values)
+
+| Where | Value | Source tag |
+|---|---|---|
+| exercise ankle-pumps dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise assisted-arm-raise dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise balance dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise band-rotation dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise bridging dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise calf-raises dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise core dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise cycling dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise gait-drills dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise gentle-rom dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise hand-wrist-elbow dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise heel-slides dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise hip-abduction dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise ice-compression dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise ice-elevation dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise lunges dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise lunges easier version | mini-squats | NEEDS_PHYSIO_SIGNOFF |
+| exercise mini-squats dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise pendulum dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise quad-set dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise shoulder-blade-squeeze dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise sit-to-stand dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise squats dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise squats easier version | mini-squats | NEEDS_PHYSIO_SIGNOFF |
+| exercise stairs-practice dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise stationary-cycling dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise step-ups dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise step-ups easier version | mini-squats | NEEDS_PHYSIO_SIGNOFF |
+| exercise straight-leg-raise dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise swimming dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise walking dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise walking-aid dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise walking-programme dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
+| exercise wall-slide dose | Sets and repetitions: as shown by your physio | NEEDS_PHYSIO_SIGNOFF |
 
 <!-- SIGNOFF:END -->
