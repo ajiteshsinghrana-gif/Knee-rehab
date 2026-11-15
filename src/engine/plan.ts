@@ -62,7 +62,8 @@ export function pendingProposal(p: Patient, pack: ProtocolPack, tri: { tier: str
 export type PlanAction =
   | { type: 'regress-exercise'; exerciseId: string; note?: string }
   | { type: 'restore-exercise'; exerciseId: string; note?: string }
-  | { type: 'set-exercises'; add?: string[]; remove?: string[]; note?: string }
+  | { type: 'set-exercises'; add?: string[]; remove?: string[]; note?: string; notify?: boolean }
+  | { type: 'move-phase'; toPhase: string; note: string }
   | { type: 'hold-progression'; note?: string }
   | { type: 'release-hold'; note?: string }
   | { type: 'change-follow-up'; checkInEveryDays: number; reviewEveryDays?: number; nextReviewDate: string | null; until?: string | null; note?: string; flagKey?: string; proposalStatus?: 'approved' | 'modified' }
@@ -72,7 +73,7 @@ export type PlanAction =
   | { type: 'remove-override'; id: string; reason?: string }
   | { type: 'record'; action: string; status: 'approved' | 'modified'; note?: string };
 
-export interface Ctx { nowMs: number; today: string; who?: string }
+export interface Ctx { nowMs: number; today: string; who?: string; /** Set by applyManual only. */ manual?: boolean }
 
 const iso = (ms: number) => new Date(ms).toISOString();
 let seq = 0;
@@ -126,6 +127,12 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       }
       plan.added = [...added];
       plan.removed = [...removed];
+      if (a.notify) {
+        const after = currentExercises({ ...p, plan }, pack);
+        const addedNow = after.filter((x) => !cur.includes(x));
+        const removedNow = cur.filter((x) => !after.includes(x));
+        if (addedNow.length || removedNow.length) changes.push({ kind: 'exercises', added: addedNow, removed: removedNow });
+      }
       audit = entry(a.type, `Exercise list changed: +${(a.add ?? []).join(', ') || 'none'} -${(a.remove ?? []).join(', ') || 'none'}`, { exercises: cur }, { exercises: currentExercises({ ...p, plan }, pack) }, a.note);
       break;
     }
@@ -173,6 +180,24 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       audit = entry(a.type, `Phase signed off: ${gate.fromPhase} to ${gate.toPhase}`, { phase: gate.fromPhase }, { phase: gate.toPhase }, a.note);
       break;
     }
+    case 'move-phase': {
+      // A manual move: any direction, with or without the gate being met. The reason is mandatory and the audit says whether the protocol was overridden.
+      if (!a.note || !a.note.trim()) throw new Error('A reason is required to move a patient to another phase');
+      const to = pack.phases.find((x) => x.id === a.toPhase);
+      if (!to) throw new Error('Unknown phase');
+      if (a.toPhase === p.currentPhase) throw new Error('The patient is already in that phase');
+      const order = (id: string) => pack.phases.find((x) => x.id === id)?.order ?? 0;
+      const gate = evaluateGate(p, pack, ctx.today);
+      const nextOnly = !!gate && gate.toPhase === a.toPhase;
+      const unmet = nextOnly ? gate!.criteria.filter((c) => !c.met).map((c) => c.label.en) : [];
+      const direction = order(a.toPhase) < order(p.currentPhase) ? 'back' : nextOnly ? 'next' : 'skip';
+      const overrode = direction === 'back' || direction === 'skip' || unmet.length > 0 || !!plan.hold;
+      out = { ...out, currentPhase: a.toPhase, phaseStartDate: ctx.today };
+      plan = { ...plan, swaps: {}, added: [], removed: [] };
+      changes.push({ kind: 'phase', phaseId: a.toPhase });
+      audit = entry(a.type, `Phase moved by the physio: ${p.currentPhase} to ${a.toPhase} (${direction})${overrode ? ', protocol overridden' : ''}`, { phase: p.currentPhase }, { phase: a.toPhase, direction, overrodeProtocol: overrode, unmetCriteria: unmet, holdWasOn: !!plan.hold }, a.note.trim());
+      break;
+    }
     case 'set-override': {
       if (!a.reason || !a.reason.trim()) throw new Error('A reason is required for a per-patient override');
       const t = listOverridable(pack, p).find((x) => x.target === a.target);
@@ -197,6 +222,22 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
     }
   }
   out = { ...out, plan, audit: [...p.audit, audit!] };
+  if (ctx.manual) out.audit = [...p.audit, { ...audit!, manual: true }];
   if (changes.length) out.notices = [...p.notices, { id: newId(ctx.nowMs), at, changes, seen: false }];
   return out;
+}
+
+/** Plan changes the physio can make on his own, apart from the suggested actions (Phase 5.4). */
+export const MANUAL_TYPES = ['set-exercises', 'regress-exercise', 'restore-exercise', 'hold-progression', 'release-hold', 'change-follow-up', 'move-phase'] as const;
+
+/**
+ * A physio-initiated change. A written reason is always required (safety measure), the change is
+ * flagged `manual` in the audit log, and the patient is told what changed (not the reason).
+ */
+export function applyManual(p: Patient, pack: ProtocolPack, a: PlanAction, reason: string, ctx: Ctx): Patient {
+  const why = (reason ?? '').trim();
+  if (!why) throw new Error('Write your reason for this change first');
+  if (!(MANUAL_TYPES as readonly string[]).includes(a.type)) throw new Error('This change is not available as a manual change');
+  const act: PlanAction = a.type === 'set-exercises' ? { ...a, note: why, notify: true } : ({ ...a, note: why } as PlanAction);
+  return applyAction(p, pack, act, { ...ctx, manual: true });
 }

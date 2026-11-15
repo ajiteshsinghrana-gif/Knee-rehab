@@ -12,9 +12,9 @@ import { LineChart } from './Charts';
 import { Onboarding } from './Onboarding';
 import { ImportProtocol } from './Import';
 import { NewCondition } from './Condition';
-import { applyAction, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
+import { applyAction, applyManual, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
 import { listOverridable } from '../engine/overrides';
-import { exerciseName, getExercise } from '../exercises/library';
+import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
 
 const TIER_LABEL: Record<Tier, string> = { SAFETY: 'SAFETY', URGENT: 'URGENT', REVIEW: 'REVIEW', ON_PLAN: 'ON PLAN' };
 const srcClass = (s: string) => s.split(/[;( ]/)[0].replace(/[^A-Z_]/g, '');
@@ -198,6 +198,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
       </div>
 
       <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} />
+      <AdjustCard patient={p} pack={pack} now={now} />
       <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
 
       {pack.questionnaires.map((q) => {
@@ -340,7 +341,7 @@ function PlanCard({ patient: p, pack, now, onApply, err }: { patient: Patient; p
         <summary>Audit log ({p.audit.length})</summary>
         {p.audit.length === 0 ? <p className="tiny">No plan changes yet.</p> : (
           <ul className="audit">{[...p.audit].reverse().map((a) => (
-            <li key={a.id}><b>{a.at.slice(0, 16).replace('T', ' ')}</b> · {a.who}: {a.summary}{a.note ? <> <i>“{a.note}”</i></> : null}</li>))}</ul>
+            <li key={a.id}><b>{a.at.slice(0, 16).replace('T', ' ')}</b> · {a.who}: {a.manual && <span className="src PHYSIO_OVERRIDE">physio-initiated</span>} {a.summary}{a.note ? <> <i>“{a.note}”</i></> : null}</li>))}</ul>
         )}
       </details>
     </div>
@@ -371,6 +372,101 @@ function OverridesCard({ patient: p, pack, onApply, err }: { patient: Patient; p
       </div>
       {err && <p className="err" role="alert">{err}</p>}
       <p className="tiny">Applies to this patient only. The pack is unchanged. The reason is logged and shown on the evidence line whenever the rule fires.</p>
+    </details>
+  );
+}
+
+// ------------------------------------------------------------------ physio-initiated changes (Phase 5.4)
+type AdjustKind = 'add' | 'remove' | 'easier' | 'hold' | 'phase';
+function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
+  const st = getState();
+  const [kind, setKind] = useState<AdjustKind>('add');
+  const [ex, setEx] = useState('');
+  const [toPhase, setToPhase] = useState('');
+  const [reason, setReason] = useState('');
+  const [ack, setAck] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState('');
+  const cur = currentExercises(p, pack);
+  const order = (id: string) => pack.phases.find((x) => x.id === id)?.order ?? 0;
+  const gate = evaluateGate(p, pack, st.today);
+
+  /** What the protocol would say about this move. Any warning needs a tick before the change can be made. */
+  const warning = (): string | null => {
+    if (kind !== 'phase' || !toPhase) return null;
+    if (order(toPhase) < order(p.currentPhase)) return 'This moves the patient back to an earlier phase.';
+    if (gate && gate.toPhase === toPhase) {
+      const unmet = gate.criteria.filter((c) => !c.met);
+      if (unmet.length) return `${unmet.length} gate criteri${unmet.length === 1 ? 'on is' : 'a are'} not met: ${unmet.map((c) => c.label.en).join('; ')}.`;
+      if (p.plan.hold) return 'Progression is on hold.';
+      return null;
+    }
+    return 'This skips a phase, so the protocol gate does not apply.';
+  };
+  const warn = warning();
+  const ready = !!reason.trim() && (!warn || ack) && (kind === 'hold' || (kind === 'phase' ? !!toPhase : !!ex));
+
+  const action = (): PlanAction => {
+    if (kind === 'add') return { type: 'set-exercises', add: [ex] };
+    if (kind === 'remove') return { type: 'set-exercises', remove: [ex] };
+    if (kind === 'easier') return { type: 'regress-exercise', exerciseId: ex };
+    if (kind === 'hold') return p.plan.hold ? { type: 'release-hold' } : { type: 'hold-progression' };
+    return { type: 'move-phase', toPhase, note: reason };
+  };
+  const run = () => {
+    try {
+      updatePatient(p.id, (q) => applyManual(q, pack, action(), reason, { nowMs: now, today: st.today }));
+      setErr(''); setDone('Done. The patient will see what changed on their screen. Your reason is saved in the audit log.');
+      setEx(''); setToPhase(''); setReason(''); setAck(false);
+    } catch (e) { setErr((e as Error).message); setDone(''); }
+  };
+  return (
+    <details className="card adjust" data-testid="adjust" open>
+      <summary><b>Adjust the treatment yourself</b></summary>
+      <p className="tiny">Use this when you want to change the plan without waiting for a suggestion. You can go beyond the protocol. A reason is required for every change; it is saved in the audit log and the patient is told what changed.</p>
+      <div className="fu">
+        <select aria-label="What do you want to change" value={kind} onChange={(e) => { setKind(e.target.value as AdjustKind); setEx(''); setToPhase(''); setAck(false); setDone(''); setErr(''); }}>
+          <option value="add">Add an exercise</option>
+          <option value="remove">Remove an exercise</option>
+          <option value="easier">Make an exercise easier</option>
+          <option value="hold">{p.plan.hold ? 'Remove the hold on progression' : 'Put progression on hold'}</option>
+          <option value="phase">Move to a phase</option>
+        </select>
+        {kind === 'add' && (
+          <select aria-label="Exercise to add" value={ex} onChange={(e) => setEx(e.target.value)}>
+            <option value="">Choose an exercise…</option>
+            {LIBRARY.filter((e) => !cur.includes(e.id)).map((e) => <option key={e.id} value={e.id}>{e.name.en}</option>)}
+          </select>
+        )}
+        {kind === 'remove' && (
+          <select aria-label="Exercise to remove" value={ex} onChange={(e) => setEx(e.target.value)}>
+            <option value="">Choose an exercise…</option>
+            {cur.map((id) => <option key={id} value={id}>{exerciseName(id, 'en')}</option>)}
+          </select>
+        )}
+        {kind === 'easier' && (
+          <select aria-label="Exercise to make easier" value={ex} onChange={(e) => setEx(e.target.value)}>
+            <option value="">Choose an exercise…</option>
+            {cur.map((id) => { const to = getExercise(id)?.regressionId; return <option key={id} value={id} disabled={!to}>{exerciseName(id, 'en')}{to ? ` → ${exerciseName(to, 'en')}` : ' (no easier version yet: remove it and add another instead)'}</option>; })}
+          </select>
+        )}
+        {kind === 'phase' && (
+          <select aria-label="Phase to move to" value={toPhase} onChange={(e) => { setToPhase(e.target.value); setAck(false); }}>
+            <option value="">Choose a phase…</option>
+            {pack.phases.filter((x) => x.id !== p.currentPhase).map((x) => <option key={x.id} value={x.id}>{x.name.en}</option>)}
+          </select>
+        )}
+      </div>
+      {kind === 'phase' && <p className="tiny">Moving phase resets this patient's exercise swaps and additions to the new phase's list.</p>}
+      {warn && (
+        <label className="check warnline" data-testid="adjust-warning"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} aria-label="I understand this overrides the protocol" /> {warn} I understand this overrides the protocol.</label>
+      )}
+      <div className="fu">
+        <input aria-label="Reason for this change" placeholder="Reason for this change (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <button className="btn primary" disabled={!ready} onClick={run}>Apply and tell the patient</button>
+      </div>
+      {err && <p className="err" role="alert">{err}</p>}
+      {done && <p className="okline" role="status" data-testid="adjust-done">{done}</p>}
     </details>
   );
 }

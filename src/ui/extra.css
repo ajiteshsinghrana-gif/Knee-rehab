@@ -73,3 +73,8 @@
 .caregivertoggle { display: flex; gap: 10px; align-items: flex-start; background: #fff; border: 1px solid #cfd8d6; border-radius: 12px; padding: 10px 12px; margin: 10px 0; }
 .caregivertoggle input { width: 24px; height: 24px; margin-top: 2px; flex: none; }
 .caregivertoggle small { display: block; font-weight: 400; color: #4b5b58; margin-top: 2px; }
+
+/* Phase 5.4: physio-initiated changes */
+.adjust .fu { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+.adjust .fu input { flex: 1 1 220px; }
+.warnline { display: flex; gap: 8px; align-items: flex-start; background: #fff6dd; border: 1px solid #e3c26b; border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
