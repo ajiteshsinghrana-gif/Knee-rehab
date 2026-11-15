@@ -7,7 +7,8 @@
  * Only signs the patient actually mentioned are returned; the rest stay unanswered.
  */
 import { getExercise } from '../exercises/library';
-import type { Exercises, ProtocolPack } from '../types';
+import type { Exercises, Lang, ProtocolPack } from '../types';
+import { SPEECH_LANG } from './speak';
 
 export interface VoiceResult {
   pain?: number;
@@ -118,11 +119,11 @@ export const voiceSupported = (): boolean => {
   return !!(w.SpeechRecognition || w.webkitSpeechRecognition);
 };
 
-export function listen(lang: 'en' | 'hi', onText: (s: string) => void, onEnd: (err?: string) => void): () => void {
+export function listen(lang: Lang, onText: (s: string) => void, onEnd: (err?: string) => void): () => void {
   const w = window as any;
   const Rec = w.SpeechRecognition || w.webkitSpeechRecognition;
   const r = new Rec();
-  r.lang = lang === 'hi' ? 'hi-IN' : 'en-IN';
+  r.lang = SPEECH_LANG[lang];
   r.interimResults = false;
   r.maxAlternatives = 1;
   r.continuous = false;

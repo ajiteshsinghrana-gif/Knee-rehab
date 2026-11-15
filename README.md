@@ -111,6 +111,15 @@ Copy a pack in `src/packs/`, register it in `src/engine/packs.ts`, run `npm test
 
 **Phase 4.1.** Written conditions can mark a weekly measure as "measured on a photo": the physio names the three points to tap (English and Hindi) and picks the reading (angle between, or deviation from straight). The photo stays on the patient's phone. A physio can also load a questionnaire from a JSON file, save it for reuse in other conditions, or download it. A loaded file never confirms permission: "permission to use" is always unticked until the physio ticks it, and it stays on the sign-off list.
 
+## Third language: Bengali (Phase 5.1)
+
+Patients can use English, Hindi or Bengali (the language button cycles through them; the physio picks it when adding a patient, and it travels in the invite). All screen text, the three built-in conditions and the exercise list have Bengali wording (`src/i18n/bn.ts`, `src/i18n/bn-content.ts`). Tests fail if a screen string or built-in pack string has no Bengali version.
+
+- **NEEDS_NATIVE_REVIEW:** the Bengali was written by Claude and has not been read by a Bengali-speaking clinician. Have one check it before real patients use it, above all the warning signs, the "seek care now" screen and the TSK-11 sentences.
+- Text a physio writes for a new condition is English + Hindi. In Bengali it shows the built-in wording where the English matches (for example "Pain"), otherwise English.
+- Read aloud and voice input use the browser's Bengali voice (`bn-IN`). The read-aloud button hides itself on phones with no Bengali voice. Voice input does not pre-fill answers in Bengali yet; the patient taps instead, and the tapped warning-sign step is unchanged.
+- The physio screens stay English-only.
+
 ## Run
 
 ```

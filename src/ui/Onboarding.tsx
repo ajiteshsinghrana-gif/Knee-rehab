@@ -67,7 +67,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
         <div className="formgrid">
           <label>Name <input value={d.name} onChange={(e) => set({ name: e.target.value })} aria-label="Patient name" /></label>
           <label>Age <input type="number" min={1} max={110} value={d.age} onChange={(e) => set({ age: Number(e.target.value) })} aria-label="Age" /></label>
-          <label>Language <select value={d.language} onChange={(e) => set({ language: e.target.value as Lang })} aria-label="Language"><option value="en">English</option><option value="hi">हिन्दी</option></select></label>
+          <label>Language <select value={d.language} onChange={(e) => set({ language: e.target.value as Lang })} aria-label="Language"><option value="en">English</option><option value="hi">हिन्दी</option><option value="bn">বাংলা</option></select></label>
           <label>Condition <select value={d.packId} onChange={(e) => choosePack(e.target.value)} aria-label="Condition">{packs.map((p) => <option key={p.id} value={p.id}>{p.condition.en}</option>)}</select></label>
           <label>{pack.anchorLabel.en} date <input type="date" max={s.today} value={d.anchorDate} onChange={(e) => set({ anchorDate: e.target.value })} aria-label="Surgery date" /></label>
           <label>Starting phase <select value={d.phaseId} onChange={(e) => choosePhase(e.target.value)} aria-label="Phase">{pack.phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name.en}</option>)}</select></label>
@@ -101,7 +101,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
         <div>
           <h3>Review and approve</h3>
           <ul className="audit">
-            <li><b>{d.name || '(no name)'}</b>, {d.age}, {d.language === 'hi' ? 'Hindi' : 'English'}</li>
+            <li><b>{d.name || '(no name)'}</b>, {d.age}, {({ en: 'English', hi: 'Hindi', bn: 'Bengali' } as Record<string, string>)[d.language]}</li>
             <li>{pack.condition.en}, {pack.anchorLabel.en} {d.anchorDate}, {phase.name.en}</li>
             <li>Exercises: {d.exercises.map((id) => exerciseName(id, 'en')).join(', ')}</li>
             <li>Check-ins every {d.checkInEveryDays} day(s); your reviews every {d.reviewEveryDays} day(s)</li>
