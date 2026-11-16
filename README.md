@@ -107,7 +107,6 @@ Copy a pack in `src/packs/`, register it in `src/engine/packs.ts`, run `npm test
 - **Photo angle (4.1)**: in the weekly self-test the patient can add a photo and tap three points (hip, knee, ankle for knee bend; hip, shoulder, wrist for arm raise; points can be dragged). The app computes the angle with plain geometry (`src/angle.ts`), shows it, and fills the box on "Use this angle". Typing the number still works. The photo is shown from memory and is not stored or sent. The physio sees "(measured on photo)" next to the reading in the gate table. Packs opt in per measure with `photoAngle` (validated). Written conditions do not have this yet.
 - **Questionnaires (4.2)**: every questionnaire carries a credit line and a flag for whether permission to use it is confirmed. TSK-11 shows its authors (Woby et al., 2005) and is listed under NEEDS_PHYSIO_SIGNOFF until the physio confirms permission. **The Oxford Knee Score and Oxford Shoulder Score are not included**: they are licensed by their publisher and their wording cannot be bundled here. A physio who holds a licence can type any questionnaire into "Add a condition" (monthly, scored by summing option values, optional REVIEW alert on the total, permission box required). The physio's patient view shows the latest score with the credit line.
 - **Silence (4.3)**: all three shipped conditions and every written condition raise a REVIEW alert when a patient has not checked in for a set time. It is labelled "No check-in for N days" in English and Hindi with the real number of days. The hours are placeholders (72 h) tagged NEEDS_PHYSIO_SIGNOFF.
-- Still to come in later phases: caregiver mode, third language, backend.
 
 **Phase 4.1.** Written conditions can mark a weekly measure as "measured on a photo": the physio names the three points to tap (English and Hindi) and picks the reading (angle between, or deviation from straight). The photo stays on the patient's phone. A physio can also load a questionnaire from a JSON file, save it for reuse in other conditions, or download it. A loaded file never confirms permission: "permission to use" is always unticked until the physio ticks it, and it stays on the sign-off list.
 
@@ -152,7 +151,7 @@ On each patient, "Expected recovery curves" lets the physio replace a curve:
 - A written reason is required (put the source of the numbers there). It is saved in the audit log: on the patient for a patient curve, and on every patient of the condition for a clinic default.
 - Weeks must go up, at least two points, allowed difference above 0. The chart note then says who set the curve and why.
 - Either kind can be removed again (with a reason).
-- A clinic default is kept in this browser's saved state with the patients (there is no server yet, Phase 6), so on another phone or computer the clinic default is not there until the backend exists.
+- A clinic default is kept in this browser's saved state with the patients (it is not part of live sync yet), so on another phone or computer the clinic default is not there.
 - Only measures that already have a curve can be edited. A physio-written condition sets its curves in the "expected recovery" section of the form.
 
 ## Run
@@ -166,7 +165,7 @@ npm run signoff   # refresh the list below from the packs
 
 ## Known limits
 
-- Phases 0 to 4 are built. caregiver mode, third language, Supabase, FHIR and AI extraction are not.
+- Built: Phases 0 to 5, 7, live sync (6.1) and physio sign-in (6.2, off until you turn it on). Not built: FHIR, AI-assisted protocol extraction.
 - The photo field stores the file name only. There is no upload yet.
 - The Overdue clock in the demo uses the demo calendar, not real time.
 - Adherence (A3) divides by the full 7-day window even in the first week after surgery, as in the previous build. A patient with few days of data can trip A3.
@@ -319,7 +318,32 @@ Leaving both empty keeps sync off; the app then works exactly as before.
 
 **Limits (be honest in the demo):**
 - Security is a secret link/key only. Anyone with a patient's invite link can read and write that patient's rows. There is no real login yet. **Do not use real patient data** until proper authentication, consent and compliance are in place.
-- Tested only against a fake local server (`scripts/fake-supabase.mjs`), not a real Supabase project. Expect to fix small setup issues the first time.
+- 6.1 was checked on a real Supabase project on 15 Nov 2026 (a check-in reached the physio and flagged SAFETY). The plan-change-to-phone direction and everything in 6.2 below have only been tested against the fake local server (`scripts/fake-supabase.mjs`).
 - Offline: the app keeps working and catches up when the connection returns.
-- The physio device keeps the keys in its browser storage, so one physio device only.
+- Without sign-in (6.2), the physio device keeps the keys in its browser storage, so one physio device only.
 - Demo patients are never synced. The demo calendar (Fast-forward) is shared by all and is not synced.
+
+## Physio sign-in (Phase 6.2)
+
+Turns the secret link into a real per-patient access rule. **Off by default**: nothing changes until you do the steps below.
+
+**What it does**
+- A physio creates an account (email and password, Supabase Auth) on the Physio dashboard. Patients never sign in.
+- When a signed-in physio adds a patient, that patient's key is registered to the physio (`rehab_owner`, once, automatically).
+- For a registered patient the database lets only the owning physio read both slices or write the plan ("down"). The patient's phone, which has only the secret link, can read the plan and write only its own answers ("up"). A second physio account sees nothing and cannot take a patient over. Nobody can delete rows.
+- Patients added before sign-in existed (keys nobody has registered) behave exactly as in 6.1. A physio who signs in registers the keys of the patients already on that device.
+- Signed out, the physio side stops syncing and the dashboard says so. Data stays on the device and sends after the next sign-in.
+- The physio can sign in on a second device and see their patients, but a patient's audit log and review state still live only on the device that added the patient (unchanged from 6.1).
+
+**Turn it on (about 5 minutes, do both steps together)**
+1. Supabase SQL Editor: run `supabase/schema-v2.sql` (after `schema.sql`; safe to run twice).
+2. Authentication settings: for a demo, switch off "Confirm email" so sign-up signs in at once. For anything real, leave it on and add a password policy.
+3. Set `"auth": true` in `sync.config.json`, run `node scripts/build.mjs`, commit `docs/`.
+4. Open the Physio dashboard, create your account, then add patients as before.
+
+If step 1 is done without step 3 (or the reverse), the physio device shows "Sync problem" until both match.
+
+**Limits (be honest)**
+- This is access control for a prototype, not compliance. It has no consent flow, no audit of who read what, no password reset screen and no multi-clinic roles. The patient's link is still a secret that grants access to that patient's answers and plan. Do not use real patient data.
+- Tokens are kept in the browser's localStorage on the physio device.
+- Tested only against the fake server and in a headless browser, not against a real Supabase project. The SQL in `schema-v2.sql` has not been run on a real database yet.

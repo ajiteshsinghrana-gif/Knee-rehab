@@ -14,6 +14,7 @@ function SyncChip() {
   const s = useSyncExternalStore(subscribeSync, getSyncStatus);
   if (!s.enabled) return null;
   const t = s.lastOkAt ? new Date(s.lastOkAt).toLocaleTimeString() : '';
+  if (s.state === 'login') return <span className="syncchip bad" role="status" data-testid="sync-chip">● Sign in as a physio (Physio dashboard tab) to sync your patients. Their data stays on this device until then.</span>;
   if (s.state === 'error') return <span className="syncchip bad" role="status" data-testid="sync-chip">⚠ Sync problem. Your data is safe on this device and will send when it works. ({s.error})</span>;
   return <span className="syncchip" role="status" data-testid="sync-chip">● Live sync on{s.patients ? ` · ${s.patients} patient${s.patients === 1 ? '' : 's'}` : ''}{t ? ` · last ${t}` : ''}</span>;
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { LoginCard } from './Login';
 import type { Patient, ProtocolPack, Tier, TriageResult } from '../types';
 import { L } from '../i18n';
 import { getPack } from '../engine/packs';
@@ -44,6 +45,7 @@ export function Clinician({ state }: { state: AppState }) {
   const counts = (['SAFETY', 'URGENT', 'REVIEW', 'ON_PLAN'] as Tier[]).map((t) => [t, rows.filter((x) => x.r.tier === t).length] as const);
   return (
     <>
+      <LoginCard />
       <p className="dashnotice">Supports clinical judgement; not a diagnosis. Tiers come only from deterministic rules in each patient's protocol pack. Nothing changes a plan until you approve it.</p>
       <div className="dash">
         <aside className="worklist">
