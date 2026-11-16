@@ -89,3 +89,10 @@
 /* Phase 6.1: live sync */
 .syncchip { display: block; padding: 4px 12px; font-size: 13px; background: #e7f4ee; color: #0a5a3c; }
 .syncchip.bad { background: #fdecea; color: #8c1d18; }
+.logincard { margin: 8px 12px; padding: 10px 12px; border: 1px solid #b9c7d6; border-radius: 8px; background: #f4f8fc; font-size: 14px; }
+.logincard.signedin { background: #e7f4ee; border-color: #a9d3bf; }
+.logincard .loginrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 8px; }
+.logincard label { display: flex; flex-direction: column; font-size: 13px; gap: 2px; }
+.logincard input { min-height: 40px; padding: 4px 8px; font-size: 15px; }
+.loginmsg { margin: 8px 0 0; color: #0a5a3c; }
+.loginmsg.bad { color: #8c1d18; }
