@@ -1,6 +1,8 @@
 import { auditCsv } from '../audit';
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { LoginCard } from './Login';
+import { DEFAULT_RETENTION_YEARS, completeTreatment, eraseLocal, isActive, reopenTreatment, retentionDue, retentionEnd } from '../lifecycle';
+import { physioErasePatient, physioNewClaimPin } from '../sync/engine';
 import { getSyncStatus, physioResetPatientLink, subscribeSync } from '../sync/engine';
 import { inviteUrl } from '../onboarding';
 import { qrSvg } from '../qr';
@@ -12,7 +14,7 @@ import { compareWorklist, stageFor, triage, weeksInPhase, weeksSince } from '../
 import { evaluateGate } from '../engine/gates';
 import { ACTION_LABELS, suggestedActions } from '../engine/actions';
 import { collectSignoffs } from '../engine/signoff';
-import { clockMs, getState, removeClinicCurve, setClinicCurve, updatePatient, type AppState } from '../store';
+import { clockMs, getState, realToday, removeClinicCurve, setClinicCurve, setState, updatePatient, type AppState } from '../store';
 import { LineChart } from './Charts';
 import { Onboarding } from './Onboarding';
 import { ImportProtocol } from './Import';
@@ -44,22 +46,28 @@ export function Clinician({ state }: { state: AppState }) {
     [state.patients, now],
   );
   const [sel, setSel] = useState(state.activeId);
-  const [mode, setMode] = useState<'dash' | 'add' | 'import' | 'condition'>('dash');
-  const cur = rows.find((x) => x.p.id === sel) ?? rows[0];
-  const counts = (['SAFETY', 'URGENT', 'REVIEW', 'ON_PLAN'] as Tier[]).map((t) => [t, rows.filter((x) => x.r.tier === t).length] as const);
+  const [mode, setMode] = useState<'dash' | 'add' | 'import' | 'condition' | 'past'>('dash');
+  const activeRows = rows.filter((x) => isActive(x.p));
+  const pastRows = rows.filter((x) => !isActive(x.p));
+  const cur = rows.find((x) => x.p.id === sel) ?? activeRows[0] ?? rows[0];
+  const counts = (['SAFETY', 'URGENT', 'REVIEW', 'ON_PLAN'] as Tier[]).map((t) => [t, activeRows.filter((x) => x.r.tier === t).length] as const);
+  const asks = state.patients.filter((p) => p.erasureRequestedAt).length;
   return (
     <>
       <LoginCard />
+      <ClinicSettings state={state} />
       <p className="dashnotice">Supports clinical judgement; not a diagnosis. Tiers come only from deterministic rules in each patient's protocol pack. Nothing changes a plan until you approve it.</p>
       <div className="dash">
         <aside className="worklist">
           <h2>Worklist</h2>
           <div className="btnrow"><button className="btn primary" onClick={() => setMode('add')}>+ Add patient</button><button className="btn" onClick={() => setMode('import')}>Import protocol</button><button className="btn" onClick={() => setMode('condition')}>+ Add a condition</button></div>
+          <div className="btnrow"><button className={`btn ${mode === 'past' ? 'primary' : ''}`} data-testid="past-btn" onClick={() => setMode(mode === 'past' ? 'dash' : 'past')}>Past patients ({pastRows.length}){asks ? ` · ${asks} erasure request${asks === 1 ? '' : 's'}` : ''}</button></div>
           <p className="counts">{counts.map(([t, n]) => <span key={t}><Tier tier={t} /> {n}</span>)}</p>
           <ul>
-            {rows.map(({ p, pack, r }) => (
+            {activeRows.length === 0 && <li className="tiny">No active patients. Add one, or open Past patients.</li>}
+            {activeRows.map(({ p, pack, r }) => (
               <li key={p.id}>
-                <button className={`prow ${p.id === cur.p.id ? 'active' : ''}`} onClick={() => setSel(p.id)}>
+                <button className={`prow ${p.id === cur?.p.id ? 'active' : ''}`} onClick={() => { setSel(p.id); setMode('dash'); }}>
                   <span className={`dot ${r.tier}`} />
                   <span className="pmain">
                     <b>{p.name}, {p.age}{r.overdue && <span className="overdue">Overdue</span>}</b>
@@ -75,7 +83,9 @@ export function Clinician({ state }: { state: AppState }) {
         {mode === 'add' && <Onboarding onClose={() => { setMode('dash'); setSel(getState().activeId); }} onNewCondition={() => setMode('condition')} />}
         {mode === 'import' && <ImportProtocol onClose={() => setMode('dash')} />}
         {mode === 'condition' && <NewCondition onClose={() => setMode('dash')} onAddPatient={() => setMode('add')} />}
-        {mode === 'dash' && <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />}
+        {mode === 'past' && <PastPatients rows={pastRows.map((x) => x.p)} years={state.retentionYears ?? DEFAULT_RETENTION_YEARS} today={state.today} onOpen={(id) => { setSel(id); setMode('dash'); }} />}
+        {mode === 'dash' && !cur && <section className="card"><p>No patients yet. Use + Add patient.</p></section>}
+        {mode === 'dash' && cur && <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />}
       </div>
     </>
   );
@@ -205,8 +215,9 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
       </div>
 
       <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} />
+      <LifecycleCard patient={p} now={now} />
       <AccessCard patient={p} />
-      <AdjustCard patient={p} pack={pack} now={now} />
+      {p.status !== 'completed' && <AdjustCard patient={p} pack={pack} now={now} />}
       <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
       <CurvesCard patient={p} pack={pack} now={now} />
 
@@ -348,9 +359,11 @@ function AccessCard({ patient: p }: { patient: Patient }) {
       ) : <p className="tiny">Patient accounts are not switched on. The link alone opens the plan.</p>}
       <div className="btnrow">
         <button className="btn" onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'} invite link and QR code</button>
+        {sync.auth && !p.claimPin && !email && <button className="btn" onClick={async () => { try { const pin = await physioNewClaimPin(p.syncKey!); updatePatient(p.id, (q) => ({ ...q, claimPin: pin })); setErr(''); } catch (e) { setErr((e as Error).message); } }}>Create a claim PIN</button>}
         {sync.auth && email && !ask && <button className="btn" onClick={() => setAsk(true)}>Reset this patient's account link</button>}
       </div>
       {ask && <p role="alert" className="warnline">The patient is signed out of this link and the next person to open it can make a new account. Their answers stay with you. <button className="btn primary" onClick={async () => { try { await physioResetPatientLink(p.syncKey!); setAsk(false); setErr(''); } catch (e) { setErr((e as Error).message); } }}>Yes, reset</button> <button className="btn" onClick={() => setAsk(false)}>Cancel</button></p>}
+      {sync.auth && !email && p.claimPin && <p data-testid="claim-pin">Claim PIN to tell the patient (by voice or message, not in the link): <b className="pin">{p.claimPin.replace(/(\d{4})(\d{4})/, '$1 $2')}</b></p>}
       {err && <p className="err" role="alert">{err}</p>}
       {show && (
         <div data-testid="access-invite">
@@ -359,6 +372,120 @@ function AccessCard({ patient: p }: { patient: Patient }) {
           <p className="tiny">The link carries the patient's name, plan and a secret key. Share it privately, only with the patient.</p>
         </div>
       )}
+    </section>
+  );
+}
+
+/** Clinic-wide choices about patient data (Phase 6.4): how long records are kept, who patients contact, and the switch to real dates. */
+function ClinicSettings({ state }: { state: AppState }) {
+  const [confirm, setConfirm] = useState(false);
+  const years = state.retentionYears ?? DEFAULT_RETENTION_YEARS;
+  const setYears = (n: number) => { if (n >= 0 && n <= 30) setState({ ...getState(), retentionYears: n }); };
+  const setContact = (v: string) => { const st = getState(); const c = v.slice(0, 120); setState({ ...st, clinicContact: c, patients: st.patients.map((p) => ({ ...p, clinicContact: c || undefined })) }); };
+  const goLive = () => {
+    const st = getState();
+    const keep = st.patients.filter((p) => p.syncRole === 'physio');
+    setState({ ...st, live: true, today: realToday(), patients: keep, activeId: keep[0]?.id ?? '', demoStep: 0 });
+    setConfirm(false);
+  };
+  return (
+    <details className="card clinicsettings" data-testid="clinic-settings">
+      <summary><b>Clinic settings: patient data and dates</b></summary>
+      <div className="fu">
+        <label>Keep a finished patient's record for <input type="number" min={0} max={30} value={years} onChange={(e) => setYears(Number(e.target.value))} aria-label="Retention years" /> year(s)</label>
+        <label>Contact shown to patients (phone or email) <input maxLength={120} value={state.clinicContact ?? ''} onChange={(e) => setContact(e.target.value)} aria-label="Clinic contact" /></label>
+      </div>
+      <p className="tiny">After this period a finished patient is flagged "review for erasure" under Past patients. Nothing is deleted by itself. Ask your lawyer what period applies to you: medical-record rules often say about 3 years, and some guidance says longer.</p>
+      {state.live ? <p className="okline" role="status">Real-clinic mode is on: check-ins use today's real date.</p> : (
+        !confirm ? <div className="btnrow"><button className="btn" onClick={() => setConfirm(true)}>Switch to real-clinic mode</button></div>
+          : <p role="alert" className="warnline">This removes the six demo patients from this computer and uses today's real date for check-ins. Patients you added yourself stay. This cannot be undone (the Reset button on the demo bar restores the demo). <button className="btn primary" onClick={goLive}>Yes, switch</button> <button className="btn" onClick={() => setConfirm(false)}>Cancel</button></p>
+      )}
+    </details>
+  );
+}
+
+/** Past patients: everyone whose treatment is complete. Records are kept for the retention period, then flagged for erasure. */
+function PastPatients({ rows, years, today, onOpen }: { rows: Patient[]; years: number; today: string; onOpen: (id: string) => void }) {
+  return (
+    <section className="card past" data-testid="past-patients">
+      <h2>Past patients</h2>
+      <p className="tiny">Treatment complete. These records stay readable for {years} year(s) after completion, then are flagged for you to review and erase.</p>
+      {rows.length === 0 ? <p>No past patients yet.</p> : (
+        <ul className="audit">{rows.map((p) => {
+          const end = retentionEnd(p, years);
+          const due = retentionDue(p, years, today);
+          return (
+            <li key={p.id}>
+              <b>{p.name}</b>, {p.age} · {getPack(p.packId).condition.en} · completed {p.completedAt?.slice(0, 10)}
+              {end && <> · keep until {end}</>}
+              {due && <span className="overdue"> Review for erasure</span>}
+              {p.erasureRequestedAt && <span className="overdue"> Patient asked for erasure on {p.erasureRequestedAt.slice(0, 10)}</span>}
+              {' '}<button className="btn" onClick={() => onOpen(p.id)}>Open</button>
+            </li>
+          );
+        })}</ul>
+      )}
+    </section>
+  );
+}
+
+/** Finish or reopen treatment, answer an erasure request, erase a patient (Phase 6.4). */
+function LifecycleCard({ patient: p, now }: { patient: Patient; now: number }) {
+  const st = getState();
+  const years = st.retentionYears ?? DEFAULT_RETENTION_YEARS;
+  const [note, setNote] = useState('');
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [sure, setSure] = useState<'erase' | null>(null);
+  const [typed, setTyped] = useState('');
+  const [keepNote, setKeepNote] = useState('');
+  const done = p.status === 'completed';
+  const end = retentionEnd(p, years);
+  const ctx = { nowMs: now, today: st.today };
+  const change = (f: () => Patient) => { try { const next = f(); updatePatient(p.id, () => next); setNote(''); setErr(''); } catch (e) { setErr((e as Error).message); } };
+  const erase = async (cloud: boolean, reason: string) => {
+    try {
+      if (cloud && p.syncKey && p.syncRole === 'physio' && getSyncStatus().enabled) await physioErasePatient(p.syncKey);
+      setState(eraseLocal(getState(), p.id, reason, Date.now()));
+    } catch (e) { setErr((e as Error).message); }
+  };
+  const keep = () => updatePatient(p.id, (q) => ({ ...q, erasureNote: (keepNote || `We must keep your record until ${end ?? 'the end of the required period'}, then we will erase it.`).slice(0, 300) }));
+  return (
+    <section className={`card lifecycle ${p.erasureRequestedAt ? 'asked' : ''}`} data-testid="lifecycle">
+      <h3>Treatment status</h3>
+      {done
+        ? <p>Treatment complete since <b>{p.completedAt?.slice(0, 10)}</b>. {end && <>Keep the record until <b>{end}</b>{retentionDue(p, years, st.today) && <span className="overdue"> Review for erasure</span>}.</>}</p>
+        : <p>Active.</p>}
+      {p.erasureRequestedAt && (
+        <div className="warnline" role="alert" data-testid="erasure-request">
+          <b>The patient asked for their data to be erased on {p.erasureRequestedAt.slice(0, 10)}.</b>
+          <p className="tiny">Under India's DPDP Act the patient may ask for erasure, but you may keep records you are required to keep (medical-record rules{end ? `; your retention date for this patient is ${end}` : ''}). Erase now, or tell the patient why you are keeping it.</p>
+          <input aria-label="Message to the patient" placeholder="Message to the patient (optional)" value={keepNote} maxLength={300} onChange={(e) => setKeepNote(e.target.value)} />
+          <button className="btn" onClick={keep}>Keep for now and tell the patient</button>
+        </div>
+      )}
+      {p.erasureNote && <p className="tiny">Message shown to the patient: {p.erasureNote}</p>}
+      <div className="fu">
+        <input aria-label="Note for the audit log" placeholder={done ? 'Why is treatment starting again? (required)' : 'Why is treatment complete? (required)'} value={note} onChange={(e) => setNote(e.target.value)} />
+        {done
+          ? <button className="btn" onClick={() => change(() => reopenTreatment(p, note, ctx))}>Reopen treatment</button>
+          : <button className="btn primary" onClick={() => change(() => completeTreatment(p, note, ctx))}>Mark treatment complete</button>}
+      </div>
+      {err && <p className="err" role="alert">{err}</p>}
+      {msg && <p className="okline" role="status">{msg}</p>}
+      {sure !== 'erase'
+        ? <div className="btnrow"><button className="btn" data-testid="erase-start" onClick={() => setSure('erase')}>Erase this patient's data…</button></div>
+        : (
+          <div className="warnline" role="alert" data-testid="erase-confirm">
+            <p>This permanently erases <b>{p.name}</b>: the plan, every check-in and the audit log, on this computer and in the cloud. It cannot be undone. A line with no personal data is kept in the erasure log. Type the patient's name to confirm.</p>
+            <input aria-label="Type the patient's name" value={typed} onChange={(e) => setTyped(e.target.value)} />
+            <div className="btnrow">
+              <button className="btn primary" disabled={typed.trim().toLowerCase() !== p.name.trim().toLowerCase()} onClick={() => void erase(true, p.erasureRequestedAt ? 'patient request' : done ? 'retention period over' : 'physio decision')}>Erase now</button>
+              <button className="btn" disabled={typed.trim().toLowerCase() !== p.name.trim().toLowerCase()} onClick={() => void erase(false, 'this device only')}>Erase on this computer only</button>
+              <button className="btn" onClick={() => { setSure(null); setTyped(''); }}>Cancel</button>
+            </div>
+          </div>
+        )}
     </section>
   );
 }

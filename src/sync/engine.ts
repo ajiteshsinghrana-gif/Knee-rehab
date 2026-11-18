@@ -6,9 +6,9 @@
 import type { Patient } from '../types';
 import type { AppState } from '../store';
 import { applyDown, applyUp, downSlice, sliceKey, upSlice } from './slices';
-import { claimKey, listPatientLinks, loadConfig, pullSlice, pushSlice, resetPatientLink, type FetchFn, type SyncConfig } from './client';
+import { claimKey, deleteMyAccount, eraseKeyData, newClaimPin, setClaimHash, sha256Hex, listPatientLinks, loadConfig, pullSlice, pushSlice, resetPatientLink, type FetchFn, type SyncConfig } from './client';
 import { createPatientAccount, signInPatient, type Restored } from './account';
-import { getAccessToken, getSession, signIn, signOut, signUp, subscribeAuth } from './auth';
+import { requestPasswordReset, setNewPassword, getAccessToken, getSession, signIn, signOut, signUp, subscribeAuth } from './auth';
 
 /** state 'login': sign-in is required (Phase 6.2) and nobody is signed in, so the physio's patients are not syncing yet. */
 export interface SyncStatus {
@@ -57,7 +57,7 @@ export async function syncOnce(env: Env, memo: Memo): Promise<void> {
       if (physioSide && tok) {
         const claimId = `${user}|${t.syncKey}`;
         memo.claimed ??= new Set();
-        if (!memo.claimed.has(claimId)) { await claimKey(env.config, t.syncKey!, tok, f); memo.claimed.add(claimId); } // one-time: this physio now owns the patient
+        if (!memo.claimed.has(claimId)) { await claimKey(env.config, t.syncKey!, tok, f, t.claimPin ? await sha256Hex(t.claimPin) : undefined); memo.claimed.add(claimId); } // one-time: this physio now owns the patient
       }
       // A patient's phone first fetches its own earlier answers (new phone, cleared browser) and merges them, before it sends anything.
       memo.restored ??= new Set();
@@ -133,17 +133,54 @@ export async function physioResetPatientLink(key: string): Promise<void> {
 }
 
 /** Patient side (6.3): make an account for this patient / sign in on this phone / sign out. Errors carry a message that is safe to show. */
-export async function patientCreateAccount(patient: Patient, email: string, password: string): Promise<'done' | 'confirm-email'> {
+export async function patientCreateAccount(patient: Patient, email: string, password: string, pin?: string): Promise<'done' | 'confirm-email'> {
   if (!activeConfig) throw new Error('Live sync is not set up');
-  const r = await createPatientAccount(activeConfig, patient, email, password); kick(); return r;
+  const r = await createPatientAccount(activeConfig, patient, email, password, fetch, undefined, Date.now(), pin); kick(); return r;
 }
-export async function patientSignIn(email: string, password: string, current?: Patient): Promise<Restored> {
+export async function patientSignIn(email: string, password: string, current?: Patient, pin?: string): Promise<Restored> {
   if (!activeConfig) throw new Error('Live sync is not set up');
-  const r = await signInPatient(activeConfig, email, password, current); kick(); return r;
+  const r = await signInPatient(activeConfig, email, password, current, fetch, undefined, Date.now(), pin); kick(); return r;
 }
 export async function patientSignOut(): Promise<void> {
   if (!activeConfig) return;
   await signOut(activeConfig); kick();
+}
+
+/** Anyone: email a password-reset link. Works for physio and patient accounts alike. */
+export async function sendPasswordReset(email: string): Promise<void> {
+  if (!activeConfig) throw new Error('Live sync is not set up');
+  await requestPasswordReset(activeConfig, email, window.location.href.split('#')[0]);
+}
+/** Finish a password reset: the one-time token comes from the reset email's link. */
+export async function finishPasswordReset(token: string, password: string): Promise<void> {
+  if (!activeConfig) throw new Error('Still loading. Try again in a moment.');
+  await setNewPassword(activeConfig, token, password);
+}
+/** Patient: delete my login. The clinic keeps its treatment record until the physio erases it. */
+export async function patientDeleteAccount(): Promise<void> {
+  if (!activeConfig) throw new Error('Live sync is not set up');
+  const token = await getAccessToken(activeConfig);
+  if (!token) throw new Error('Sign in first');
+  await deleteMyAccount(activeConfig, token);
+  await signOut(activeConfig); kick();
+}
+/** Physio: erase this patient's cloud copy. Local removal is done by the caller (lifecycle.eraseLocal). */
+export async function physioErasePatient(key: string): Promise<void> {
+  if (!activeConfig) return;
+  const token = await getAccessToken(activeConfig);
+  if (!token) throw new Error('Sign in first so the cloud copy can be erased too.');
+  await eraseKeyData(activeConfig, key, token);
+  const { [key]: _gone, ...rest } = status.links;
+  setStatus({ links: rest });
+}
+/** Physio: make a new claim PIN for a patient (replaces any older one) and return it to show. */
+export async function physioNewClaimPin(key: string): Promise<string> {
+  if (!activeConfig) throw new Error('Live sync is not set up');
+  const token = await getAccessToken(activeConfig);
+  if (!token) throw new Error('Sign in first');
+  const pin = newClaimPin();
+  await setClaimHash(activeConfig, key, await sha256Hex(pin), token);
+  return pin;
 }
 
 /** Start syncing. Returns a stop function. Does nothing (and returns a no-op) when sync is not configured. */

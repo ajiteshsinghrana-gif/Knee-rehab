@@ -313,6 +313,21 @@ export interface Patient {
   syncRole?: 'physio' | 'patient';
   /** Set on a patient's own phone once their account (Phase 6.3) has claimed this patient. Not sent in invites. */
   accountEmail?: string;
+  /** Treatment finished (Phase 6.4). A completed patient leaves the worklist and sits under Past patients; nothing else about the record changes. */
+  status?: 'completed';
+  completedAt?: string;
+  /** The physio's own note on why treatment ended. Stays on the physio's computer. */
+  completionNote?: string;
+  /** What the patient agreed to when making their account (DPDP notice version and time). Travels to the physio with the answers. */
+  consent?: { version: string; at: string };
+  /** The patient asked for their record to be erased (right to erasure). The physio decides; see lifecycle.ts. */
+  erasureRequestedAt?: string;
+  /** The physio's message to the patient when erasure is deferred (for example, record-keeping rules). */
+  erasureNote?: string;
+  /** Who to contact about this data (clinic phone or email). Set once by the physio and shown in the privacy notice. */
+  clinicContact?: string;
+  /** One-time PIN the patient needs to claim the link. Physio's computer only; never put in a link or a slice. */
+  claimPin?: string;
   anchorDate: string; // surgery date
   currentPhase: string; // phase id
   phaseStartDate: string;

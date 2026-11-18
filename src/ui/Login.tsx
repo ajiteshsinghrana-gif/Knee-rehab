@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore, type FormEvent } from 'react';
-import { getSyncStatus, physioSignIn, physioSignOut, physioSignUp, subscribeSync } from '../sync/engine';
+import { sendPasswordReset, getSyncStatus, physioSignIn, physioSignOut, physioSignUp, subscribeSync } from '../sync/engine';
 
 /** Physio sign-in (Phase 6.2). Shown on the physio dashboard only, and only when sync.json has auth: true. Patients never see it. */
 export function LoginCard() {
@@ -44,6 +44,7 @@ export function LoginCard() {
         <button className="btn primary" type="submit" disabled={busy}>{busy ? 'Please wait…' : mode === 'in' ? 'Sign in' : 'Create account'}</button>
         <button className="btn" type="button" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setMsg(null); }}>{mode === 'in' ? 'New physio? Create an account' : 'I already have an account'}</button>
       </div>
+      {mode === 'in' && <button className="linkbtn" type="button" onClick={async () => { if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setMsg({ bad: true, text: 'Type your email above first.' }); return; } try { await sendPasswordReset(email); setMsg({ bad: false, text: 'If that email has an account, a reset link is on its way. Open it on this computer.' }); } catch (e) { setMsg({ bad: true, text: (e as Error).message }); } }}>Forgot password?</button>}
       {msg && <p role="status" className={msg.bad ? 'loginmsg bad' : 'loginmsg'}>{msg.text}</p>}
     </form>
   );

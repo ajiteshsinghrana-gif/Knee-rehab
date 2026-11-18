@@ -4,7 +4,7 @@ import { PACKS } from '../engine/packs';
 import { LIBRARY, exerciseName } from '../exercises/library';
 import { listOverridable } from '../engine/overrides';
 import { getSyncStatus } from '../sync/engine';
-import { newSyncKey } from '../sync/client';
+import { newClaimPin, newSyncKey } from '../sync/client';
 import { buildPatient, inviteUrl, validateOnboard, type OnboardDraft } from '../onboarding';
 import { qrSvg } from '../qr';
 import { clockMs, getState, setState } from '../store';
@@ -45,7 +45,7 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
     try {
       const st = getState();
       let p = buildPatient(d, { nowMs: clockMs(st), today: st.today });
-      if (getSyncStatus().enabled) p = { ...p, syncKey: newSyncKey(), syncRole: 'physio' as const }; // live sync: this computer is the physio's side
+      if (getSyncStatus().enabled) p = { ...p, syncKey: newSyncKey(), syncRole: 'physio' as const, ...(getSyncStatus().auth ? { claimPin: newClaimPin() } : {}), ...(st.clinicContact ? { clinicContact: st.clinicContact } : {}) }; // live sync: this computer is the physio's side
       setState({ ...st, patients: [...st.patients, p] });
       const base = window.location.href.split('#')[0];
       setMade({ id: p.id, url: inviteUrl(p, base) });

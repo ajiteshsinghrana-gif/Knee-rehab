@@ -98,3 +98,4 @@
 .loginmsg.bad { color: #8c1d18; }
 .safetybanner.sameday{background:#7a4a00}.auditbox>summary{display:inline-block;cursor:pointer;margin:6px 0}.physioins{background:#eef6ff;border-radius:12px;padding:8px 12px}
 .patientshell{max-width:520px;margin:0 auto;padding:16px}.acctbar{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 12px;background:#f2f4f7;font-size:.85rem;flex-wrap:wrap}
+.privnotice{background:#f6f8fa;border-radius:12px;padding:8px 12px;margin:8px 0;font-size:.9rem}.linkbtn{background:none;border:0;color:#0b5fff;text-decoration:underline;padding:6px 0;font-size:1rem;cursor:pointer}.mydata{margin:12px auto;max-width:520px;padding:8px 12px}

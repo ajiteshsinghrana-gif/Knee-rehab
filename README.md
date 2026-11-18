@@ -378,3 +378,39 @@ If step 1 is done without step 3 (or the reverse), the physio device shows "Sync
 - Hindi and Bengali strings added in this phase (account screens, the same-day warning, instruction notices) are machine-drafted: **NEEDS_NATIVE_REVIEW**.
 - Check-ins are dated by the demo calendar (`state.today`), not the real date, as before.
 - Prototype only. Do not use real patient data.
+
+## Patient lifecycle, data rights and DPDP (Phase 6.4)
+
+**Not legal advice.** This is software support built around India's DPDP Act 2023 and DPDP Rules 2025. The Rules were notified on 13 Nov 2025; the main duties (notice, consent, security safeguards, breach reporting, erasure) start on **13 May 2027**. Software cannot make a clinic compliant by itself: the clinic still needs its own policies, a lawyer to confirm the notice wording and retention period, and a way to handle complaints.
+
+**Lifecycle**
+- *Active*: on the worklist. *Treatment complete*: the physio marks it with a written note (audit-logged). The patient leaves the worklist and appears under **Past patients**, read-only in effect (the Adjust treatment card is hidden). *Reopen* is available with a note.
+- The patient's phone shows "Your treatment is complete" and stops asking for check-ins.
+- **Retention**: the clinic sets a period (default 3 years, based on medical-record rules; some guidance says longer). When it passes, the patient is flagged "Review for erasure". **Nothing is deleted automatically.**
+- **Erase** (physio, typed-name confirmation): removes the patient from the computer and, if signed in, from the cloud (answers, plan, account link, ownership). The only trace is an erasure-log line with the date, reason and whether an account existed. No name, no email.
+
+**Data rights (patient side, "My data")**
+- *Download my data* (right of access): a JSON file with their own check-ins, plan and consent. The physio's private reasons and notes are not in it.
+- *Ask my physio to erase my data*: the request reaches the physio with a banner. The physio can erase now, or **keep it and send the patient a reason** (for example, record-keeping rules). This reflects that erasure and medical-record retention can pull in different directions.
+- *Delete my login*: removes the email account. The clinic's treatment record stays until the physio erases it.
+- *Consent and notice*: before an account is made, the patient sees what is collected, who sees it, how long it is kept and their rights, with the clinic's contact (set under Clinic settings), and must tick to agree. The notice version and time are stored and shown to the physio.
+
+**Claim PIN**: each new patient gets an 8-digit PIN. The physio tells it to the patient (voice or message, not in the link). Creating the account needs the link **and** the PIN. The database stores only a hash and discards the PIN after checking. Older patients can get one with "Create a claim PIN".
+
+**Password reset**: "Forgot password?" on the patient and physio sign-in. It emails a reset link; the page that opens asks for a new password.
+
+**Real dates**: patient phones always use the real date. The physio can switch to **real-clinic mode** under Clinic settings, which removes the six demo patients and uses today's date. The demo is unchanged until then.
+
+**Turn it on**
+1. Supabase SQL Editor: run `supabase/schema-v4.sql` (after v1 to v3; safe to run again).
+2. Supabase Authentication, URL Configuration: set **Site URL** to your GitHub Pages address (password-reset links return there).
+3. Merge, run `node scripts/build.mjs`, commit `docs/`.
+4. Open the Physio dashboard, Clinic settings: set the retention period and the clinic contact.
+
+**Limits (be honest)**
+- `schema-v4.sql` has not been run on a real Postgres. Tested against the fake server and a headless browser.
+- Supabase's built-in email sender allows only a few emails per hour. Use your own SMTP for real use.
+- Deleting a login uses a database function that removes the user from Supabase Auth. If it fails, remove the user under Authentication, Users.
+- Not covered: breach notification process, children's data (verifiable parental consent for under-18s), a formal grievance workflow, audit of who read what, encryption beyond what Supabase provides, data kept in browser storage on shared devices, backups held by Supabase after erasure.
+- The retention default is a starting point, not advice. Hindi and Bengali strings are machine-drafted: **NEEDS_NATIVE_REVIEW**, and the notice needs legal review.
+- Prototype only. Do not use real patient data until a lawyer and the physio have signed off.

@@ -25,6 +25,13 @@ export interface AppState {
   questionnaires?: SavedQuestionnaire[];
   /** Expected-recovery curves the physio set for every patient of a condition, by pack id (Phase 7.1). */
   clinicCurves?: Record<string, CurveEdit[]>;
+  /** Clinic settings for patient data (Phase 6.4). */
+  retentionYears?: number;
+  clinicContact?: string;
+  /** Erasures done, with no personal data in them: when, why, and whether a patient account existed. */
+  erasureLog?: { at: string; reason: string; hadAccount: boolean }[];
+  /** Real clinic (not the demo): dates and times come from the device clock. */
+  live?: boolean;
 }
 
 export function seedState(): AppState {
@@ -125,7 +132,14 @@ export const updatePatient = (id: string, f: (p: Patient) => Patient) => {
   setState({ ...s, patients: s.patients.map((p) => (p.id === id ? f(p) : p)) });
 };
 /** Demo clock: 09:00 on the demo date. */
-export const clockMs = (s: AppState): number => Date.parse(s.today + 'T09:00:00Z');
+export const clockMs = (s: AppState): number => (s.live ? Date.now() : Date.parse(s.today + 'T09:00:00Z'));
+/** Today's date on this device (local calendar day), as YYYY-MM-DD. */
+export const realToday = (d = new Date()): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/** In live mode, keep state.today on the real date. Called at start-up, on focus and every minute. */
+export function refreshToday(): void {
+  const s = getState();
+  if (s.live && s.today !== realToday()) setState({ ...s, today: realToday() });
+}
 
 /**
  * Set the expected-recovery curve for EVERY patient of a condition (Phase 7.1). A reason is required; each of those
