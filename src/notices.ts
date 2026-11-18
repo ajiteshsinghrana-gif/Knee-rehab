@@ -21,6 +21,8 @@ export function changeText(c: NoticeChange, lang: Lang, pack: ProtocolPack): str
       ];
       return t(lang, 'change_exercises', { parts: parts.join('; ') });
     }
+    case 'instruction': return t(lang, 'change_instruction', { text: c.text });
+    case 'instructionRemoved': return t(lang, 'change_instructionRemoved', { text: c.text });
     case 'phase': return t(lang, 'change_phase', { phase: L(pack.phases.find((x) => x.id === c.phaseId)?.name, lang) || c.phaseId });
   }
 }

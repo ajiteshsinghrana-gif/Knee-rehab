@@ -67,6 +67,8 @@ export type PlanAction =
   | { type: 'move-phase'; toPhase: string; note: string }
   | { type: 'hold-progression'; note?: string }
   | { type: 'release-hold'; note?: string }
+  | { type: 'add-instruction'; text: string; note?: string }
+  | { type: 'remove-instruction'; id: string; note?: string }
   | { type: 'change-follow-up'; checkInEveryDays: number; reviewEveryDays?: number; nextReviewDate: string | null; until?: string | null; note?: string; flagKey?: string; proposalStatus?: 'approved' | 'modified' }
   | { type: 'reject-proposal'; flagKey: string; note?: string }
   | { type: 'sign-off-phase'; note?: string }
@@ -144,6 +146,24 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       plan.hold = { at, by: who, ...(a.note ? { note: a.note } : {}) };
       changes.push({ kind: 'hold' });
       audit = entry(a.type, 'Progression put on hold', { hold: null }, { hold: plan.hold }, a.note);
+      break;
+    }
+    case 'add-instruction': {
+      const text = (a.text ?? '').trim();
+      if (!text) throw new Error('Write the instruction first');
+      if (text.length > 400) throw new Error('Keep the instruction under 400 characters');
+      const ins = { id: newId(ctx.nowMs), text, at };
+      plan.instructions = [...(plan.instructions ?? []), ins];
+      changes.push({ kind: 'instruction', text });
+      audit = entry(a.type, `Custom instruction added: ${text}`, { instructions: (p.plan.instructions ?? []).length }, { instructions: plan.instructions.length }, a.note);
+      break;
+    }
+    case 'remove-instruction': {
+      const old = (plan.instructions ?? []).find((x) => x.id === a.id);
+      if (!old) throw new Error('Instruction not found');
+      plan.instructions = (plan.instructions ?? []).filter((x) => x.id !== a.id);
+      changes.push({ kind: 'instructionRemoved', text: old.text });
+      audit = entry(a.type, `Custom instruction removed: ${old.text}`, { instructions: (p.plan.instructions ?? []).length }, { instructions: plan.instructions.length }, a.note);
       break;
     }
     case 'release-hold': {
@@ -250,7 +270,7 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
 }
 
 /** Plan changes the physio can make on his own, apart from the suggested actions (Phase 5.4). */
-export const MANUAL_TYPES = ['set-exercises', 'regress-exercise', 'restore-exercise', 'hold-progression', 'release-hold', 'change-follow-up', 'move-phase'] as const;
+export const MANUAL_TYPES = ['set-exercises', 'regress-exercise', 'restore-exercise', 'hold-progression', 'release-hold', 'change-follow-up', 'move-phase', 'add-instruction', 'remove-instruction'] as const;
 
 /**
  * A physio-initiated change. A written reason is always required (safety measure), the change is

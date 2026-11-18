@@ -1,3 +1,4 @@
+import { safetyLevel, hasEmergencySign } from '../safety';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LANGS, LANG_NAME } from '../types';
 import type { Lang, Patient, ProtocolPack, Value } from '../types';
@@ -46,12 +47,13 @@ export function PatientView({ patient }: { patient: Patient }) {
   );
 }
 
-function SafetyBanner({ lang }: { lang: Lang }) {
+function SafetyBanner({ lang, emergency }: { lang: Lang; emergency: boolean }) {
+  const k = emergency ? 'safety' : 'safetyToday';
   return (
-    <div className="safetybanner" role="alert">
-      <strong>⚠️ {t(lang, 'safetyTitle')}</strong>
-      <p>{t(lang, 'safetyBody')}</p>
-      <ReadAloud key={lang} text={`${t(lang, 'safetyTitle')}. ${t(lang, 'safetyBody')}`} lang={lang} />
+    <div className={`safetybanner${emergency ? '' : ' sameday'}`} role="alert" data-level={emergency ? 'emergency' : 'same-day'}>
+      <strong>⚠️ {t(lang, `${k}Title`)}</strong>
+      <p>{t(lang, `${k}Body`)}</p>
+      <ReadAloud key={lang} text={`${t(lang, `${k}Title`)}. ${t(lang, `${k}Body`)}`} lang={lang} />
     </div>
   );
 }
@@ -78,7 +80,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
   const sym = { all: ['ok', '✓'], some: ['part', '½'], none: ['miss', '✕'] } as const;
   return (
     <main>
-      {tri.tier === 'SAFETY' && <SafetyBanner lang={lang} />}
+      {tri.tier === 'SAFETY' && <SafetyBanner lang={lang} emergency={safetyLevel(patient) === 'emergency'} />}
       <div>
         <div className="hello">{T('hello')}, {patient.name}</div>
         <p className="sub">{T('dayAfter', { n: day })} · {L(phase.name, lang)}</p>
@@ -101,6 +103,12 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
           })}
         </div>
       </div>
+      {(patient.plan.instructions ?? []).length > 0 && (
+        <div className="physioins" data-testid="instructions">
+          <h3>{T('yourPhysioSays')}</h3>
+          <ul className="exlist">{(patient.plan.instructions ?? []).map((x) => <li key={x.id}>{x.text}</li>)}</ul>
+        </div>
+      )}
       {exs.length > 0 && (
         <div>
           <h3>{T('yourExercises')}</h3>
@@ -385,7 +393,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
             {draft.heard && <p className="hint">{T('voiceHeard')} “{draft.heard}”</p>}
             <ul className="review">{reviewRows.map((r) => (
               <li key={r.step}><div><small>{r.label}</small><strong>{r.value}</strong></div><button onClick={() => edit(r.step)}>{T('change')}</button></li>))}</ul>
-            {draft.warnings && pack.warningSigns.some((w) => draft.warnings[w.id] && w.tier === 'SAFETY') && <SafetyBanner lang={lang} />}
+            {draft.warnings && pack.warningSigns.some((w) => draft.warnings[w.id] && w.tier === 'SAFETY') && <SafetyBanner lang={lang} emergency={hasEmergencySign(draft.warnings)} />}
             <button className="big primary" disabled={!isComplete(draft)} onClick={save}>{isComplete(draft) ? T('save') : T('answerEverySign')}</button>
           </>
         )}
@@ -398,7 +406,7 @@ function Done({ patient, pack, lang, onHome }: { patient: Patient; pack: Protoco
   const tri = triage(patient, pack);
   return (
     <main>
-      {tri.tier === 'SAFETY' && <SafetyBanner lang={lang} />}
+      {tri.tier === 'SAFETY' && <SafetyBanner lang={lang} emergency={safetyLevel(patient) === 'emergency'} />}
       <h2>{t(lang, 'thanks')}</h2>
       <p className="sub">{t(lang, 'thanksBody')}</p>
       <ReadAloud key={lang} text={`${t(lang, 'thanks')} ${t(lang, 'thanksBody')}`} lang={lang} />

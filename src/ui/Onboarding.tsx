@@ -13,7 +13,7 @@ const today = () => getState().today;
 const qrOrNull = (u: string): string | null => { try { return qrSvg(u, 5); } catch { return null; } };
 
 /** Phase 3.1: new patient -> condition -> adjust plan -> approve -> link and QR code. */
-export function Onboarding({ onClose }: { onClose: () => void }) {
+export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; onNewCondition?: () => void }) {
   const s = getState();
   const packs = Object.values(PACKS);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -73,6 +73,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
           <label>Language <select value={d.language} onChange={(e) => set({ language: e.target.value as Lang })} aria-label="Language"><option value="en">English</option><option value="hi">हिन्दी</option><option value="bn">বাংলা</option></select></label>
           <label className="check"><input type="checkbox" checked={!!d.caregiver} onChange={(e) => set({ caregiver: e.target.checked })} aria-label="A caregiver will answer" /> A family member or carer will usually answer for the patient</label>
           <label>Condition <select value={d.packId} onChange={(e) => choosePack(e.target.value)} aria-label="Condition">{packs.map((p) => <option key={p.id} value={p.id}>{p.condition.en}</option>)}</select></label>
+          {onNewCondition && <p className="tiny" data-testid="new-condition-hint">Condition not listed? <button type="button" className="btn" onClick={onNewCondition}>+ Write a new condition</button> You write its phases, exercises and warning signs once, then pick it here.</p>}
           <label>{pack.anchorLabel.en} date <input type="date" max={s.today} value={d.anchorDate} onChange={(e) => set({ anchorDate: e.target.value })} aria-label="Surgery date" /></label>
           <label>Starting phase <select value={d.phaseId} onChange={(e) => choosePhase(e.target.value)} aria-label="Phase">{pack.phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name.en}</option>)}</select></label>
           <div className="btnrow"><button className="btn primary" onClick={next}>Next: adjust the plan</button></div>

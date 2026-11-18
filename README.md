@@ -16,7 +16,7 @@ Live build is served from `docs/` (GitHub Pages: Settings > Pages > Deploy from 
 
 | Tier | Meaning | Response time (config) |
 |---|---|---|
-| SAFETY | Red-flag symptom. Patient sees "Seek care now: call 112". | 2 h (placeholder) |
+| SAFETY | Red-flag symptom. Patient sees one of two messages (Phase 6.3): "Seek care now: call 112" for chest pain or breathlessness, or "Contact your surgeon or clinic today" (112 only if they cannot be reached or it gets worse) for calf pain/redness, fever, wound fluid, spreading redness. | 2 h (placeholder) |
 | URGENT | R2 giving way/locking, R3 high pain, R4 knee not straight, R5 combination | 24 h |
 | REVIEW | Amber rules (A1 to A8) | 72 h |
 | ON_PLAN | No rule triggered | weekly summary |
@@ -165,7 +165,7 @@ npm run signoff   # refresh the list below from the packs
 
 ## Known limits
 
-- Built: Phases 0 to 5, 7, live sync (6.1) and physio sign-in (6.2, off until you turn it on). Not built: FHIR, AI-assisted protocol extraction.
+- Built: Phases 0 to 5, 7, live sync (6.1), physio sign-in (6.2) and patient accounts (6.3). Not built: FHIR, AI-assisted protocol extraction.
 - The photo field stores the file name only. There is no upload yet.
 - The Overdue clock in the demo uses the demo calendar, not real time.
 - Adherence (A3) divides by the full 7-day window even in the first week after surgery, as in the previous build. A patient with few days of data can trip A3.
@@ -347,3 +347,34 @@ If step 1 is done without step 3 (or the reverse), the physio device shows "Sync
 - This is access control for a prototype, not compliance. It has no consent flow, no audit of who read what, no password reset screen and no multi-clinic roles. The patient's link is still a secret that grants access to that patient's answers and plan. Do not use real patient data.
 - Tokens are kept in the browser's localStorage on the physio device.
 - Tested only against the fake server and in a headless browser, not against a real Supabase project. The SQL in `schema-v2.sql` has not been run on a real database yet.
+
+
+## Patient accounts and physio tools (Phase 6.3)
+
+**Patients**
+- A phone that opens an invite link (or `#signin`) becomes a *patient device*: it shows only the patient's own screens. No demo bar, no physio dashboard, and `#clinician` does nothing there. The flag is per browser. A physio who wants to try the patient view should use a private window; `#reset-device` clears the flag on their own browser.
+- With `"auth": true`, the patient creates an email-and-password account the first time. It claims that one patient link and stores the invite, so the patient can **sign in on any phone and get the plan and history back**. The bare link stops working once it is claimed, so a forwarded link cannot be used by someone else.
+- The physio's Patient access card shows which email holds the account, can show the invite link and QR again, and can **reset a wrong claim**.
+- Sign-out removes the plan from that phone; answers stay on the server and return at the next sign-in.
+- Check-ins are now **merged by date**, never replaced, so an empty phone cannot wipe the physio's copy of the history.
+
+**Physio tools**
+- *Add patient*: "Condition not listed? + Write a new condition" opens the condition builder, then returns to Add patient.
+- *Adjust treatment*: "Other: write your own instruction" (up to 400 characters). It needs a written reason, is saved in the audit log as physio-initiated, shows on the patient's home screen and as a "what changed" notice. The reason is never sent to the patient. A physio can also remove their own instructions.
+- *Audit log*: a visible button on the Current plan card, with **Download as CSV** (when, who, action, what changed, reason).
+
+**Two-level warning advice** (`src/safety.ts`): chest pain or breathlessness is an emergency ("call 112 now"). Every other safety sign is same-day ("contact your surgeon or clinic today; hospital or 112 if you cannot reach them or feel worse"). If the signs cannot be determined, the stronger message is shown. This split is our own safety default, not from the protocol source, and **needs physio sign-off**.
+
+**Turn it on (after 6.2 is working)**
+1. Supabase SQL Editor: run `supabase/schema-v3.sql` (after `schema.sql` and `schema-v2.sql`; safe to run twice).
+2. Merge this branch, run `node scripts/build.mjs`, commit `sync.config.json` and `docs/`.
+3. Open a patient's invite link on a phone and create the account.
+4. For a demo, switch off "Confirm email" in Supabase Auth; otherwise the patient confirms by email, then taps "I already have an account".
+
+**Limits (be honest)**
+- `schema-v3.sql` has not been run on a real Postgres. Tested against the fake server and in a headless browser only.
+- No password reset for patients yet. A forgotten password means the physio resets the link and the patient makes a new account (history is kept).
+- The first person to open a link claims it. Send links privately.
+- Hindi and Bengali strings added in this phase (account screens, the same-day warning, instruction notices) are machine-drafted: **NEEDS_NATIVE_REVIEW**.
+- Check-ins are dated by the demo calendar (`state.today`), not the real date, as before.
+- Prototype only. Do not use real patient data.

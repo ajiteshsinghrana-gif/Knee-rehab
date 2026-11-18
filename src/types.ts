@@ -311,6 +311,8 @@ export interface Patient {
   syncKey?: string;
   /** Which side of the sync this device is: the physio who created the patient, or the patient's own phone. */
   syncRole?: 'physio' | 'patient';
+  /** Set on a patient's own phone once their account (Phase 6.3) has claimed this patient. Not sent in invites. */
+  accountEmail?: string;
   anchorDate: string; // surgery date
   currentPhase: string; // phase id
   phaseStartDate: string;
@@ -371,7 +373,10 @@ export interface Plan {
   overrides: Override[];
   /** Curves set for this patient only; they win over a clinic default and the protocol's curve. */
   curveOverrides?: CurveEdit[];
+  /** Free-text instructions the physio wrote himself (Phase 6.3). The patient sees the text, never the reason. */
+  instructions?: CustomInstruction[];
 }
+export interface CustomInstruction { id: string; text: string; at: string; }
 export interface AuditEntry {
   id: string;
   at: string;
@@ -391,7 +396,9 @@ export type NoticeChange =
   | { kind: 'release' }
   | { kind: 'followUp'; nextReviewDate: string | null; checkInEveryDays: number }
   | { kind: 'phase'; phaseId: string }
-  | { kind: 'exercises'; added: string[]; removed: string[] };
+  | { kind: 'exercises'; added: string[]; removed: string[] }
+  | { kind: 'instruction'; text: string }
+  | { kind: 'instructionRemoved'; text: string };
 export interface Notice {
   id: string;
   at: string;

@@ -8,7 +8,13 @@ import type { FetchFn, SyncConfig } from './client';
 export interface Session { accessToken: string; refreshToken: string; expiresAt: number; userId: string; email: string }
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-const KEY = 'rehabpath-session';
+/** The physio's computer and a patient's phone keep separate sessions, so one browser can never mix them up. */
+const KEYS = { physio: 'rehabpath-session', patient: 'rehabpath-session-patient' } as const;
+export type AuthScope = keyof typeof KEYS;
+let scope: AuthScope = 'physio';
+const KEY = () => KEYS[scope];
+/** Choose whose session this page uses. Call before anything else when the device is a patient's phone. */
+export function setAuthScope(s: AuthScope) { if (s !== scope) { scope = s; session = null; loaded = false; notify(); } }
 const SKEW_MS = 60_000; // refresh a minute before the token runs out
 
 let session: Session | null = null;
@@ -20,7 +26,7 @@ export const subscribeAuth = (f: () => void) => { subs.add(f); return () => { su
 const defaultStore = (): Store | null => { try { return typeof localStorage === 'undefined' ? null : localStorage; } catch { return null; } };
 
 function persist(s: Session | null, store: Store | null) {
-  try { if (!store) return; if (s) store.setItem(KEY, JSON.stringify(s)); else store.removeItem(KEY); } catch { /* storage unavailable: the session just lasts until the page closes */ }
+  try { if (!store) return; if (s) store.setItem(KEY(), JSON.stringify(s)); else store.removeItem(KEY()); } catch { /* storage unavailable: the session just lasts until the page closes */ }
 }
 
 const isSession = (x: unknown): x is Session => {
@@ -32,12 +38,12 @@ const isSession = (x: unknown): x is Session => {
 export function loadSession(store: Store | null = defaultStore()): Session | null {
   if (loaded) return session;
   loaded = true;
-  try { const raw = store?.getItem(KEY); const s = raw ? JSON.parse(raw) : null; session = isSession(s) ? s : null; } catch { session = null; }
+  try { const raw = store?.getItem(KEY()); const s = raw ? JSON.parse(raw) : null; session = isSession(s) ? s : null; } catch { session = null; }
   return session;
 }
 export const getSession = (): Session | null => loadSession();
 /** For tests: forget everything held in memory. */
-export function _resetAuth() { session = null; loaded = false; }
+export function _resetAuth() { session = null; loaded = false; scope = 'physio'; }
 
 const authHeaders = (c: SyncConfig, bearer?: string) => ({ apikey: c.anonKey, 'Content-Type': 'application/json', ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) });
 
