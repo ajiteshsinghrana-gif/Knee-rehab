@@ -9,6 +9,8 @@ import { Clinician } from './Clinician';
 import { getSyncStatus, subscribeSync } from '../sync/engine';
 import { isPatientDevice } from '../device';
 import { PatientShell } from './PatientShell';
+import { ResetPassword } from './ResetPassword';
+import { recoveryTokenFromHash } from '../sync/auth';
 
 const route = (): 'patient' | 'clinician' => (window.location.hash === '#clinician' ? 'clinician' : 'patient');
 
@@ -22,6 +24,9 @@ function SyncChip() {
 }
 
 export function App() {
+  const [recovery, setRecovery] = useState<string | null>(() => recoveryTokenFromHash(window.location.hash));
+  useEffect(() => { if (recovery) window.history.replaceState(null, '', window.location.pathname + window.location.search); }, [recovery]);
+  if (recovery) return <ResetPassword token={recovery} onDone={() => setRecovery(null)} />;
   // The device kind is fixed when the page loads (main.tsx). A patient's phone never reaches the physio dashboard code path.
   return isPatientDevice() ? <PatientApp /> : <DemoApp />;
 }

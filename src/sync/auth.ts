@@ -103,3 +103,21 @@ export async function getAccessToken(c: SyncConfig, fetchFn: FetchFn = fetch, st
   } catch { /* offline: keep the session, try again later */ }
   return null;
 }
+
+/** Ask Supabase to email a password-reset link. The link returns to `redirectTo` with a one-time token in the address (#access_token=...&type=recovery). */
+export async function requestPasswordReset(c: SyncConfig, email: string, redirectTo: string, fetchFn: FetchFn = fetch): Promise<void> {
+  const r = await fetchFn(`${c.url}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST', headers: authHeaders(c), body: JSON.stringify({ email: email.trim() }) });
+  if (!r.ok) throw new Error(await errorText(r, 'Could not send the reset email. Wait a few minutes and try again.'));
+}
+/** Set a new password using the one-time token from the reset email. */
+export async function setNewPassword(c: SyncConfig, accessToken: string, password: string, fetchFn: FetchFn = fetch): Promise<void> {
+  if (password.length < 8) throw new Error('Choose a password of at least 8 characters.');
+  const r = await fetchFn(`${c.url}/auth/v1/user`, { method: 'PUT', headers: authHeaders(c, accessToken), body: JSON.stringify({ password }) });
+  if (!r.ok) throw new Error(await errorText(r, 'This reset link has expired. Ask for a new one.'));
+}
+/** Read a recovery token from the page address, if the page was opened from a reset email. */
+export function recoveryTokenFromHash(hash: string): string | null {
+  const q = new URLSearchParams(hash.replace(/^#/, ''));
+  const t = q.get('access_token');
+  return q.get('type') === 'recovery' && t ? t : null;
+}

@@ -34,21 +34,55 @@ export async function pullSlice(c: SyncConfig, key: string, slice: Slice, fetchF
 }
 
 /** Register the signed-in physio as the owner of this patient key. Does nothing if the key is already claimed (by anyone). */
-export async function claimKey(c: SyncConfig, key: string, token: string, fetchFn: FetchFn = fetch): Promise<void> {
+export async function claimKey(c: SyncConfig, key: string, token: string, fetchFn: FetchFn = fetch, claimHash?: string): Promise<void> {
   const r = await fetchFn(`${c.url}/rest/v1/rehab_owner?on_conflict=sync_key`, {
     method: 'POST', headers: headers(c, key, { Prefer: 'resolution=ignore-duplicates,return=minimal' }, token),
-    body: JSON.stringify({ sync_key: key }),
+    body: JSON.stringify({ sync_key: key, ...(claimHash ? { claim_hash: claimHash } : {}) }),
   });
   if (!r.ok) throw new Error(`could not register this patient (${r.status})`);
+}
+
+/** SHA-256 of a claim PIN as hex. The database stores only this, never the PIN. */
+export async function sha256Hex(s: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(d), (x) => x.toString(16).padStart(2, '0')).join('');
+}
+/** 8 random digits, shown to the physio and given to the patient by voice or message. */
+export function newClaimPin(): string {
+  const b = new Uint32Array(1);
+  let n = 0;
+  do { crypto.getRandomValues(b); n = b[0]; } while (n >= 4_294_967_000); // no modulo bias
+  return String(n % 100_000_000).padStart(8, '0');
+}
+/** Physio: set (or replace) the PIN a patient must enter to claim the link. */
+export async function setClaimHash(c: SyncConfig, key: string, hash: string, token: string, fetchFn: FetchFn = fetch): Promise<void> {
+  const r = await fetchFn(`${c.url}/rest/v1/rehab_owner?sync_key=eq.${encodeURIComponent(key)}`, { method: 'PATCH', headers: headers(c, key, { Prefer: 'return=minimal' }, token), body: JSON.stringify({ claim_hash: hash }) });
+  if (!r.ok) throw new Error(`could not set the claim PIN (${r.status})`);
+}
+
+/** Physio: erase everything held in the cloud for this patient (answers, plan, account link, ownership). Needs schema-v4.sql. */
+export async function eraseKeyData(c: SyncConfig, key: string, token: string, fetchFn: FetchFn = fetch): Promise<void> {
+  for (const table of ['rehab_sync', 'rehab_patient', 'rehab_owner']) {
+    const r = await fetchFn(`${c.url}/rest/v1/${table}?sync_key=eq.${encodeURIComponent(key)}`, { method: 'DELETE', headers: headers(c, key, {}, token) });
+    if (!r.ok) throw new Error(`could not erase the cloud copy (${table}: ${r.status}). Run supabase/schema-v4.sql first.`);
+  }
+}
+export class PinError extends Error {}
+
+/** Patient: delete their own login (schema-v4). The clinic's record of the treatment is not touched. */
+export async function deleteMyAccount(c: SyncConfig, token: string, fetchFn: FetchFn = fetch): Promise<void> {
+  const r = await fetchFn(`${c.url}/rest/v1/rpc/rehab_delete_my_account`, { method: 'POST', headers: headers(c, '', {}, token), body: '{}' });
+  if (!r.ok) throw new Error(`could not delete the account (${r.status}). Ask your physio for help.`);
 }
 
 export interface PatientLink { sync_key: string; email: string | null; invite: string; created_at: string }
 export class LinkTakenError extends Error {}
 
 /** The patient's account claims this patient key. The invite is stored so the patient can sign in on any phone. Needs the secret link. */
-export async function claimPatient(c: SyncConfig, key: string, invite: string, token: string, fetchFn: FetchFn = fetch): Promise<void> {
-  const r = await fetchFn(`${c.url}/rest/v1/rehab_patient`, { method: 'POST', headers: headers(c, key, { Prefer: 'return=minimal' }, token), body: JSON.stringify({ sync_key: key, invite }) });
+export async function claimPatient(c: SyncConfig, key: string, invite: string, token: string, fetchFn: FetchFn = fetch, pin?: string): Promise<void> {
+  const r = await fetchFn(`${c.url}/rest/v1/rehab_patient`, { method: 'POST', headers: headers(c, key, { Prefer: 'return=minimal' }, token), body: JSON.stringify({ sync_key: key, invite, ...(pin ? { pin } : {}) }) });
   if (r.ok) return;
+  if (r.status === 403 && /PIN/i.test(await r.text().catch(() => ''))) throw new PinError('The claim PIN is missing or wrong. Ask your physio for the 8-digit PIN.');
   if (r.status === 409) {
     if ((await listPatientLinks(c, token, fetchFn, key)).length) return; // already this account's own claim
     throw new LinkTakenError('This link has already been used to make an account. Sign in with that account, or ask your physio to reset the link.');

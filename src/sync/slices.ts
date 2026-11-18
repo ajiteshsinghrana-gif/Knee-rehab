@@ -13,10 +13,11 @@ import type { DailyCheckIn, Notice, Patient, PeriodicEntry, Plan } from '../type
 import { isLang } from '../types';
 import { getPack } from '../engine/packs';
 
-export interface UpSlice { v: 1; daily: DailyCheckIn[]; periodic: PeriodicEntry[]; language: string; caregiverMode: boolean; seen: string[] }
+export interface UpSlice { v: 1; daily: DailyCheckIn[]; periodic: PeriodicEntry[]; language: string; caregiverMode: boolean; seen: string[]; consent?: { version: string; at: string }; erasureRequestedAt?: string }
 export interface DownSlice {
   v: 1; name: string; age: number; anchorDate: string; enrolledOn?: string; currentPhase: string; phaseStartDate: string;
   sessionsPrescribedPerDay: number; plan: Plan; notices: Notice[];
+  status?: 'completed'; completedAt?: string; erasureNote?: string; clinicContact?: string;
 }
 
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -48,7 +49,7 @@ const cleanPeriodic = (e: PeriodicEntry): PeriodicEntry => ({
 
 // ---------------- patient -> physio ----------------
 export function upSlice(p: Patient): UpSlice {
-  return { v: 1, daily: p.daily, periodic: p.periodic, language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id) };
+  return { v: 1, daily: p.daily, periodic: p.periodic, language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id), ...(p.consent ? { consent: p.consent } : {}), ...(p.erasureRequestedAt ? { erasureRequestedAt: p.erasureRequestedAt } : {}) };
 }
 const stamp = (e: object): number => (e as { recordedAt?: number }).recordedAt ?? 0;
 /** Same day: the later recording wins; an entry is never lost because the other side has fewer. */
@@ -73,6 +74,8 @@ export function applyUp(p: Patient, raw: unknown): Patient {
     ...p, daily, periodic, language: isLang(raw.language) ? raw.language : p.language,
     ...(raw.caregiverMode === true ? { caregiverMode: true } : { caregiverMode: false }),
     notices: p.notices.map((n) => (seen.has(n.id) ? { ...n, seen: true } : n)),
+    ...(isObj(raw.consent) && typeof raw.consent.version === 'string' && typeof raw.consent.at === 'string' ? { consent: { version: raw.consent.version.slice(0, 40), at: raw.consent.at.slice(0, 40) } } : {}),
+    ...(typeof raw.erasureRequestedAt === 'string' ? { erasureRequestedAt: raw.erasureRequestedAt.slice(0, 40) } : {}),
   };
 }
 
@@ -88,6 +91,7 @@ export function downSlice(p: Patient): DownSlice {
   return {
     v: 1, name: p.name, age: p.age, anchorDate: p.anchorDate, ...(p.enrolledOn ? { enrolledOn: p.enrolledOn } : {}), currentPhase: p.currentPhase, phaseStartDate: p.phaseStartDate,
     sessionsPrescribedPerDay: p.sessionsPrescribedPerDay, plan: redactPlan(p.plan), notices: p.notices,
+    ...(p.status === 'completed' ? { status: 'completed' as const, ...(p.completedAt ? { completedAt: p.completedAt } : {}) } : {}), ...(p.erasureNote ? { erasureNote: p.erasureNote } : {}), ...(p.clinicContact ? { clinicContact: p.clinicContact } : {}),
   };
 }
 const validNotice = (n: unknown): n is Notice => isObj(n) && typeof n.id === 'string' && typeof n.at === 'string' && typeof n.seen === 'boolean' && Array.isArray(n.changes) && n.changes.every((c) => isObj(c) && typeof c.kind === 'string');
@@ -108,6 +112,10 @@ export function applyDown(p: Patient, raw: unknown): Patient {
     anchorDate: raw.anchorDate, ...(isDate(raw.enrolledOn) ? { enrolledOn: raw.enrolledOn } : {}), currentPhase: raw.currentPhase, phaseStartDate: raw.phaseStartDate,
     sessionsPrescribedPerDay: Number.isFinite(raw.sessionsPrescribedPerDay) ? Number(raw.sessionsPrescribedPerDay) : p.sessionsPrescribedPerDay,
     plan: raw.plan as Plan, notices,
+    status: raw.status === 'completed' ? 'completed' : undefined,
+    completedAt: raw.status === 'completed' && typeof raw.completedAt === 'string' ? raw.completedAt.slice(0, 40) : undefined,
+    erasureNote: typeof raw.erasureNote === 'string' ? raw.erasureNote.slice(0, 300) : undefined,
+    clinicContact: typeof raw.clinicContact === 'string' ? raw.clinicContact.slice(0, 120) : p.clinicContact,
   };
 }
 

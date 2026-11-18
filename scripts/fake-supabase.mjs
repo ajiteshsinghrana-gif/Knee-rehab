@@ -5,12 +5,13 @@
 //   authenticated patient account (schema-v3): claims a key once (needs the key); then reads both slices and writes only "up";
 //   once a key is claimed the secret link (anon) no longer works for it.
 import http from 'node:http';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomUUID, randomBytes, createHash } from 'node:crypto';
 
 export function startFake(port = 0, opts = {}) {
   const rows = new Map(); // `${sync_key}|${slice}` -> row
   const owners = new Map(); // sync_key -> physio user id
   const patients = new Map(); // sync_key -> { patientId, email, invite, created_at } (schema-v3 rehab_patient)
+  const claimHashes = new Map(); // sync_key -> sha256 hex (schema-v4 rehab_owner.claim_hash)
   const users = new Map(); // email -> { id, password }
   const access = new Map(); // access token -> user id
   const refresh = new Map(); // refresh token -> user id
@@ -21,7 +22,7 @@ export function startFake(port = 0, opts = {}) {
     return { access_token: a, refresh_token: r, token_type: 'bearer', expires_in: opts.ttlSeconds ?? 3600, user: { id, email } };
   };
   const server = http.createServer((req, res) => {
-    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'x-sync-key, apikey, authorization, content-type, prefer', 'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS' };
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'x-sync-key, apikey, authorization, content-type, prefer', 'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
     const key = req.headers['x-sync-key'] ?? '';
     const send = (code, body) => { res.writeHead(code, { ...cors, 'Content-Type': 'application/json' }); res.end(body === undefined ? '' : JSON.stringify(body)); };
@@ -56,15 +57,41 @@ export function startFake(port = 0, opts = {}) {
       }
       return send(400, { error: 'unsupported_grant_type' });
     });
+    if (url.pathname === '/auth/v1/recover' && req.method === 'POST') return body((j) => { log.push(`RECOVER ${j.email}`); return send(200, {}); });
+    if (url.pathname === '/auth/v1/user' && req.method === 'PUT') return body((j) => {
+      if (!userId) return send(401, { msg: 'invalid token' });
+      if (!j.password || String(j.password).length < 6) return send(422, { msg: 'Password should be at least 6 characters.' });
+      const em = [...users].find(([, u]) => u.id === userId)?.[0]; if (em) users.get(em).password = j.password;
+      log.push('PASSWORD_SET'); return send(200, { id: userId });
+    });
     if (url.pathname === '/auth/v1/logout' && req.method === 'POST') { if (bearer) access.delete(bearer); log.push('LOGOUT'); return send(204); }
+
+    if (url.pathname === '/rest/v1/rpc/rehab_delete_my_account' && req.method === 'POST') {
+      if (!userId) return send(401, { message: 'not signed in' });
+      for (const [k, v] of [...patients]) if (v.patientId === userId) patients.delete(k);
+      const em = [...users].find(([, u]) => u.id === userId)?.[0]; if (em) users.delete(em);
+      access.delete(bearer); log.push('ACCOUNT_DELETED'); return send(204);
+    }
 
     // ---- Ownership table ----
     if (url.pathname === '/rest/v1/rehab_owner' && req.method === 'POST') return body((j) => {
       if (!userId) return send(401, { message: 'permission denied for table rehab_owner' }); // anon has no policy here
       if (!/^[0-9a-f]{32}$/.test(j.sync_key ?? '')) return send(400, { message: 'check constraint violated' });
-      if (!owners.has(j.sync_key)) owners.set(j.sync_key, userId); // on conflict do nothing
+      if (!owners.has(j.sync_key)) { owners.set(j.sync_key, userId); if (j.claim_hash) claimHashes.set(j.sync_key, j.claim_hash); } // on conflict do nothing
       log.push('CLAIM'); return send(201);
     });
+
+    if (url.pathname === '/rest/v1/rehab_owner' && req.method === 'PATCH') return body((j) => {
+      const k = /^eq\.(.*)$/.exec(url.searchParams.get('sync_key') ?? '')?.[1];
+      if (!userId || !k || owners.get(k) !== userId) return send(204); // update policy: only the owner's own row
+      if (typeof j.claim_hash === 'string') claimHashes.set(k, j.claim_hash);
+      log.push('SET_PIN'); return send(204);
+    });
+    if (url.pathname === '/rest/v1/rehab_owner' && req.method === 'DELETE') {
+      const k = /^eq\.(.*)$/.exec(url.searchParams.get('sync_key') ?? '')?.[1];
+      if (userId && k && owners.get(k) === userId) { owners.delete(k); claimHashes.delete(k); log.push('OWNER_ERASED'); }
+      return send(204);
+    }
 
     // ---- Patient accounts (schema-v3) ----
     const emailOf = (id) => [...users].find(([, u]) => u.id === id)?.[0];
@@ -74,6 +101,11 @@ export function startFake(port = 0, opts = {}) {
         if (!/^[0-9a-f]{32}$/.test(j.sync_key ?? '') || typeof j.invite !== 'string' || j.invite.length < 20) return send(400, { message: 'check constraint violated' });
         if (j.sync_key !== key) return send(403, { code: '42501', message: 'new row violates row-level security policy' }); // claiming needs the secret link
         if (patients.has(j.sync_key)) return send(409, { code: '23505', message: 'duplicate key value violates unique constraint' });
+        const need = claimHashes.get(j.sync_key);
+        if (need) {
+          const got = typeof j.pin === 'string' ? createHash('sha256').update(j.pin).digest('hex') : '';
+          if (got !== need) return send(403, { code: '42501', message: 'claim PIN required or wrong' });
+        }
         patients.set(j.sync_key, { patientId: userId, email: emailOf(userId), invite: j.invite, created_at: new Date().toISOString() });
         log.push('PATIENT_CLAIM'); return send(201);
       });
@@ -110,10 +142,15 @@ export function startFake(port = 0, opts = {}) {
       rows.set(`${row.sync_key}|${row.slice}`, { ...row, updated_at: new Date().toISOString() + Math.random() });
       send(201);
     });
+    if (req.method === 'DELETE') { // schema-v4: the owning physio may erase a patient's rows
+      const k = /^eq\.(.*)$/.exec(url.searchParams.get('sync_key') ?? '')?.[1];
+      if (userId && k && owners.get(k) === userId) { rows.delete(`${k}|up`); rows.delete(`${k}|down`); log.push('SYNC_ERASED'); }
+      return send(204);
+    }
     send(405, {});
   });
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve({
-    port: server.address().port, rows, owners, patients, users, access, log,
+    port: server.address().port, rows, owners, patients, claimHashes, users, access, log,
     revokeAccess: () => access.clear(), // simulate expired access tokens (refresh tokens still work)
     close: () => new Promise((r) => server.close(r)),
   })));
