@@ -155,6 +155,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
           <small>{dueText(r, now)}{r.responseHours ? ` (${r.responseHours} h target)` : ''}</small>
         </div>
       </div>
+      <AccessCard patient={p} />
 
       {signoffs.length > 0 && (
         <details className="placeholders">
@@ -216,7 +217,6 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
 
       <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} />
       <LifecycleCard patient={p} now={now} />
-      <AccessCard patient={p} />
       {p.status !== 'completed' && <AdjustCard patient={p} pack={pack} now={now} />}
       <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
       <CurvesCard patient={p} pack={pack} now={now} />
@@ -347,19 +347,19 @@ function AccessCard({ patient: p }: { patient: Patient }) {
   const [show, setShow] = useState(false);
   const [ask, setAsk] = useState(false);
   const [err, setErr] = useState('');
-  if (!sync.enabled || !p.syncKey || p.syncRole !== 'physio') return null;
-  const email = sync.links[p.syncKey];
+  const email = p.syncKey ? sync.links[p.syncKey] : undefined;
   const url = inviteUrl(p, window.location.href.split('#')[0]);
   const qr = (() => { try { return qrSvg(url, 5); } catch { return null; } })();
   return (
-    <section className="card access" data-testid="access">
-      <h3>Patient access</h3>
-      {sync.auth ? (
+    <details className="card access" data-testid="access" open={false}>
+      <summary><b>Patient link and QR code</b> · send it again, or let a new phone join</summary>
+      {!p.syncKey && <p className="tiny">Live sync is off for this patient, so the link opens their plan on one phone and their answers stay on that phone.</p>}
+      {p.syncKey && sync.auth ? (
         <p>{email ? <>Patient account: <b>{email}</b>. They can sign in on any phone.</> : <>No patient account yet. The first person to open the link makes the account, so send it privately.</>}</p>
-      ) : <p className="tiny">Patient accounts are not switched on. The link alone opens the plan.</p>}
+      ) : p.syncKey ? <p className="tiny">Patient accounts are not switched on. The link alone opens the plan.</p> : null}
       <div className="btnrow">
         <button className="btn" onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'} invite link and QR code</button>
-        {sync.auth && !p.claimPin && !email && <button className="btn" onClick={async () => { try { const pin = await physioNewClaimPin(p.syncKey!); updatePatient(p.id, (q) => ({ ...q, claimPin: pin })); setErr(''); } catch (e) { setErr((e as Error).message); } }}>Create a claim PIN</button>}
+        {p.syncKey && p.syncRole === 'physio' && sync.auth && !p.claimPin && !email && <button className="btn" onClick={async () => { try { const pin = await physioNewClaimPin(p.syncKey!); updatePatient(p.id, (q) => ({ ...q, claimPin: pin })); setErr(''); } catch (e) { setErr((e as Error).message); } }}>Create a claim PIN</button>}
         {sync.auth && email && !ask && <button className="btn" onClick={() => setAsk(true)}>Reset this patient's account link</button>}
       </div>
       {ask && <p role="alert" className="warnline">The patient is signed out of this link and the next person to open it can make a new account. Their answers stay with you. <button className="btn primary" onClick={async () => { try { await physioResetPatientLink(p.syncKey!); setAsk(false); setErr(''); } catch (e) { setErr((e as Error).message); } }}>Yes, reset</button> <button className="btn" onClick={() => setAsk(false)}>Cancel</button></p>}
@@ -372,22 +372,15 @@ function AccessCard({ patient: p }: { patient: Patient }) {
           <p className="tiny">The link carries the patient's name, plan and a secret key. Share it privately, only with the patient.</p>
         </div>
       )}
-    </section>
+    </details>
   );
 }
 
 /** Clinic-wide choices about patient data (Phase 6.4): how long records are kept, who patients contact, and the switch to real dates. */
 function ClinicSettings({ state }: { state: AppState }) {
-  const [confirm, setConfirm] = useState(false);
   const years = state.retentionYears ?? DEFAULT_RETENTION_YEARS;
   const setYears = (n: number) => { if (n >= 0 && n <= 30) setState({ ...getState(), retentionYears: n }); };
   const setContact = (v: string) => { const st = getState(); const c = v.slice(0, 120); setState({ ...st, clinicContact: c, patients: st.patients.map((p) => ({ ...p, clinicContact: c || undefined })) }); };
-  const goLive = () => {
-    const st = getState();
-    const keep = st.patients.filter((p) => p.syncRole === 'physio');
-    setState({ ...st, live: true, today: realToday(), patients: keep, activeId: keep[0]?.id ?? '', demoStep: 0 });
-    setConfirm(false);
-  };
   return (
     <details className="card clinicsettings" data-testid="clinic-settings">
       <summary><b>Clinic settings: patient data and dates</b></summary>
@@ -396,10 +389,7 @@ function ClinicSettings({ state }: { state: AppState }) {
         <label>Contact shown to patients (phone or email) <input maxLength={120} value={state.clinicContact ?? ''} onChange={(e) => setContact(e.target.value)} aria-label="Clinic contact" /></label>
       </div>
       <p className="tiny">After this period a finished patient is flagged "review for erasure" under Past patients. Nothing is deleted by itself. Ask your lawyer what period applies to you: medical-record rules often say about 3 years, and some guidance says longer.</p>
-      {state.live ? <p className="okline" role="status">Real-clinic mode is on: check-ins use today's real date.</p> : (
-        !confirm ? <div className="btnrow"><button className="btn" onClick={() => setConfirm(true)}>Switch to real-clinic mode</button></div>
-          : <p role="alert" className="warnline">This removes the six demo patients from this computer and uses today's real date for check-ins. Patients you added yourself stay. This cannot be undone (the Reset button on the demo bar restores the demo). <button className="btn primary" onClick={goLive}>Yes, switch</button> <button className="btn" onClick={() => setConfirm(false)}>Cancel</button></p>
-      )}
+      <p className="tiny">This is the live clinic. The demo has its own data and the six made-up patients; use Switch to demo at the top.</p>
     </details>
   );
 }

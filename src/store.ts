@@ -8,8 +8,14 @@ import { getPack } from './engine/packs';
 import { restoreAuthoredPack, type QuestionnaireDraft } from './author/condition';
 export interface SavedQuestionnaire { id: string; name: string; q: QuestionnaireDraft }
 import { DEMO_TODAY_LAST, makeAllPatients } from './demo/seed';
+import { getMode, type Mode } from './mode';
+import { isPatientDevice } from './device';
 
 export const STORAGE_KEY = 'rehabpath-v1';
+/** The live clinic keeps its own data, apart from the demo (Phase 6.5). */
+export const LIVE_KEY = 'rehabpath-live-v1';
+/** A patient's phone keeps its own store, so opening an invite link can never touch a physio's patients on the same browser. */
+export const PATIENT_KEY = 'rehabpath-patient-v1';
 export const LEGACY_KEY = 'acl-rehab-v1';
 
 export interface AppState {
@@ -90,7 +96,36 @@ export function migrateLegacy(old: any): AppState {
 
 type Storage = Pick<globalThis.Storage, 'getItem' | 'setItem'>;
 
-export function loadState(storage: Storage | null = typeof localStorage === 'undefined' ? null : localStorage): AppState {
+/** First time in live mode: bring over only the real patients (and the conditions they use) from the demo storage; never the demo patients. */
+function liveFromDemo(storage: Storage | null, patientDevice: boolean): AppState {
+  const empty: AppState = { version: 1, patients: [], activeId: '', today: realToday(), demoStep: 0, live: true };
+  try {
+    const raw = storage?.getItem(STORAGE_KEY);
+    const s = raw ? (JSON.parse(raw) as AppState) : null;
+    if (!s || !Array.isArray(s.patients)) return empty;
+    for (const cp of s.customPacks ?? []) { try { restoreAuthoredPack(cp); } catch { /* ignored */ } }
+    const known = (id: string) => { try { getPack(id); return true; } catch { return false; } };
+    const patients = s.patients.filter((x) => (patientDevice ? x.syncRole === 'patient' : !!x.syncRole) && known(x.packId)).map(normalizePatient);
+    return { ...empty, patients, activeId: patients[0]?.id ?? '', customPacks: s.customPacks, clinicContact: s.clinicContact, retentionYears: s.retentionYears, questionnaires: s.questionnaires };
+  } catch { return empty; }
+}
+
+export function loadState(storage: Storage | null = typeof localStorage === 'undefined' ? null : localStorage, mode: Mode = getMode(), patientDevice: boolean = isPatientDevice()): AppState {
+  if (mode === 'live' || patientDevice) {
+    try {
+      const cur = storage?.getItem(patientDevice ? PATIENT_KEY : LIVE_KEY);
+      if (cur) {
+        const s = JSON.parse(cur) as AppState;
+        if (s?.version === 1 && Array.isArray(s.patients)) {
+          for (const cp of s.customPacks ?? []) { try { restoreAuthoredPack(cp); } catch { /* an invalid saved pack is ignored */ } }
+          const known = (id: string) => { try { getPack(id); return true; } catch { return false; } };
+          const patients = s.patients.filter((x) => known(x.packId)).map(normalizePatient);
+          return { ...s, patients, live: true, activeId: patients.some((x) => x.id === s.activeId) ? s.activeId : patients[0]?.id ?? '', today: realToday() };
+        }
+      }
+    } catch { /* fall through to a fresh live clinic */ }
+    return liveFromDemo(storage, patientDevice);
+  }
   try {
     const cur = storage?.getItem(STORAGE_KEY);
     if (cur) {
@@ -123,10 +158,10 @@ export const subscribe = (f: () => void) => { subs.add(f); return () => { subs.d
 export function setState(next: AppState): void {
   state = next;
   setClinicCurves(next.clinicCurves);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* offline demo still works in memory */ }
+  try { localStorage.setItem(isPatientDevice() ? PATIENT_KEY : getMode() === 'live' ? LIVE_KEY : STORAGE_KEY, JSON.stringify(next)); } catch { /* offline demo still works in memory */ }
   subs.forEach((f) => f());
 }
-export const resetState = () => setState(seedState());
+export const resetState = () => { if (getMode() === 'demo') setState(seedState()); };
 export const updatePatient = (id: string, f: (p: Patient) => Patient) => {
   const s = getState();
   setState({ ...s, patients: s.patients.map((p) => (p.id === id ? f(p) : p)) });
