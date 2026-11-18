@@ -311,6 +311,8 @@ export interface Patient {
   syncKey?: string;
   /** Which side of the sync this device is: the physio who created the patient, or the patient's own phone. */
   syncRole?: 'physio' | 'patient';
+  /** Set on a patient's own phone once their account (Phase 6.3) has claimed this patient. Not sent in invites. */
+  accountEmail?: string;
   anchorDate: string; // surgery date
   currentPhase: string; // phase id
   phaseStartDate: string;

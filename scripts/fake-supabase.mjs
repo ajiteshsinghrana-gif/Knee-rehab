@@ -2,12 +2,15 @@
 // It mimics row-level security as written in supabase/schema.sql and supabase/schema-v2.sql, and the Auth endpoints the app uses.
 //   anon (no user token): sees only rows whose sync_key equals its x-sync-key header; may write "up"; may write "down" only while the key is unclaimed.
 //   authenticated physio (user token): sees both slices of keys they own; may write only "down" for keys they own.
+//   authenticated patient account (schema-v3): claims a key once (needs the key); then reads both slices and writes only "up";
+//   once a key is claimed the secret link (anon) no longer works for it.
 import http from 'node:http';
 import { randomUUID, randomBytes } from 'node:crypto';
 
 export function startFake(port = 0, opts = {}) {
   const rows = new Map(); // `${sync_key}|${slice}` -> row
-  const owners = new Map(); // sync_key -> user id
+  const owners = new Map(); // sync_key -> physio user id
+  const patients = new Map(); // sync_key -> { patientId, email, invite, created_at } (schema-v3 rehab_patient)
   const users = new Map(); // email -> { id, password }
   const access = new Map(); // access token -> user id
   const refresh = new Map(); // refresh token -> user id
@@ -18,7 +21,7 @@ export function startFake(port = 0, opts = {}) {
     return { access_token: a, refresh_token: r, token_type: 'bearer', expires_in: opts.ttlSeconds ?? 3600, user: { id, email } };
   };
   const server = http.createServer((req, res) => {
-    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'x-sync-key, apikey, authorization, content-type, prefer', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'x-sync-key, apikey, authorization, content-type, prefer', 'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS' };
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
     const key = req.headers['x-sync-key'] ?? '';
     const send = (code, body) => { res.writeHead(code, { ...cors, 'Content-Type': 'application/json' }); res.end(body === undefined ? '' : JSON.stringify(body)); };
@@ -63,6 +66,30 @@ export function startFake(port = 0, opts = {}) {
       log.push('CLAIM'); return send(201);
     });
 
+    // ---- Patient accounts (schema-v3) ----
+    const emailOf = (id) => [...users].find(([, u]) => u.id === id)?.[0];
+    if (url.pathname === '/rest/v1/rehab_patient') {
+      if (!userId) return send(401, { message: 'permission denied for table rehab_patient' });
+      if (req.method === 'POST') return body((j) => {
+        if (!/^[0-9a-f]{32}$/.test(j.sync_key ?? '') || typeof j.invite !== 'string' || j.invite.length < 20) return send(400, { message: 'check constraint violated' });
+        if (j.sync_key !== key) return send(403, { code: '42501', message: 'new row violates row-level security policy' }); // claiming needs the secret link
+        if (patients.has(j.sync_key)) return send(409, { code: '23505', message: 'duplicate key value violates unique constraint' });
+        patients.set(j.sync_key, { patientId: userId, email: emailOf(userId), invite: j.invite, created_at: new Date().toISOString() });
+        log.push('PATIENT_CLAIM'); return send(201);
+      });
+      if (req.method === 'GET') {
+        const k = /^eq\.(.*)$/.exec(url.searchParams.get('sync_key') ?? '')?.[1];
+        const out = [...patients].filter(([sk, r]) => (!k || sk === k) && (r.patientId === userId || owners.get(sk) === userId)).map(([sk, r]) => ({ sync_key: sk, email: r.email, invite: r.invite, created_at: r.created_at }));
+        return send(200, out);
+      }
+      if (req.method === 'DELETE') {
+        const k = /^eq\.(.*)$/.exec(url.searchParams.get('sync_key') ?? '')?.[1];
+        if (k && owners.get(k) === userId) { patients.delete(k); log.push('PATIENT_RESET'); }
+        return send(204);
+      }
+      return send(405, {});
+    }
+
     // ---- Sync table ----
     if (url.pathname !== '/rest/v1/rehab_sync') return send(404, { message: 'not found' });
     if (req.method === 'GET') {
@@ -70,14 +97,14 @@ export function startFake(port = 0, opts = {}) {
       const s = /^eq\.(.*)$/.exec(url.searchParams.get('slice') ?? '')?.[1];
       log.push(`GET ${s}`);
       const r = rows.get(`${k}|${s}`);
-      const visible = r && (userId ? owners.get(r.sync_key) === userId : r.sync_key === key);
+      const visible = r && (userId ? (owners.get(r.sync_key) === userId || patients.get(r.sync_key)?.patientId === userId) : (r.sync_key === key && !patients.has(r.sync_key)));
       return send(200, visible ? [{ data: r.data, updated_at: r.updated_at }] : []); // row-level security: everything else is invisible
     }
     if (req.method === 'POST') return body((row) => {
       const valid = /^[0-9a-f]{32}$/.test(row.sync_key ?? '') && ['up', 'down'].includes(row.slice);
       const allowed = valid && (userId
-        ? owners.get(row.sync_key) === userId && row.slice === 'down'
-        : row.sync_key === key && (row.slice === 'up' || !owners.has(row.sync_key)));
+        ? (owners.get(row.sync_key) === userId && row.slice === 'down') || (patients.get(row.sync_key)?.patientId === userId && row.slice === 'up')
+        : row.sync_key === key && !patients.has(row.sync_key) && (row.slice === 'up' || !owners.has(row.sync_key)));
       if (!allowed) return send(403, { code: '42501', message: 'new row violates row-level security policy' });
       log.push(`POST ${row.slice}`);
       rows.set(`${row.sync_key}|${row.slice}`, { ...row, updated_at: new Date().toISOString() + Math.random() });
@@ -86,7 +113,7 @@ export function startFake(port = 0, opts = {}) {
     send(405, {});
   });
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve({
-    port: server.address().port, rows, owners, users, access, log,
+    port: server.address().port, rows, owners, patients, users, access, log,
     revokeAccess: () => access.clear(), // simulate expired access tokens (refresh tokens still work)
     close: () => new Promise((r) => server.close(r)),
   })));

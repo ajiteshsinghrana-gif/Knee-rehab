@@ -42,6 +42,34 @@ export async function claimKey(c: SyncConfig, key: string, token: string, fetchF
   if (!r.ok) throw new Error(`could not register this patient (${r.status})`);
 }
 
+export interface PatientLink { sync_key: string; email: string | null; invite: string; created_at: string }
+export class LinkTakenError extends Error {}
+
+/** The patient's account claims this patient key. The invite is stored so the patient can sign in on any phone. Needs the secret link. */
+export async function claimPatient(c: SyncConfig, key: string, invite: string, token: string, fetchFn: FetchFn = fetch): Promise<void> {
+  const r = await fetchFn(`${c.url}/rest/v1/rehab_patient`, { method: 'POST', headers: headers(c, key, { Prefer: 'return=minimal' }, token), body: JSON.stringify({ sync_key: key, invite }) });
+  if (r.ok) return;
+  if (r.status === 409) {
+    if ((await listPatientLinks(c, token, fetchFn, key)).length) return; // already this account's own claim
+    throw new LinkTakenError('This link has already been used to make an account. Sign in with that account, or ask your physio to reset the link.');
+  }
+  throw new Error(`could not create the account link (${r.status})`);
+}
+
+/** Patient: their own claims. Physio: the claims on their patients (who made an account, with which email). */
+export async function listPatientLinks(c: SyncConfig, token: string, fetchFn: FetchFn = fetch, onlyKey?: string): Promise<PatientLink[]> {
+  const r = await fetchFn(`${c.url}/rest/v1/rehab_patient?select=sync_key,email,invite,created_at${onlyKey ? `&sync_key=eq.${encodeURIComponent(onlyKey)}` : ''}`, { headers: headers(c, onlyKey ?? '', {}, token), cache: 'no-store' });
+  if (!r.ok) throw new Error(`could not read patient accounts (${r.status})`);
+  const rows = (await r.json()) as unknown;
+  return Array.isArray(rows) ? (rows as PatientLink[]).filter((x) => validSyncKey(x?.sync_key) && typeof x.invite === 'string') : [];
+}
+
+/** Physio: forget which account claimed this patient, so the patient can make a new one from the invite link. */
+export async function resetPatientLink(c: SyncConfig, key: string, token: string, fetchFn: FetchFn = fetch): Promise<void> {
+  const r = await fetchFn(`${c.url}/rest/v1/rehab_patient?sync_key=eq.${encodeURIComponent(key)}`, { method: 'DELETE', headers: headers(c, key, {}, token) });
+  if (!r.ok) throw new Error(`could not reset the patient's account link (${r.status})`);
+}
+
 /** 128-bit random secret, hex. */
 export function newSyncKey(): string {
   const b = new Uint8Array(16);

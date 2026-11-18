@@ -50,11 +50,23 @@ const cleanPeriodic = (e: PeriodicEntry): PeriodicEntry => ({
 export function upSlice(p: Patient): UpSlice {
   return { v: 1, daily: p.daily, periodic: p.periodic, language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id) };
 }
-/** Physio's computer receives the patient's answers. Only answer fields change; the plan is never touched. */
+/** Same day: the later recording wins; an entry is never lost because the other side has fewer. */
+function mergeBy<T extends { recordedAt?: number }>(local: T[], incoming: T[], key: (e: T) => string): T[] {
+  const m = new Map<string, T>(local.map((e) => [key(e), e]));
+  for (const e of incoming) { const cur = m.get(key(e)); if (!cur || (e.recordedAt ?? 0) >= (cur.recordedAt ?? 0)) m.set(key(e), e); }
+  return [...m.values()];
+}
+const dailyKey = (e: DailyCheckIn) => e.date;
+const periodicKey = (e: PeriodicEntry) => `${e.date}|${Object.keys(e.values).sort().join(',')}`; // a weekly test and a monthly questionnaire can share a date
+
+/** Receives the patient's answers (the physio's computer, or the patient's own new phone restoring its history).
+ *  Answers are merged by date, never replaced, so an empty or older copy can never erase history. The plan is never touched. */
 export function applyUp(p: Patient, raw: unknown): Patient {
   if (!isObj(raw) || raw.v !== 1) return p;
-  const daily = (Array.isArray(raw.daily) ? raw.daily : []).filter(validDaily).map(cleanDaily).sort((a, b) => a.date.localeCompare(b.date));
-  const periodic = (Array.isArray(raw.periodic) ? raw.periodic : []).filter(validPeriodic).map(cleanPeriodic).sort((a, b) => a.date.localeCompare(b.date));
+  const inDaily = (Array.isArray(raw.daily) ? raw.daily : []).filter(validDaily).map(cleanDaily);
+  const inPeriodic = (Array.isArray(raw.periodic) ? raw.periodic : []).filter(validPeriodic).map(cleanPeriodic);
+  const daily = mergeBy(p.daily, inDaily, dailyKey).sort((a, b) => a.date.localeCompare(b.date));
+  const periodic = mergeBy(p.periodic, inPeriodic, periodicKey).sort((a, b) => a.date.localeCompare(b.date));
   const seen = new Set((Array.isArray(raw.seen) ? raw.seen : []).filter((x): x is string => typeof x === 'string'));
   return {
     ...p, daily, periodic, language: isLang(raw.language) ? raw.language : p.language,
