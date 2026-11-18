@@ -50,10 +50,11 @@ const cleanPeriodic = (e: PeriodicEntry): PeriodicEntry => ({
 export function upSlice(p: Patient): UpSlice {
   return { v: 1, daily: p.daily, periodic: p.periodic, language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id) };
 }
+const stamp = (e: object): number => (e as { recordedAt?: number }).recordedAt ?? 0;
 /** Same day: the later recording wins; an entry is never lost because the other side has fewer. */
-function mergeBy<T extends { recordedAt?: number }>(local: T[], incoming: T[], key: (e: T) => string): T[] {
+function mergeBy<T extends object>(local: T[], incoming: T[], key: (e: T) => string): T[] {
   const m = new Map<string, T>(local.map((e) => [key(e), e]));
-  for (const e of incoming) { const cur = m.get(key(e)); if (!cur || (e.recordedAt ?? 0) >= (cur.recordedAt ?? 0)) m.set(key(e), e); }
+  for (const e of incoming) { const cur = m.get(key(e)); if (!cur || stamp(e) >= stamp(cur)) m.set(key(e), e); }
   return [...m.values()];
 }
 const dailyKey = (e: DailyCheckIn) => e.date;

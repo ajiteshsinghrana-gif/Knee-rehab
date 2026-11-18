@@ -7,6 +7,7 @@ import type { Patient } from '../types';
 import type { AppState } from '../store';
 import { applyDown, applyUp, downSlice, sliceKey, upSlice } from './slices';
 import { claimKey, listPatientLinks, loadConfig, pullSlice, pushSlice, resetPatientLink, type FetchFn, type SyncConfig } from './client';
+import { createPatientAccount, signInPatient, type Restored } from './account';
 import { getAccessToken, getSession, signIn, signOut, signUp, subscribeAuth } from './auth';
 
 /** state 'login': sign-in is required (Phase 6.2) and nobody is signed in, so the physio's patients are not syncing yet. */
@@ -129,6 +130,20 @@ export async function physioResetPatientLink(key: string): Promise<void> {
   const { [key]: _gone, ...rest } = status.links;
   setStatus({ links: rest });
   kick();
+}
+
+/** Patient side (6.3): make an account for this patient / sign in on this phone / sign out. Errors carry a message that is safe to show. */
+export async function patientCreateAccount(patient: Patient, email: string, password: string): Promise<'done' | 'confirm-email'> {
+  if (!activeConfig) throw new Error('Live sync is not set up');
+  const r = await createPatientAccount(activeConfig, patient, email, password); kick(); return r;
+}
+export async function patientSignIn(email: string, password: string, current?: Patient): Promise<Restored> {
+  if (!activeConfig) throw new Error('Live sync is not set up');
+  const r = await signInPatient(activeConfig, email, password, current); kick(); return r;
+}
+export async function patientSignOut(): Promise<void> {
+  if (!activeConfig) return;
+  await signOut(activeConfig); kick();
 }
 
 /** Start syncing. Returns a stop function. Does nothing (and returns a no-op) when sync is not configured. */

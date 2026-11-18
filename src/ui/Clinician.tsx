@@ -1,5 +1,9 @@
-import { useMemo, useState } from 'react';
+import { auditCsv } from '../audit';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { LoginCard } from './Login';
+import { getSyncStatus, physioResetPatientLink, subscribeSync } from '../sync/engine';
+import { inviteUrl } from '../onboarding';
+import { qrSvg } from '../qr';
 import type { Patient, ProtocolPack, Tier, TriageResult } from '../types';
 import { L } from '../i18n';
 import { getPack } from '../engine/packs';
@@ -68,7 +72,7 @@ export function Clinician({ state }: { state: AppState }) {
             ))}
           </ul>
         </aside>
-        {mode === 'add' && <Onboarding onClose={() => { setMode('dash'); setSel(getState().activeId); }} />}
+        {mode === 'add' && <Onboarding onClose={() => { setMode('dash'); setSel(getState().activeId); }} onNewCondition={() => setMode('condition')} />}
         {mode === 'import' && <ImportProtocol onClose={() => setMode('dash')} />}
         {mode === 'condition' && <NewCondition onClose={() => setMode('dash')} onAddPatient={() => setMode('add')} />}
         {mode === 'dash' && <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />}
@@ -201,6 +205,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
       </div>
 
       <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} />
+      <AccessCard patient={p} />
       <AdjustCard patient={p} pack={pack} now={now} />
       <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
       <CurvesCard patient={p} pack={pack} now={now} />
@@ -325,6 +330,48 @@ function ProposalCard({ patient: p, pack, r, now }: { patient: Patient; pack: Pr
   );
 }
 
+/** How this patient gets back into the app (Phase 6.3): who holds the account, resend the link, reset a wrong claim. */
+function AccessCard({ patient: p }: { patient: Patient }) {
+  const sync = useSyncExternalStore(subscribeSync, getSyncStatus);
+  const [show, setShow] = useState(false);
+  const [ask, setAsk] = useState(false);
+  const [err, setErr] = useState('');
+  if (!sync.enabled || !p.syncKey || p.syncRole !== 'physio') return null;
+  const email = sync.links[p.syncKey];
+  const url = inviteUrl(p, window.location.href.split('#')[0]);
+  const qr = (() => { try { return qrSvg(url, 5); } catch { return null; } })();
+  return (
+    <section className="card access" data-testid="access">
+      <h3>Patient access</h3>
+      {sync.auth ? (
+        <p>{email ? <>Patient account: <b>{email}</b>. They can sign in on any phone.</> : <>No patient account yet. The first person to open the link makes the account, so send it privately.</>}</p>
+      ) : <p className="tiny">Patient accounts are not switched on. The link alone opens the plan.</p>}
+      <div className="btnrow">
+        <button className="btn" onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'} invite link and QR code</button>
+        {sync.auth && email && !ask && <button className="btn" onClick={() => setAsk(true)}>Reset this patient's account link</button>}
+      </div>
+      {ask && <p role="alert" className="warnline">The patient is signed out of this link and the next person to open it can make a new account. Their answers stay with you. <button className="btn primary" onClick={async () => { try { await physioResetPatientLink(p.syncKey!); setAsk(false); setErr(''); } catch (e) { setErr((e as Error).message); } }}>Yes, reset</button> <button className="btn" onClick={() => setAsk(false)}>Cancel</button></p>}
+      {err && <p className="err" role="alert">{err}</p>}
+      {show && (
+        <div data-testid="access-invite">
+          {qr ? <div className="qr" dangerouslySetInnerHTML={{ __html: qr }} /> : <p className="tiny">This plan is too large for a QR code. Send the link instead.</p>}
+          <p className="linkbox"><input readOnly value={url} aria-label="Invite link" onFocus={(e) => e.currentTarget.select()} /></p>
+          <p className="tiny">The link carries the patient's name, plan and a secret key. Share it privately, only with the patient.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function downloadAudit(p: Patient) {
+  const blob = new Blob([auditCsv(p)], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `audit-${p.name.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 function PlanCard({ patient: p, pack, now, onApply, err }: { patient: Patient; pack: ProtocolPack; now: number; onApply: ApplyFn; err: string }) {
   const st = getState();
   const exs = currentExercises(p, pack);
@@ -342,8 +389,16 @@ function PlanCard({ patient: p, pack, now, onApply, err }: { patient: Patient; p
       <p>Check-ins: every <b>{fu.checkInEveryDays}</b> day(s) · Next review: <b>{fu.nextReviewDate ?? 'not set'}</b>{p.plan.followUp?.until && <> <small>(until {p.plan.followUp.until})</small></>}</p>
       <p>Progression: {p.plan.hold ? <b className="holdtag">On hold since {p.plan.hold.at.slice(0, 10)}</b> : 'not on hold'} {p.plan.hold && <button className="btn" onClick={() => onApply({ type: 'release-hold' })}>Remove hold</button>}</p>
       {err && <p className="err" role="alert">{err}</p>}
-      <details>
-        <summary>Audit log ({p.audit.length})</summary>
+      {(p.plan.instructions ?? []).length > 0 && (
+        <>
+          <h4>Your own instructions</h4>
+          <ul className="planlist">{(p.plan.instructions ?? []).map((x) => <li key={x.id}>{x.text}</li>)}</ul>
+        </>
+      )}
+      <details className="auditbox" data-testid="audit">
+        <summary className="btn" role="button">📋 Audit log ({p.audit.length}) · see every plan change</summary>
+        <p className="tiny">Every change to this patient's plan: who made it, when, what changed, and your written reason. It is saved on this device and cannot be edited.</p>
+        <button className="btn" disabled={p.audit.length === 0} onClick={() => downloadAudit(p)}>Download as CSV</button>
         {p.audit.length === 0 ? <p className="tiny">No plan changes yet.</p> : (
           <ul className="audit">{[...p.audit].reverse().map((a) => (
             <li key={a.id}><b>{a.at.slice(0, 16).replace('T', ' ')}</b> · {a.who}: {a.manual && <span className="src PHYSIO_OVERRIDE">physio-initiated</span>} {a.summary}{a.note ? <> <i>“{a.note}”</i></> : null}</li>))}</ul>
@@ -382,11 +437,12 @@ function OverridesCard({ patient: p, pack, onApply, err }: { patient: Patient; p
 }
 
 // ------------------------------------------------------------------ physio-initiated changes (Phase 5.4)
-type AdjustKind = 'add' | 'remove' | 'easier' | 'hold' | 'phase';
+type AdjustKind = 'add' | 'remove' | 'easier' | 'hold' | 'phase' | 'custom' | 'uncustom';
 function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
   const st = getState();
   const [kind, setKind] = useState<AdjustKind>('add');
   const [ex, setEx] = useState('');
+  const [text, setText] = useState('');
   const [toPhase, setToPhase] = useState('');
   const [reason, setReason] = useState('');
   const [ack, setAck] = useState(false);
@@ -409,12 +465,14 @@ function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
     return 'This skips a phase, so the protocol gate does not apply.';
   };
   const warn = warning();
-  const ready = !!reason.trim() && (!warn || ack) && (kind === 'hold' || (kind === 'phase' ? !!toPhase : !!ex));
+  const ready = !!reason.trim() && (!warn || ack) && (kind === 'hold' || (kind === 'phase' ? !!toPhase : kind === 'custom' ? !!text.trim() : !!ex));
 
   const action = (): PlanAction => {
     if (kind === 'add') return { type: 'set-exercises', add: [ex] };
     if (kind === 'remove') return { type: 'set-exercises', remove: [ex] };
     if (kind === 'easier') return { type: 'regress-exercise', exerciseId: ex };
+    if (kind === 'custom') return { type: 'add-instruction', text };
+    if (kind === 'uncustom') return { type: 'remove-instruction', id: ex };
     if (kind === 'hold') return p.plan.hold ? { type: 'release-hold' } : { type: 'hold-progression' };
     return { type: 'move-phase', toPhase, note: reason };
   };
@@ -422,7 +480,7 @@ function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
     try {
       updatePatient(p.id, (q) => applyManual(q, pack, action(), reason, { nowMs: now, today: st.today }));
       setErr(''); setDone('Done. The patient will see what changed on their screen. Your reason is saved in the audit log.');
-      setEx(''); setToPhase(''); setReason(''); setAck(false);
+      setEx(''); setText(''); setToPhase(''); setReason(''); setAck(false);
     } catch (e) { setErr((e as Error).message); setDone(''); }
   };
   return (
@@ -436,6 +494,8 @@ function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
           <option value="easier">Make an exercise easier</option>
           <option value="hold">{p.plan.hold ? 'Remove the hold on progression' : 'Put progression on hold'}</option>
           <option value="phase">Move to a phase</option>
+          <option value="custom">Other: write your own instruction</option>
+          {(p.plan.instructions ?? []).length > 0 && <option value="uncustom">Remove one of my own instructions</option>}
         </select>
         {kind === 'add' && (
           <select aria-label="Exercise to add" value={ex} onChange={(e) => setEx(e.target.value)}>
@@ -455,6 +515,15 @@ function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
             {cur.map((id) => { const to = getExercise(id)?.regressionId; return <option key={id} value={id} disabled={!to}>{exerciseName(id, 'en')}{to ? ` → ${exerciseName(to, 'en')}` : ' (no easier version yet: remove it and add another instead)'}</option>; })}
           </select>
         )}
+        {kind === 'custom' && (
+          <textarea aria-label="Your instruction for the patient" placeholder="e.g. Use a knee brace when walking outdoors. Avoid stairs until Friday." maxLength={400} rows={3} value={text} onChange={(e) => setText(e.target.value)} />
+        )}
+        {kind === 'uncustom' && (
+          <select aria-label="Instruction to remove" value={ex} onChange={(e) => setEx(e.target.value)}>
+            <option value="">Choose an instruction…</option>
+            {(p.plan.instructions ?? []).map((x) => <option key={x.id} value={x.id}>{x.text.slice(0, 80)}</option>)}
+          </select>
+        )}
         {kind === 'phase' && (
           <select aria-label="Phase to move to" value={toPhase} onChange={(e) => { setToPhase(e.target.value); setAck(false); }}>
             <option value="">Choose a phase…</option>
@@ -462,6 +531,7 @@ function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
           </select>
         )}
       </div>
+      {kind === 'custom' && <p className="tiny">The patient sees this text on their home screen and as a "what changed" notice. Your reason is not shown to them. It goes in the audit log.</p>}
       {kind === 'phase' && <p className="tiny">Moving phase resets this patient's exercise swaps and additions to the new phase's list.</p>}
       {warn && (
         <label className="check warnline" data-testid="adjust-warning"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} aria-label="I understand this overrides the protocol" /> {warn} I understand this overrides the protocol.</label>

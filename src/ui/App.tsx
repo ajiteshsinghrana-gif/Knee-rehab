@@ -7,6 +7,8 @@ import { decodeInvite } from '../onboarding';
 import { PatientView } from './Patient';
 import { Clinician } from './Clinician';
 import { getSyncStatus, subscribeSync } from '../sync/engine';
+import { isPatientDevice } from '../device';
+import { PatientShell } from './PatientShell';
 
 const route = (): 'patient' | 'clinician' => (window.location.hash === '#clinician' ? 'clinician' : 'patient');
 
@@ -20,6 +22,29 @@ function SyncChip() {
 }
 
 export function App() {
+  // The device kind is fixed when the page loads (main.tsx). A patient's phone never reaches the physio dashboard code path.
+  return isPatientDevice() ? <PatientApp /> : <DemoApp />;
+}
+
+function PatientApp() {
+  useEffect(() => {
+    // Invite link / QR code: #join=<code> adds this patient to the phone. Nothing else is on a patient device.
+    const join = () => {
+      const m = /^#join=(.+)$/.exec(window.location.hash);
+      if (!m) return;
+      const inv = decodeInvite(m[1]);
+      const st = getState();
+      if (inv) setState({ ...st, patients: st.patients.some((p) => p.id === inv.patient.id) ? st.patients : [...st.patients, inv.patient], customPacks: inv.pack && !(st.customPacks ?? []).some((c) => c.id === inv.pack!.id) ? [...(st.customPacks ?? []), inv.pack] : st.customPacks, activeId: inv.patient.id });
+      window.location.hash = 'patient';
+    };
+    join();
+    window.addEventListener('hashchange', join);
+    return () => window.removeEventListener('hashchange', join);
+  }, []);
+  return <PatientShell />;
+}
+
+function DemoApp() {
   const state = useSyncExternalStore(subscribe, getState);
   const [view, setView] = useState(route);
   useEffect(() => {
