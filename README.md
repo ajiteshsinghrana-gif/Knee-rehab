@@ -399,7 +399,7 @@ If step 1 is done without step 3 (or the reverse), the physio device shows "Sync
 
 **Password reset**: "Forgot password?" on the patient and physio sign-in. It emails a reset link; the page that opens asks for a new password.
 
-**Real dates**: patient phones always use the real date. The physio can switch to **real-clinic mode** under Clinic settings, which removes the six demo patients and uses today's date. The demo is unchanged until then.
+**Real dates**: patient phones and the live clinic always use the real date. The demo keeps its own demo calendar.
 
 **Turn it on**
 1. Supabase SQL Editor: run `supabase/schema-v4.sql` (after v1 to v3; safe to run again).
@@ -414,3 +414,20 @@ If step 1 is done without step 3 (or the reverse), the physio device shows "Sync
 - Not covered: breach notification process, children's data (verifiable parental consent for under-18s), a formal grievance workflow, audit of who read what, encryption beyond what Supabase provides, data kept in browser storage on shared devices, backups held by Supabase after erasure.
 - The retention default is a starting point, not advice. Hindi and Bengali strings are machine-drafted: **NEEDS_NATIVE_REVIEW**, and the notice needs legal review.
 - Prototype only. Do not use real patient data until a lawyer and the physio have signed off.
+
+
+## Demo and live clinic (Phase 6.5)
+
+One website, two modes that never share data:
+- **Demo** (the default): the six made-up patients, the demo bar, fast-forward. No cloud sync. Works exactly as before. A "Go to live clinic" button is on the demo bar.
+- **Live clinic**: the running app. Real patients only, real dates, cloud sync. Nothing is shown until the physio signs in. Tabs: *Physio dashboard* and *View as patient*. The preview shows a patient's phone screen exactly as they see it, **read-only** (the preview is inert: nothing tapped there changes the record).
+- Switch with the buttons at the top, or by opening `#live` or `#demo` on the site address.
+- The first time you open the live clinic, your real patients (the ones with a sync link) are carried over from the old shared store. Demo patients are never carried over. The demo and live stores are separate in the browser (`rehabpath-v1` and `rehabpath-live-v1`).
+
+**Patients**: a phone that opens an invite link (or `#signin`) becomes a patient device with its **own store** (`rehabpath-patient-v1`). It shows only that patient's screens, with no demo bar, no dashboard and no preview. Opening a patient's link on the physio's own browser also makes that browser a patient device; the physio's data is untouched, and `#reset-device` returns to the physio view. Use a private window to try links.
+
+**Patient link and QR code**: every patient card has a "Patient link and QR code" section at the top, available at any time (not just when the patient is created), with the claim PIN if one is set.
+
+**Limits**
+- Signing out of the live clinic hides the patients but their data stays in that browser's storage. On a shared computer, clear the site data.
+- The preview shows the patient's plan as the physio's computer has it, which is what the phone shows after a sync.

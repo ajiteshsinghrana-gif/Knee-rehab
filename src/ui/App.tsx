@@ -8,6 +8,9 @@ import { PatientView } from './Patient';
 import { Clinician } from './Clinician';
 import { getSyncStatus, subscribeSync } from '../sync/engine';
 import { isPatientDevice } from '../device';
+import { getMode, setMode } from '../mode';
+import { LoginCard } from './Login';
+import { isActive } from '../lifecycle';
 import { PatientShell } from './PatientShell';
 import { ResetPassword } from './ResetPassword';
 import { recoveryTokenFromHash } from '../sync/auth';
@@ -28,7 +31,7 @@ export function App() {
   useEffect(() => { if (recovery) window.history.replaceState(null, '', window.location.pathname + window.location.search); }, [recovery]);
   if (recovery) return <ResetPassword token={recovery} onDone={() => setRecovery(null)} />;
   // The device kind is fixed when the page loads (main.tsx). A patient's phone never reaches the physio dashboard code path.
-  return isPatientDevice() ? <PatientApp /> : <DemoApp />;
+  return isPatientDevice() ? <PatientApp /> : getMode() === 'live' ? <LiveApp /> : <DemoApp />;
 }
 
 function PatientApp() {
@@ -47,6 +50,59 @@ function PatientApp() {
     return () => window.removeEventListener('hashchange', join);
   }, []);
   return <PatientShell />;
+}
+
+/** The running app (Phase 6.5): real patients only, physio sign-in required, and a read-only preview of any patient's phone. */
+function LiveApp() {
+  const state = useSyncExternalStore(subscribe, getState);
+  const sync = useSyncExternalStore(subscribeSync, getSyncStatus);
+  const [view, setView] = useState<'physio' | 'preview'>('physio');
+  const [previewId, setPreviewId] = useState('');
+  const gated = sync.ready && sync.enabled && sync.auth && !sync.user; // nobody sees any patient until the physio signs in
+  const people = state.patients.filter(isActive);
+  const shown = people.find((p) => p.id === previewId) ?? people[0];
+  return (
+    <>
+      <div className="livebar" data-testid="live-bar">
+        <span className="tag live">LIVE CLINIC</span>
+        <span className="demotext">Real patients, real dates, saved to your account. Patients open only their own link on their own phone.</span>
+        <button className="btn" data-testid="to-demo" onClick={() => { setMode('demo'); window.location.reload(); }}>Switch to demo →</button>
+      </div>
+      {gated ? (
+        <main className="patientshell" data-testid="physio-gate">
+          <h2>Physio sign-in</h2>
+          <p>Sign in to see your patients. If you are a patient, open the link your physio sent you, or <a href="#signin" onClick={() => window.location.reload()}>sign in here</a>.</p>
+          <LoginCard />
+        </main>
+      ) : (
+        <>
+          <SyncChip />
+          <nav className="tabs">
+            <button className={view === 'physio' ? 'on' : ''} onClick={() => setView('physio')}>Physio dashboard</button>
+            <button className={view === 'preview' ? 'on' : ''} data-testid="preview-tab" onClick={() => setView('preview')}>View as patient</button>
+          </nav>
+          {view === 'physio' ? <Clinician state={state} /> : (
+            <section data-testid="preview">
+              {!shown ? <p className="card">No active patients yet. Add one on the Physio dashboard.</p> : (
+                <>
+                  <p className="previewbar" role="status">
+                    <label htmlFor="preview-patient">Preview</label>{' '}
+                    <select id="preview-patient" value={shown.id} onChange={(e) => setPreviewId(e.target.value)}>
+                      {people.map((p) => <option key={p.id} value={p.id}>{p.name} · {getPack(p.packId).condition.en}</option>)}
+                    </select>{' '}
+                    This is what {shown.name} sees on their phone. It is read-only: nothing you tap here changes their record.
+                  </p>
+                  <div className="previewwrap" ref={(el) => { if (el) el.setAttribute('inert', ''); }} aria-label={`Preview of ${shown.name}'s phone`}>
+                    <PatientView key={shown.id} patient={shown} />
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+        </>
+      )}
+    </>
+  );
 }
 
 function DemoApp() {
@@ -95,6 +151,7 @@ function DemoApp() {
         <span className="demobtns">
           <button className="btn primary" disabled={!s} onClick={fastForward}>⏩ Fast-forward ({Math.min(step + 1, DEMO_STEPS.length)}/{DEMO_STEPS.length})</button>
           <button className="btn" onClick={resetState}>↺ Reset</button>
+          <button className="btn" data-testid="to-live" onClick={() => { setMode('live'); window.location.reload(); }}>Go to live clinic →</button>
         </span>
       </div>
       <SyncChip />

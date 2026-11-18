@@ -99,3 +99,6 @@
 .safetybanner.sameday{background:#7a4a00}.auditbox>summary{display:inline-block;cursor:pointer;margin:6px 0}.physioins{background:#eef6ff;border-radius:12px;padding:8px 12px}
 .patientshell{max-width:520px;margin:0 auto;padding:16px}.acctbar{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 12px;background:#f2f4f7;font-size:.85rem;flex-wrap:wrap}
 .privnotice{background:#f6f8fa;border-radius:12px;padding:8px 12px;margin:8px 0;font-size:.9rem}.linkbtn{background:none;border:0;color:#0b5fff;text-decoration:underline;padding:6px 0;font-size:1rem;cursor:pointer}.mydata{margin:12px auto;max-width:520px;padding:8px 12px}
+.livebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:#0b3d2e;color:#fff}.livebar .tag.live{background:#19c37d;color:#04281d;border-radius:6px;padding:2px 8px;font-weight:700}.livebar .demotext{flex:1;font-size:.85rem}
+.previewbar{background:#fff7e0;border:1px solid #f0c36d;border-radius:12px;padding:8px 12px;margin:8px auto;max-width:560px;font-size:.9rem}
+.previewwrap{max-width:420px;margin:8px auto;border:6px solid #1c1c1e;border-radius:28px;overflow:hidden;pointer-events:none;user-select:none;background:#fff}
