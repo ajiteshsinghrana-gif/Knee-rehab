@@ -14,7 +14,7 @@ describe('onboarding (Phase 3.1)', () => {
   it('validates the form', () => {
     expect(validateOnboard({ ...base, name: ' ' }, '2026-11-15')).toContain('Enter the patient name');
     expect(validateOnboard({ ...base, anchorDate: '2027-01-01' }, '2026-11-15').join()).toMatch(/future/);
-    expect(validateOnboard({ ...base, exercises: [] }, '2026-11-15').join()).toMatch(/at least one/);
+    expect(validateOnboard({ ...base, exercises: [] }, '2026-11-15')).toEqual([]); // a phase may prescribe no listed exercises (Phase 6.8)
     expect(validateOnboard(base, '2026-11-15')).toEqual([]);
   });
   it('a default pack gives a plain plan, an empty history and an ON_PLAN start', () => {

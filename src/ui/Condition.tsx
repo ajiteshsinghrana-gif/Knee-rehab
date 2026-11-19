@@ -37,7 +37,7 @@ function BiField({ label, value, onChange, hint }: { label: string; value: Bi; o
 export function NewCondition({ onClose, onAddPatient, initial, initialNotes }: { onClose: () => void; onAddPatient: () => void; initial?: ConditionDraft; initialNotes?: string[] }) {
   const [d, setD] = useState<ConditionDraft>(() => initial ?? blankDraft(newConditionId(clockMs(getState()))));
   const [saved, setSaved] = useState('');
-  const [msg, setMsg] = useState(() => (initial ? 'Loaded the AI draft. Nothing is saved yet. Check every item against its quote, fix the Hindi, and fill the gaps below.' : ''));
+  const [msg, setMsg] = useState(() => (initial?.aiDraft ? 'Loaded the AI draft. Nothing is saved yet. Check every item against its quote, fix the Hindi, and fill the gaps below.' : ''));
   const up = (fn: (c: ConditionDraft) => void) => setD((x) => { const c: ConditionDraft = JSON.parse(JSON.stringify(x)); fn(c); return c; });
   const saved_q = getState().questionnaires ?? [];
   const loadQuestionnaire = async (f?: File) => {
@@ -112,7 +112,7 @@ export function NewCondition({ onClose, onAddPatient, initial, initialNotes }: {
     return (
       <section className="card condition" data-testid="condition-saved">
         <h2>{d.condition.en} saved</h2>
-        <p>This condition is now in your list. Add a patient to start using it. The patient sees all text in English and Hindi as you wrote it.</p>
+        <p>This condition is now in your list. Add a patient to start using it. The patient sees the text as you wrote it (English wording where Hindi was left blank).</p>
         {a && Object.values(a.source).some((s) => s === 'placeholder') && <p className="tiny">Some alert timings are placeholders. They are listed under "values awaiting physio sign-off" on every patient of this condition.</p>}
         <div className="btnrow"><button className="btn primary" onClick={onAddPatient}>+ Add a patient</button><button className="btn" onClick={onClose}>Close</button></div>
       </section>
@@ -122,7 +122,7 @@ export function NewCondition({ onClose, onAddPatient, initial, initialNotes }: {
   return (
     <section className="card condition" data-testid="condition">
       <div className="btnrow"><h2>Add a condition</h2><button className="btn" onClick={onClose}>Close</button></div>
-      <p className="tiny">Write the protocol yourself. Every clinical value is typed or approved by you. The app only runs it and flags drift. Patient-facing text must be written in English and Hindi. A saved condition cannot be edited; save a new version instead.</p>
+      <p className="tiny">Write the protocol yourself. Every clinical value is typed or approved by you. The app only runs it and flags drift. Write patient-facing text in English, Hindi or both: where one is left blank the patient sees the other. A saved condition cannot be edited; save a new version instead.</p>
       {msg && <p className={/^(Loaded|Saved|Added)/.test(msg) ? 'reviewed' : 'err'} role="alert">{msg}</p>}
       <div className="fu"><button className="btn" onClick={download}>Download draft</button><label className="filebtn">Load a draft file<input type="file" accept=".json,application/json" aria-label="Draft file" onChange={(e) => void load(e.target.files?.[0])} /></label></div>
 
@@ -150,7 +150,7 @@ export function NewCondition({ onClose, onAddPatient, initial, initialNotes }: {
       {d.exercises.map((x, i) => (
         <div className="subcard" key={x.id}>
           <BiField label={`Exercise ${i + 1} name`} value={x.name} onChange={(b) => up((c) => { c.exercises[i].name = b; })} />
-          <BiField label="Dose (optional, both languages)" value={x.doseText ?? blankBi()} onChange={(b) => up((c) => { c.exercises[i].doseText = b; })} hint="Left empty, the patient sees “as shown by your physio” and it is listed for sign-off." />
+          <BiField label="Dose (optional)" value={x.doseText ?? blankBi()} onChange={(b) => up((c) => { c.exercises[i].doseText = b; })} hint="Left empty, the patient sees “as shown by your physio” and it is listed for sign-off." />
           <button className="btn" onClick={() => removeExercise(x.id)}>Remove exercise</button>
         </div>))}
       <button className="btn" onClick={addExercise}>+ Write a new exercise</button>
@@ -160,7 +160,7 @@ export function NewCondition({ onClose, onAddPatient, initial, initialNotes }: {
         <div className="subcard" key={i}>
           <BiField label={`Phase ${i + 1} name`} value={p.name} onChange={(b) => up((c) => { c.phases[i].name = b; })} />
           <div className="formgrid">
-            <label>Sessions per day<input type="number" min={1} max={6} value={p.sessionsPerDay} onChange={(e) => up((c) => { c.phases[i].sessionsPerDay = Number(e.target.value); })} /></label>
+            <label>Sessions per day<input type="number" min={0} value={p.sessionsPerDay} onChange={(e) => up((c) => { c.phases[i].sessionsPerDay = Number(e.target.value); })} /></label>
             <label>Review every (days)<input type="number" min={1} max={60} value={p.followUpEveryDays} onChange={(e) => up((c) => { c.phases[i].followUpEveryDays = Number(e.target.value); })} /></label>
             <label>Expected weeks in phase: from<input type="number" min={0} value={p.weeksMin} onChange={(e) => up((c) => { c.phases[i].weeksMin = Number(e.target.value); })} /></label>
             <label>to (empty = open ended)<input type="number" min={0} value={p.weeksMax ?? ''} onChange={(e) => up((c) => { c.phases[i].weeksMax = numOrNull(e.target.value); })} /></label>

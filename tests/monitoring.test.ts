@@ -120,13 +120,13 @@ describe('questionnaires (Phase 4.2)', () => {
     expect(ids(triage(high, pack, { nowMs: NOW }))).toContain('Q1');
     delete PACKS['custom-q1'];
   });
-  it('is refused without permission, credit, or Hindi', () => {
+  it('is refused without permission or credit; a question with Hindi left blank is allowed (English is used)', () => {
     const d = qdraft('custom-q2');
-    d.questionnaire!.permission = false; d.questionnaire!.credit = ' '; d.questionnaire!.items[1].hi = ''; d.questionnaire!.options = [d.questionnaire!.options[0]];
+    d.questionnaire!.permission = false; d.questionnaire!.credit = ' '; d.questionnaire!.items[1] = { en: '', hi: '' }; d.questionnaire!.options = [d.questionnaire!.options[0]];
     const e = validateDraft(d).join(' | ');
     expect(e).toMatch(/tick that you have permission/);
     expect(e).toMatch(/credit line/);
-    expect(e).toMatch(/question 2: write it in English and Hindi/);
+    expect(e).toMatch(/question 2: write it/);
     expect(e).toMatch(/at least two answer options/);
     expect(() => buildConditionPack(d)).toThrow();
   });
@@ -169,8 +169,8 @@ describe('photo angle for written conditions (Phase 4.1)', () => {
   });
   it('refuses a photo measure with a missing point name', () => {
     const d = pdraft('custom-ph2');
-    d.measures[0].photo!.points[2].hi = '';
-    expect(validateDraft(d).join()).toMatch(/three points to tap on the photo in English and Hindi/);
+    d.measures[0].photo!.points[2] = { en: '', hi: '' };
+    expect(validateDraft(d).join()).toMatch(/three points to tap on the photo/);
   });
   it('without the tick box a measure stays a typed number', () => {
     const d = pdraft('custom-ph3'); delete d.measures[0].photo;

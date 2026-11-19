@@ -101,7 +101,7 @@ export function toDaily(d: Draft, p: Patient, date: string, opts: { answeredBy?:
     values: Object.fromEntries(Object.entries(d.values).map(([k, v]) => [k, v as Value])),
     exercises: ex,
     sessionsPrescribed: per,
-    sessionsDone: ex === 'all' ? per : ex === 'some' ? Math.max(1, per - 1) : 0,
+    sessionsDone: ex === 'all' ? per : ex === 'some' ? Math.min(per, Math.max(1, per - 1)) : 0,
     ...(ex !== 'all' && firstReason ? { skipReason: firstReason } : {}),
     ...(rs.length ? { exerciseResults: rs.map(([id, r]) => ({ id, done: r.done === true, ...(r.done === false && r.reason ? { reason: r.reason } : {}) })) } : {}),
     hardMovement: d.hardMovement!,

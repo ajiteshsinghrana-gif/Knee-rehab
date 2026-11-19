@@ -84,7 +84,7 @@ function adherence(p: Patient, d: string, windowDays: number): number {
   for (let i = 0; i < windowDays; i++) done += entryOn(p, addDays(d, -i))?.sessionsDone ?? 0;
   // A patient who joined mid-window is judged only on the days since they joined.
   const days = p.enrolledOn ? Math.min(windowDays, diffDays(d, careStart(p))) : windowDays;
-  if (days <= 0) return 1;
+  if (days <= 0 || !(p.sessionsPrescribedPerDay > 0)) return 1; // nothing prescribed, nothing missed
   return done / (p.sessionsPrescribedPerDay * days);
 }
 

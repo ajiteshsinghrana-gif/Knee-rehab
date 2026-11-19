@@ -173,7 +173,7 @@ export function draftFrom(ai: AiDraft, approved: Set<string>, newId: string, fil
   // The document rarely gives alert timings; they stay the project's placeholders, tagged NEEDS_PHYSIO_SIGNOFF.
   d.alerts = placeholderAlerts();
   notes.push('Alert timings (hours to respond, missed sessions, pain rising) are the project placeholders and will be listed for sign-off.');
-  if ([d.condition, d.anchorLabel, ...d.phases.map((p) => p.name), ...d.measures.map((m) => m.label), ...d.signs.map((s) => s.label)].some((b) => !b.hi)) notes.push('Some Hindi wording is missing. Patient-facing text must be in both languages.');
+  if ([d.condition, d.anchorLabel, ...d.phases.map((p) => p.name), ...d.measures.map((m) => m.label), ...d.signs.map((s) => s.label)].some((b) => !b.hi)) notes.push('Some Hindi wording is missing. Hindi patients will see the English wording there.');
   notes.push('The Hindi wording was written by AI. Have a Hindi-speaking clinician read it before patients use it.');
   d.aiDraft = { file: fileName, sources };
   return { draft: d, notes, sources };
