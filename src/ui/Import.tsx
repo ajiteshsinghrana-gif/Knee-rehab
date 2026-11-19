@@ -5,7 +5,7 @@ import { buildTemplate, catalogue, extract, type Ambiguous, type ExtractResult, 
 import { buildImportedPack } from '../import/apply';
 import { readFileText } from '../import/pdf';
 import { clockMs, getState, setState } from '../store';
-import { draftFrom, requestDraft, reviewOf, type AiDraft, type DraftReview } from '../import/draft';
+import { PASTE_PROMPT, draftFrom, parseDraftJson, requestDraft, reviewOf, type AiDraft, type DraftReview } from '../import/draft';
 import { newConditionId, type ConditionDraft } from '../author/condition';
 
 const show = (v: number | string[]) => (Array.isArray(v) ? (v.length ? v.map((id) => exerciseName(id, 'en')).join(', ') : 'none') : String(v));
@@ -26,6 +26,8 @@ export function ImportProtocol({ onClose, onDraft }: { onClose: () => void; onDr
   const [aiOk, setAiOk] = useState<Record<string, boolean>>({});
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState('');
+  const [pasted, setPasted] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const proposals: Proposal[] = useMemo(() => {
     if (!res) return [];
@@ -61,6 +63,19 @@ export function ImportProtocol({ onClose, onDraft }: { onClose: () => void; onDr
       setAiOk(Object.fromEntries(review.items.map((i) => [i.id, i.quoteFound]))); // only items whose quote is really in the file start ticked
     } catch (e) { setAiErr((e as Error).message); }
     setAiBusy(false);
+  };
+  const reviewPasted = () => {
+    setAiErr(''); setAi(null);
+    try {
+      const draft = parseDraftJson(pasted);
+      const review = reviewOf(draft, text);
+      setAi({ draft, review });
+      setAiOk(Object.fromEntries(review.items.map((i) => [i.id, i.quoteFound])));
+    } catch (e) { setAiErr((e as Error).message); }
+  };
+  const copyPrompt = async () => {
+    try { await navigator.clipboard.writeText(PASTE_PROMPT + '\n' + text); setCopied(true); setTimeout(() => setCopied(false), 3000); }
+    catch { setAiErr('Could not copy automatically. Select the text in the box and copy it yourself.'); }
   };
   const openDraft = () => {
     if (!ai || !onDraft) return;
@@ -100,6 +115,18 @@ export function ImportProtocol({ onClose, onDraft }: { onClose: () => void; onDr
       <p className="tiny">For a condition the app does not ship. An AI reads the text and proposes phases, exercises, measures, criteria, alerts and warning signs, each with the exact words it found. It adds nothing from its own knowledge. You tick what to keep, then check and edit everything in the condition editor. The AI never makes a decision about a patient.</p>
       {aiErr && <p className="err" role="alert">{aiErr}</p>}
       <div className="btnrow"><button className="btn" data-testid="ai-draft" disabled={!text.trim() || aiBusy} onClick={() => void draftWithAi()}>{aiBusy ? 'Reading the document…' : 'Draft a new condition (AI)'}</button></div>
+      <details className="subcard" data-testid="paste-json">
+        <summary><b>No server? Use any AI chat instead</b></summary>
+        <ol className="tiny">
+          <li>Tap <b>Copy prompt and document</b>.</li>
+          <li>Paste it into Claude (or another AI chat) and send.</li>
+          <li>Copy the JSON it replies with and paste it below, then tap <b>Review pasted JSON</b>.</li>
+        </ol>
+        <div className="btnrow"><button className="btn" disabled={!text.trim()} onClick={() => void copyPrompt()}>{copied ? 'Copied' : 'Copy prompt and document'}</button></div>
+        <textarea className="vtext" rows={5} placeholder="Paste the AI's JSON reply here" value={pasted} onChange={(e) => setPasted(e.target.value)} aria-label="Pasted draft JSON" />
+        <div className="btnrow"><button className="btn" disabled={!pasted.trim()} onClick={reviewPasted}>Review pasted JSON</button></div>
+        <p className="tiny">Same checks as above: each quote is matched against your file, and you tick every item before anything is used.</p>
+      </details>
       {ai && (
         <div data-testid="ai-review">
           <h3>Draft: {ai.review.headline} <small>({ai.review.items.length} item{ai.review.items.length === 1 ? '' : 's'} found)</small></h3>

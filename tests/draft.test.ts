@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { draftFrom, quoteInText, requestDraft, reviewOf, type AiDraft } from '../src/import/draft';
+import { PASTE_PROMPT, draftFrom, parseDraftJson, quoteInText, requestDraft, reviewOf, type AiDraft } from '../src/import/draft';
 import { buildConditionPack, validateDraft } from '../src/author/condition';
 import { PACKS } from '../src/engine/packs';
 import { unregisterExercise } from '../src/exercises/library';
@@ -94,5 +94,18 @@ describe('AI protocol drafting (reader only, physio approves)', () => {
     expect(await msg(noConfig)).toMatch(/clinic connection/);
     expect(await msg(withConfig)).toMatch(/Sign in/);
     expect(urls.some((u) => u.includes('/functions/v1/'))).toBe(false);
+  });
+
+  it('reads pasted JSON from an AI chat: code fences and a wrapper are fine, junk is refused', () => {
+    const body = JSON.stringify(ai());
+    expect(parseDraftJson('Here you go:\n```json\n' + body + '\n```').phases).toHaveLength(2);
+    expect(parseDraftJson(JSON.stringify({ draft: ai() })).phases).toHaveLength(2);
+    expect(() => parseDraftJson('no json here')).toThrow(/not JSON/);
+    expect(() => parseDraftJson('{"phases": [oops}')).toThrow(/damaged/);
+    expect(() => parseDraftJson('{"condition": {}}')).toThrow(/phases/);
+    // the same quote check applies to pasted JSON
+    const r = reviewOf(parseDraftJson(body), DOC);
+    expect(r.items.find((i) => i.kind === 'rule')!.quoteFound).toBe(false);
+    expect(PASTE_PROMPT).toContain('ONLY what the document explicitly states');
   });
 });

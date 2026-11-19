@@ -179,6 +179,41 @@ export function draftFrom(ai: AiDraft, approved: Set<string>, newId: string, fil
   return { draft: d, notes, sources };
 }
 
+/** The same job done by hand: the physio gives this prompt and the document to Claude (or any AI chat) and pastes the JSON answer back. No server needed. */
+export const PASTE_PROMPT = `You are helping a physiotherapist turn a clinical protocol document into a structured DRAFT for review. You are a reader, not a clinician.
+Rules:
+- Extract ONLY what the document explicitly states. Add nothing from your own medical knowledge.
+- Every item needs a "quote": exact words copied from the document (max 300 characters). If you cannot quote it, leave the item out.
+- If a number is not in the document, use null or leave the item out. Never guess a number.
+- Anything a protocol normally needs that the document does not give goes in "notStated".
+- Use only criteria a patient can measure at home or report (angle, distance, weight, a score, pain 0-10). Pain 0-10 is built in and its measure id is "pain". Other measures get ids m1, m2, ...
+- Give Hindi (Devanagari) for patient-facing wording. A physio will check it.
+- Reply with ONE JSON object only, no other text, in exactly this shape:
+{"condition":{"en":"","hi":""},"anchorLabel":{"en":"after surgery","hi":"सर्जरी के बाद"},"population":"",
+"phases":[{"name":{"en":"","hi":""},"weeksMin":0,"weeksMax":4,"sessionsPerDay":null,"followUpEveryDays":null,"exercises":[{"name":{"en":"","hi":""}}],"quote":""}],
+"measures":[{"id":"m1","label":{"en":"","hi":""},"unit":"deg","min":0,"max":180,"step":1,"quote":""}],
+"gates":[{"fromPhase":1,"measure":"pain","operator":"<=","value":3,"quote":""}],
+"rules":[{"measure":"pain","operator":">=","value":8,"tier":"REVIEW","quote":""}],
+"signs":[{"label":{"en":"","hi":""},"tier":"URGENT","quote":""}],
+"precautions":[{"label":{"en":"","hi":""},"question":{"en":"","hi":""},"phases":[1],"quote":""}],
+"notStated":[""]}
+(operator is one of >= > <= < == != ; tier is REVIEW or URGENT; fromPhase and phases are 1-based phase numbers.)
+The document follows.
+`;
+
+/** Reads the JSON a physio pasted back. Accepts code fences and a {"draft": {...}} wrapper. Anything else is refused, never repaired. */
+export function parseDraftJson(raw: string): AiDraft {
+  let t = raw.trim().replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim();
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a < 0 || b <= a) throw new Error('That is not JSON. Paste the whole reply from the AI, from { to }.');
+  t = t.slice(a, b + 1);
+  let x: unknown;
+  try { x = JSON.parse(t); } catch { throw new Error('That JSON is damaged (it could not be read). Ask the AI to reply again with JSON only.'); }
+  const o = (x && typeof x === 'object' && 'draft' in (x as object) ? (x as { draft: unknown }).draft : x) as AiDraft;
+  if (!o || typeof o !== 'object' || Array.isArray(o) || !Array.isArray(o.phases)) throw new Error('That JSON has no "phases" list, so it is not a protocol draft.');
+  return o;
+}
+
 /** Asks the server function to draft a protocol. Needs a signed-in physio (the server refuses anyone else). */
 export async function requestDraft(text: string, fileName: string, fetchFn: FetchFn = fetch): Promise<AiDraft> {
   const c = await loadConfig(fetchFn);
