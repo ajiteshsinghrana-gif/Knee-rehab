@@ -7,7 +7,7 @@ import { collectSignoffs } from '../src/engine/signoff';
 import { buildPatient, decodeInvite, encodeInvite } from '../src/onboarding';
 import { evaluateGate } from '../src/engine/gates';
 import { triage } from '../src/engine/triage';
-import { currentExercises } from '../src/engine/plan';
+import { applyManual, currentExercises } from '../src/engine/plan';
 import { dailyEntry } from '../src/demo/seed';
 import { addDays, toMs } from '../src/engine/dates';
 import { ids } from './helpers';
@@ -101,7 +101,7 @@ describe('physio-written condition (Phase 3.3)', () => {
     d.phases[1].exercises = [];
     const e = validateDraft(d).join(' | ');
     expect(e).toMatch(/Name the condition in English and Hindi/);
-    expect(e).toMatch(/Phase 1 to 2: add at least one criterion/);
+    expect(e).not.toMatch(/add at least one criterion/); // a phase change without criteria is allowed (Phase 6.7)
     expect(e).toMatch(/Set the alert timings/);
     expect(e).toMatch(/Phase 2: choose at least one exercise/);
     expect(() => buildConditionPack(d)).toThrow();
@@ -135,6 +135,19 @@ describe('physio-written condition (Phase 3.3)', () => {
     expect(PACKS['custom-t9']).toBeDefined();
     expect(getExercise('custom-t9-e2')).toBeDefined();
     cleanup('custom-t9');
+  });
+  it('a multi-phase condition with no gate criteria saves; the physio moves patients on himself (Phase 6.7)', () => {
+    const d = draft('custom-t12');
+    d.gates = [];
+    expect(validateDraft(d)).toEqual([]);
+    const pack = buildConditionPack(d);
+    expect(pack.gates).toHaveLength(0);
+    expect(pack.rules.map((r) => r.id)).not.toContain('A6');
+    const p = patientOn('custom-t12');
+    expect(evaluateGate(p, pack, '2026-11-15')).toBeNull(); // no "ready for next phase" without criteria
+    const moved = applyManual(p, pack, { type: 'move-phase', toPhase: 'p2' }, 'Clinical review: ready to progress', { nowMs: NOW, today: '2026-11-15' });
+    expect(moved.currentPhase).toBe('p2');
+    cleanup('custom-t12');
   });
   it('a condition with one phase and no gates is allowed', () => {
     const d = draft('custom-t10');

@@ -3,7 +3,7 @@ import type { Bi, Operator } from '../types';
 import { LIBRARY } from '../exercises/library';
 import { PACKS } from '../engine/packs';
 import {
-  PAIN_ID, draftAsNewVersion, fatDraft, questionnaireFromFile, blankBi, blankDraft, buildConditionPack, newConditionId, placeholderAlerts, validateDraft,
+  PAIN_ID, draftAsNewVersion, ungatedChanges, fatDraft, questionnaireFromFile, blankBi, blankDraft, buildConditionPack, newConditionId, placeholderAlerts, validateDraft,
   type AlertGroup, type Alerts, type ConditionDraft,
 } from '../author/condition';
 import { clockMs, getState, setState } from '../store';
@@ -310,6 +310,7 @@ export function NewCondition({ onClose, onAddPatient, initial, initialNotes }: {
         </div>))}
 
       <h3>8. Check and save</h3>
+      {ungatedChanges(d).length > 0 && <p className="tiny" data-testid="ungated-note">No criteria set for: {ungatedChanges(d).map((i) => `phase ${i + 1} to ${i + 2}`).join(', ')}. That is allowed. You will move patients on yourself with “Move to a phase”, and the app will not show “ready for the next phase” there.</p>}
       {problems.length ? <><p>To fix before saving:</p><ul className="audit" data-testid="condition-problems">{problems.map((p, i) => <li key={i}>{p}</li>)}</ul></> : <p className="reviewed">Everything needed is filled in. The protocol is checked again by the same safety validator as the built-in conditions when you save.</p>}
       <div className="btnrow"><button className="btn primary" disabled={problems.length > 0 || !!PACKS[d.id]} onClick={save}>Save condition</button></div>
     </section>

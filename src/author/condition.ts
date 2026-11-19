@@ -114,6 +114,9 @@ const bi = (b?: Bi) => !!b && b.en.trim().length > 0 && b.hi.trim().length > 0;
 const num = (n: unknown) => typeof n === 'number' && Number.isFinite(n);
 const phaseId = (i: number) => `p${i + 1}`;
 
+/** Phase changes that have no criteria (not an error: the physio moves those patients on himself). */
+export const ungatedChanges = (d: ConditionDraft): number[] => d.phases.slice(0, -1).map((_, i) => i).filter((i) => !d.gates.find((x) => x.from === i)?.criteria.length);
+
 /** Plain-language problems the physio can fix. The pack validator still has the last word. */
 export function validateDraft(d: ConditionDraft): string[] {
   const e: string[] = [];
@@ -146,8 +149,9 @@ export function validateDraft(d: ConditionDraft): string[] {
   };
   for (let i = 0; i < d.phases.length - 1; i++) {
     const g = d.gates.find((x) => x.from === i);
-    if (!g || !g.criteria.length) e.push(`Phase ${i + 1} to ${i + 2}: add at least one criterion, otherwise the app cannot prepare a sign-off`);
-    else g.criteria.forEach((c, k) => crit(c, `Phase ${i + 1} to ${i + 2}, criterion ${k + 1}`));
+    // A phase change with no criteria is allowed: many protocols give none. The physio then moves the patient on himself
+    // ("Move to a phase", reason recorded in the audit log) and the app prepares no "ready for next phase" sign-off.
+    g?.criteria.forEach((c, k) => crit(c, `Phase ${i + 1} to ${i + 2}, criterion ${k + 1}`));
   }
   d.rules.forEach((r, i) => { crit(r, `Alert rule ${i + 1}`); if (r.tier !== 'REVIEW' && r.tier !== 'URGENT') e.push(`Alert rule ${i + 1}: choose REVIEW or URGENT`); });
   d.precautions.forEach((p, i) => {
