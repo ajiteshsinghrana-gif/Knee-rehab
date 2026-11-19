@@ -39,7 +39,6 @@ export function validateOnboard(d: OnboardDraft, today: string): string[] {
   else if (d.anchorDate > today) e.push('The surgery date cannot be in the future');
   const pack = PACKS[d.packId];
   if (pack && !pack.phases.some((p) => p.id === d.phaseId)) e.push('Choose a phase');
-  if (!d.exercises.length) e.push('Choose at least one exercise');
   if (d.exercises.some((id) => !getExercise(id))) e.push('Unknown exercise in the list');
   if (!(d.checkInEveryDays >= 1 && d.checkInEveryDays <= 14)) e.push('Check-ins must be every 1 to 14 days');
   if (!(d.reviewEveryDays >= 1 && d.reviewEveryDays <= 60)) e.push('Reviews must be every 1 to 60 days');

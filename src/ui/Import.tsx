@@ -6,15 +6,17 @@ import { buildImportedPack } from '../import/apply';
 import { readFileText } from '../import/pdf';
 import { clockMs, getState, setState } from '../store';
 import { PASTE_PROMPT, draftFrom, parseDraftJson, requestDraft, reviewOf, type AiDraft, type DraftReview } from '../import/draft';
-import { newConditionId, type ConditionDraft } from '../author/condition';
+import { blankDraft, newConditionId, type ConditionDraft } from '../author/condition';
 
+const NEW = '__new__';
 const show = (v: number | string[]) => (Array.isArray(v) ? (v.length ? v.map((id) => exerciseName(id, 'en')).join(', ') : 'none') : String(v));
 
 /** Phase 3.2: physio uploads a file or pastes text; each imported value is reviewed next to the default and approved one by one. */
 export function ImportProtocol({ onClose, onDraft }: { onClose: () => void; onDraft?: (d: ConditionDraft, notes: string[]) => void }) {
   const packs = Object.values(PACKS).filter((p) => !p.basedOn && !p.authored);
-  const [baseId, setBaseId] = useState(packs[0].id);
-  const base = PACKS[baseId];
+  const [baseId, setBaseId] = useState(NEW);
+  const isNew = baseId === NEW;
+  const base = PACKS[isNew ? packs[0].id : baseId]; // for a new condition the number-matching reader is not used
   const [text, setText] = useState('');
   const [fileName, setFileName] = useState('');
   const [res, setRes] = useState<ExtractResult | null>(null);
@@ -103,19 +105,20 @@ export function ImportProtocol({ onClose, onDraft }: { onClose: () => void; onDr
       <p className="tiny">Upload a PDF, .txt, .md, .csv or .json file, or paste text. Nothing is applied until you approve each value. Imported values are tagged PHYSIO_IMPORTED with the file name. No AI is used.</p>
       {done && <p className="reviewed" role="status">{done}</p>}
       {msg && <p className="err" role="alert">{msg}</p>}
-      <label>Start from <select value={baseId} onChange={(e) => { setBaseId(e.target.value); setRes(null); }} aria-label="Base protocol">{packs.map((p) => <option key={p.id} value={p.id}>{p.condition.en}</option>)}</select></label>
+      <label>Start from <select value={baseId} onChange={(e) => { setBaseId(e.target.value); setRes(null); }} aria-label="Base protocol"><option value={NEW}>New condition (any illness)</option>{packs.map((p) => <option key={p.id} value={p.id}>Change numbers in: {p.condition.en}</option>)}</select></label>
       <div className="fu">
         <input type="file" accept=".pdf,.txt,.md,.csv,.json,text/plain,application/pdf,application/json" onChange={(e) => void onFile(e.target.files?.[0])} aria-label="Protocol file" />
-        <button className="btn" onClick={download}>Download template</button>
+        {!isNew && <button className="btn" onClick={download}>Download template</button>}
       </div>
       <textarea className="vtext" rows={6} placeholder={'Paste protocol text, e.g.\nR3 high pain weeks 0-2 [rule:R3:stage:0]: 8\nPhase 1 exercises: quad sets, heel slides'} value={text} onChange={(e) => { setText(e.target.value); if (fileName && !e.target.value) setFileName(''); }} aria-label="Protocol text" />
-      <div className="btnrow"><button className="btn primary" disabled={!text.trim()} onClick={read}>Read protocol</button></div>
+      {!isNew && <div className="btnrow"><button className="btn primary" disabled={!text.trim()} onClick={read}>Read protocol</button></div>}
+      {isNew && onDraft && <div className="btnrow"><button className="btn" data-testid="blank-condition" onClick={() => onDraft(blankDraft(newConditionId(clockMs(getState()))), [])}>Start a blank condition (no file)</button></div>}
 
-      <h3>Or draft a new condition from this file</h3>
+      <h3>{isNew ? 'Draft the new condition from this file' : 'Or draft a new condition from this file'}</h3>
       <p className="tiny">For a condition the app does not ship. An AI reads the text and proposes phases, exercises, measures, criteria, alerts and warning signs, each with the exact words it found. It adds nothing from its own knowledge. You tick what to keep, then check and edit everything in the condition editor. The AI never makes a decision about a patient.</p>
       {aiErr && <p className="err" role="alert">{aiErr}</p>}
       <div className="btnrow"><button className="btn" data-testid="ai-draft" disabled={!text.trim() || aiBusy} onClick={() => void draftWithAi()}>{aiBusy ? 'Reading the document…' : 'Draft a new condition (AI)'}</button></div>
-      <details className="subcard" data-testid="paste-json">
+      <details className="subcard" data-testid="paste-json" open={isNew}>
         <summary><b>No server? Use any AI chat instead</b></summary>
         <ol className="tiny">
           <li>Tap <b>Copy prompt and document</b>.</li>
@@ -147,7 +150,7 @@ export function ImportProtocol({ onClose, onDraft }: { onClose: () => void; onDr
         </div>
       )}
 
-      {res && (
+      {res && !isNew && (
         <div data-testid="import-review">
           <h3>Review <small>({proposals.length} change{proposals.length === 1 ? '' : 's'} found; untouched fields keep the default)</small></h3>
           {proposals.length > 0 && (

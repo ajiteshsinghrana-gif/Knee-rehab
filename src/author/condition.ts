@@ -110,32 +110,45 @@ export const blankDraft = (id: string): ConditionDraft => ({
 export const PAIN_ID = 'pain';
 export const QSCORE_ID = 'qscore';
 const OPS: Operator[] = ['>=', '>', '<=', '<', '==', '!='];
-const bi = (b?: Bi) => !!b && b.en.trim().length > 0 && b.hi.trim().length > 0;
+/** Wording is present when at least one language is written. A missing language falls back to the other (see fillLanguages). */
+const bi = (b?: Bi) => !!b && (b.en.trim().length > 0 || b.hi.trim().length > 0);
+/** Gives every {en, hi} pair in a draft both languages: a blank one is copied from the other, so the pack validator and the patient never see an empty line. */
+export function fillLanguages<T>(x: T): T {
+  if (Array.isArray(x)) return x.map(fillLanguages) as unknown as T;
+  if (x && typeof x === 'object') {
+    const o = x as Record<string, unknown>;
+    if (typeof o.en === 'string' && typeof o.hi === 'string') { const en = o.en.trim(), hi = o.hi.trim(); return { ...o, en: en || hi, hi: hi || en } as T; }
+    return Object.fromEntries(Object.entries(o).map(([k, v]) => [k, fillLanguages(v)])) as T;
+  }
+  return x;
+}
 const num = (n: unknown) => typeof n === 'number' && Number.isFinite(n);
 const phaseId = (i: number) => `p${i + 1}`;
+
+/** Phase changes that have no criteria (not an error: the physio moves those patients on himself). */
+export const ungatedChanges = (d: ConditionDraft): number[] => d.phases.slice(0, -1).map((_, i) => i).filter((i) => !d.gates.find((x) => x.from === i)?.criteria.length);
 
 /** Plain-language problems the physio can fix. The pack validator still has the last word. */
 export function validateDraft(d: ConditionDraft): string[] {
   const e: string[] = [];
-  if (!bi(d.condition)) e.push('Name the condition in English and Hindi');
-  if (!bi(d.anchorLabel)) e.push('Say what day zero is (for example "after surgery") in English and Hindi');
+  if (!bi(d.condition)) e.push('Name the condition (in English or Hindi)');
+  if (!bi(d.anchorLabel)) e.push('Say what day zero is (for example "after surgery")');
   if (!d.phases.length) e.push('Add at least one phase');
   const exIds = new Set(d.exercises.map((x) => x.id));
-  d.exercises.forEach((x, i) => { if (!bi(x.name)) e.push(`New exercise ${i + 1}: name it in English and Hindi`); if (x.doseText && (x.doseText.en.trim() || x.doseText.hi.trim()) && !bi(x.doseText)) e.push(`New exercise ${i + 1}: write the dose in both languages, or leave both empty`); });
+  d.exercises.forEach((x, i) => { if (!bi(x.name)) e.push(`New exercise ${i + 1}: give it a name`); });
   d.phases.forEach((p, i) => {
     const n = `Phase ${i + 1}`;
-    if (!bi(p.name)) e.push(`${n}: name it in English and Hindi`);
-    if (!p.exercises.length) e.push(`${n}: choose at least one exercise`);
+    if (!bi(p.name)) e.push(`${n}: give it a name`);
     if (p.exercises.some((id) => !exIds.has(id) && !getExercise(id))) e.push(`${n}: unknown exercise`);
-    if (!(p.sessionsPerDay >= 1 && p.sessionsPerDay <= 6)) e.push(`${n}: sessions per day must be 1 to 6`);
+    if (!(Number.isFinite(p.sessionsPerDay) && p.sessionsPerDay >= 0)) e.push(`${n}: sessions per day must be a number, 0 or more`);
     if (!(p.followUpEveryDays >= 1 && p.followUpEveryDays <= 60)) e.push(`${n}: review every 1 to 60 days`);
     if (!(p.weeksMin >= 0) || (p.weeksMax !== null && !(p.weeksMax >= p.weeksMin))) e.push(`${n}: expected weeks must be from-to with from not above to`);
   });
   const mids = new Set<string>([PAIN_ID]);
   d.measures.forEach((m, i) => {
-    if (!bi(m.label)) e.push(`Measure ${i + 1}: name it in English and Hindi (this is what the patient is asked)`);
+    if (!bi(m.label)) e.push(`Measure ${i + 1}: name it (this is what the patient is asked)`);
     if (!m.unit.trim()) e.push(`Measure ${i + 1}: enter a unit`);
-    if (m.photo && (!['between', 'deviation'].includes(m.photo.reading) || m.photo.points?.length !== 3 || m.photo.points.some((x) => !bi(x)))) e.push(`Measure ${i + 1}: name the three points to tap on the photo in English and Hindi`);
+    if (m.photo && (!['between', 'deviation'].includes(m.photo.reading) || m.photo.points?.length !== 3 || m.photo.points.some((x) => !bi(x)))) e.push(`Measure ${i + 1}: name the three points to tap on the photo`);
     if (![m.min, m.max, m.step].every(num) || !(m.max > m.min) || !(m.step > 0)) e.push(`Measure ${i + 1}: needs a minimum below the maximum and a step above 0`);
     mids.add(m.id);
   });
@@ -146,12 +159,13 @@ export function validateDraft(d: ConditionDraft): string[] {
   };
   for (let i = 0; i < d.phases.length - 1; i++) {
     const g = d.gates.find((x) => x.from === i);
-    if (!g || !g.criteria.length) e.push(`Phase ${i + 1} to ${i + 2}: add at least one criterion, otherwise the app cannot prepare a sign-off`);
-    else g.criteria.forEach((c, k) => crit(c, `Phase ${i + 1} to ${i + 2}, criterion ${k + 1}`));
+    // A phase change with no criteria is allowed: many protocols give none. The physio then moves the patient on himself
+    // ("Move to a phase", reason recorded in the audit log) and the app prepares no "ready for next phase" sign-off.
+    g?.criteria.forEach((c, k) => crit(c, `Phase ${i + 1} to ${i + 2}, criterion ${k + 1}`));
   }
   d.rules.forEach((r, i) => { crit(r, `Alert rule ${i + 1}`); if (r.tier !== 'REVIEW' && r.tier !== 'URGENT') e.push(`Alert rule ${i + 1}: choose REVIEW or URGENT`); });
   d.precautions.forEach((p, i) => {
-    if (!bi(p.label) || !bi(p.question)) e.push(`Restricted movement ${i + 1}: write the name and the question in English and Hindi`);
+    if (!bi(p.label) || !bi(p.question)) e.push(`Restricted movement ${i + 1}: write the name and the question`);
     if (!p.phases.length) e.push(`Restricted movement ${i + 1}: choose the phases it applies to`);
   });
   const seenCurve = new Set<string>();
@@ -170,16 +184,16 @@ export function validateDraft(d: ConditionDraft): string[] {
   });
   const q = d.questionnaire;
   if (q) {
-    if (!bi(q.title) || !bi(q.intro)) e.push('Questionnaire: write the title and the introduction in English and Hindi');
+    if (!bi(q.title) || !bi(q.intro)) e.push('Questionnaire: write the title and the introduction');
     if (!q.items.length) e.push('Questionnaire: add at least one question');
-    q.items.forEach((it, i) => { if (!bi(it)) e.push(`Questionnaire question ${i + 1}: write it in English and Hindi`); });
+    q.items.forEach((it, i) => { if (!bi(it)) e.push(`Questionnaire question ${i + 1}: write it`); });
     if (q.options.length < 2) e.push('Questionnaire: add at least two answer options');
-    q.options.forEach((o, i) => { if (!bi(o.label) || !num(o.value)) e.push(`Questionnaire option ${i + 1}: needs a score and wording in English and Hindi`); });
+    q.options.forEach((o, i) => { if (!bi(o.label) || !num(o.value)) e.push(`Questionnaire option ${i + 1}: needs a score and wording`); });
     if (!q.credit.trim()) e.push('Questionnaire: write who it is by and the terms of use (the credit line)');
     if (!q.permission) e.push('Questionnaire: tick that you have permission to use it');
     if (q.alert && (!OPS.includes(q.alert.operator) || !num(q.alert.value))) e.push('Questionnaire alert: choose a comparison and a number');
   }
-  d.signs.forEach((s, i) => { if (!bi(s.label)) e.push(`Extra warning sign ${i + 1}: write it in English and Hindi`); });
+  d.signs.forEach((s, i) => { if (!bi(s.label)) e.push(`Extra warning sign ${i + 1}: write it`); });
   const a = d.alerts;
   if (!a) e.push('Set the alert timings, or choose "Use placeholder values (needs sign-off)"');
   else {
@@ -215,7 +229,8 @@ function exerciseRecord(x: ExerciseDraft, packId: string, usedIn: string[]): Exe
 }
 
 /** Register the draft's own exercises in the shared library (idempotent). Returns the ids it added. */
-export function registerDraftExercises(d: ConditionDraft): string[] {
+export function registerDraftExercises(draft: ConditionDraft): string[] {
+  const d = fillLanguages(draft);
   const added: string[] = [];
   for (const x of d.exercises) {
     if (getExercise(x.id)) continue;
@@ -226,9 +241,10 @@ export function registerDraftExercises(d: ConditionDraft): string[] {
   return added;
 }
 
-export function buildConditionPack(d: ConditionDraft): ProtocolPack {
-  const problems = validateDraft(d);
+export function buildConditionPack(typed: ConditionDraft): ProtocolPack {
+  const problems = validateDraft(typed);
   if (problems.length) throw new Error(problems[0]);
+  const d = fillLanguages(typed); // what the physio left blank in one language is copied from the other
   const a = d.alerts!;
   const tag = (g: AlertGroup) => (a.source[g] === 'placeholder' ? NEEDS_SIGNOFF : AUTHORED_TAG);
   const mlabel = (id: string): Bi => (id === PAIN_ID ? { en: 'Pain', hi: 'दर्द' } : d.measures.find((m) => m.id === id)!.label);
@@ -273,7 +289,7 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
 
   const pack: ProtocolPack = {
     id: d.id,
-    authored: JSON.parse(JSON.stringify(d)),
+    authored: JSON.parse(JSON.stringify(typed)),
     condition: { en: d.condition.en.trim(), hi: d.condition.hi.trim() },
     population: d.population.trim() || 'Written by the treating physio. Every clinical value was entered or approved by the physio.',
     version: `${d.version ?? 1}.0.0-physio-authored`,
