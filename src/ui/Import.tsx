@@ -4,12 +4,14 @@ import { exerciseName } from '../exercises/library';
 import { buildTemplate, catalogue, extract, type Ambiguous, type ExtractResult, type Proposal } from '../import/extract';
 import { buildImportedPack } from '../import/apply';
 import { readFileText } from '../import/pdf';
-import { getState, setState } from '../store';
+import { clockMs, getState, setState } from '../store';
+import { PASTE_PROMPT, draftFrom, parseDraftJson, requestDraft, reviewOf, type AiDraft, type DraftReview } from '../import/draft';
+import { newConditionId, type ConditionDraft } from '../author/condition';
 
 const show = (v: number | string[]) => (Array.isArray(v) ? (v.length ? v.map((id) => exerciseName(id, 'en')).join(', ') : 'none') : String(v));
 
 /** Phase 3.2: physio uploads a file or pastes text; each imported value is reviewed next to the default and approved one by one. */
-export function ImportProtocol({ onClose }: { onClose: () => void }) {
+export function ImportProtocol({ onClose, onDraft }: { onClose: () => void; onDraft?: (d: ConditionDraft, notes: string[]) => void }) {
   const packs = Object.values(PACKS).filter((p) => !p.basedOn && !p.authored);
   const [baseId, setBaseId] = useState(packs[0].id);
   const base = PACKS[baseId];
@@ -20,6 +22,12 @@ export function ImportProtocol({ onClose }: { onClose: () => void }) {
   const [picked, setPicked] = useState<Record<number, string>>({});
   const [msg, setMsg] = useState('');
   const [done, setDone] = useState('');
+  const [ai, setAi] = useState<{ draft: AiDraft; review: DraftReview } | null>(null);
+  const [aiOk, setAiOk] = useState<Record<string, boolean>>({});
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState('');
+  const [pasted, setPasted] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const proposals: Proposal[] = useMemo(() => {
     if (!res) return [];
@@ -45,6 +53,35 @@ export function ImportProtocol({ onClose }: { onClose: () => void }) {
   const download = () => {
     const url = URL.createObjectURL(new Blob([buildTemplate(base)], { type: 'text/plain' }));
     const a = document.createElement('a'); a.href = url; a.download = `${base.id}-template.txt`; a.click(); URL.revokeObjectURL(url);
+  };
+  const draftWithAi = async () => {
+    setAiBusy(true); setAiErr(''); setAi(null);
+    try {
+      const draft = await requestDraft(text, fileName || 'pasted text');
+      const review = reviewOf(draft, text);
+      setAi({ draft, review });
+      setAiOk(Object.fromEntries(review.items.map((i) => [i.id, i.quoteFound]))); // only items whose quote is really in the file start ticked
+    } catch (e) { setAiErr((e as Error).message); }
+    setAiBusy(false);
+  };
+  const reviewPasted = () => {
+    setAiErr(''); setAi(null);
+    try {
+      const draft = parseDraftJson(pasted);
+      const review = reviewOf(draft, text);
+      setAi({ draft, review });
+      setAiOk(Object.fromEntries(review.items.map((i) => [i.id, i.quoteFound])));
+    } catch (e) { setAiErr((e as Error).message); }
+  };
+  const copyPrompt = async () => {
+    try { await navigator.clipboard.writeText(PASTE_PROMPT + '\n' + text); setCopied(true); setTimeout(() => setCopied(false), 3000); }
+    catch { setAiErr('Could not copy automatically. Select the text in the box and copy it yourself.'); }
+  };
+  const openDraft = () => {
+    if (!ai || !onDraft) return;
+    const kept = new Set(Object.keys(aiOk).filter((k) => aiOk[k]));
+    const { draft, notes } = draftFrom(ai.draft, kept, newConditionId(clockMs(getState())), fileName || 'pasted text');
+    onDraft(draft, notes);
   };
   const approvedList = proposals.filter((p) => ok[p.target]);
   const create = () => {
@@ -73,6 +110,42 @@ export function ImportProtocol({ onClose }: { onClose: () => void }) {
       </div>
       <textarea className="vtext" rows={6} placeholder={'Paste protocol text, e.g.\nR3 high pain weeks 0-2 [rule:R3:stage:0]: 8\nPhase 1 exercises: quad sets, heel slides'} value={text} onChange={(e) => { setText(e.target.value); if (fileName && !e.target.value) setFileName(''); }} aria-label="Protocol text" />
       <div className="btnrow"><button className="btn primary" disabled={!text.trim()} onClick={read}>Read protocol</button></div>
+
+      <h3>Or draft a new condition from this file</h3>
+      <p className="tiny">For a condition the app does not ship. An AI reads the text and proposes phases, exercises, measures, criteria, alerts and warning signs, each with the exact words it found. It adds nothing from its own knowledge. You tick what to keep, then check and edit everything in the condition editor. The AI never makes a decision about a patient.</p>
+      {aiErr && <p className="err" role="alert">{aiErr}</p>}
+      <div className="btnrow"><button className="btn" data-testid="ai-draft" disabled={!text.trim() || aiBusy} onClick={() => void draftWithAi()}>{aiBusy ? 'Reading the document…' : 'Draft a new condition (AI)'}</button></div>
+      <details className="subcard" data-testid="paste-json">
+        <summary><b>No server? Use any AI chat instead</b></summary>
+        <ol className="tiny">
+          <li>Tap <b>Copy prompt and document</b>.</li>
+          <li>Paste it into Claude (or another AI chat) and send.</li>
+          <li>Copy the JSON it replies with and paste it below, then tap <b>Review pasted JSON</b>.</li>
+        </ol>
+        <div className="btnrow"><button className="btn" disabled={!text.trim()} onClick={() => void copyPrompt()}>{copied ? 'Copied' : 'Copy prompt and document'}</button></div>
+        <textarea className="vtext" rows={5} placeholder="Paste the AI's JSON reply here" value={pasted} onChange={(e) => setPasted(e.target.value)} aria-label="Pasted draft JSON" />
+        <div className="btnrow"><button className="btn" disabled={!pasted.trim()} onClick={reviewPasted}>Review pasted JSON</button></div>
+        <p className="tiny">Same checks as above: each quote is matched against your file, and you tick every item before anything is used.</p>
+      </details>
+      {ai && (
+        <div data-testid="ai-review">
+          <h3>Draft: {ai.review.headline} <small>({ai.review.items.length} item{ai.review.items.length === 1 ? '' : 's'} found)</small></h3>
+          {ai.review.items.length === 0 && <p>The AI found nothing it could quote from this file.</p>}
+          <ul className="audit">
+            {ai.review.items.map((it) => (
+              <li key={it.id}>
+                <label><input type="checkbox" aria-label={`Keep: ${it.summary}`} checked={!!aiOk[it.id]} onChange={(e) => setAiOk({ ...aiOk, [it.id]: e.target.checked })} /> <b>{it.summary}</b></label>
+                <blockquote className="tiny">“{it.quote}”{!it.quoteFound && <> <b className="err">Not found in your file. Check it before keeping.</b></>}</blockquote>
+              </li>))}
+          </ul>
+          {ai.review.notStated.length > 0 && <div><h4>The document does not say</h4><ul className="audit">{ai.review.notStated.map((n, i) => <li key={i}><small>{n}</small></li>)}</ul></div>}
+          <div className="btnrow">
+            <button className="btn" onClick={() => setAiOk(Object.fromEntries(ai.review.items.map((i) => [i.id, true])))}>Keep all</button>
+            <button className="btn" onClick={() => setAiOk({})}>Clear</button>
+            <button className="btn primary" disabled={!onDraft || !Object.values(aiOk).some(Boolean)} onClick={openDraft}>Open {Object.values(aiOk).filter(Boolean).length} kept item(s) in the condition editor</button>
+          </div>
+        </div>
+      )}
 
       {res && (
         <div data-testid="import-review">
