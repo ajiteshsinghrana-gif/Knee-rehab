@@ -93,6 +93,8 @@ export interface ConditionDraft {
   version: number;
   /** The condition id this one was copied from. */
   previousId?: string;
+  /** Set when the draft started from an AI reading of a document: the file and the quote behind each kept item. Shown to the physio; never used by triage. */
+  aiDraft?: { file: string; sources: { what: string; quote: string }[] };
 }
 
 let seq = 0;
@@ -275,7 +277,7 @@ export function buildConditionPack(d: ConditionDraft): ProtocolPack {
     condition: { en: d.condition.en.trim(), hi: d.condition.hi.trim() },
     population: d.population.trim() || 'Written by the treating physio. Every clinical value was entered or approved by the physio.',
     version: `${d.version ?? 1}.0.0-physio-authored`,
-    sources: ['Written by the treating physio in the app (PHYSIO_AUTHORED). Values tagged NEEDS_PHYSIO_SIGNOFF are placeholders.'],
+    sources: ['Written by the treating physio in the app (PHYSIO_AUTHORED). Values tagged NEEDS_PHYSIO_SIGNOFF are placeholders.', ...(d.aiDraft ? [`Started from an AI reading of "${d.aiDraft.file}" (quotes kept with the condition). The physio approved, edited and saved every item.`] : [])],
     anchorLabel: { en: d.anchorLabel.en.trim(), hi: d.anchorLabel.hi.trim() },
     phases: d.phases.map((p, i) => ({ id: phaseId(i), order: i + 1, name: { en: p.name.en.trim(), hi: p.name.hi.trim() }, exercises: [...p.exercises], sessionsPerDay: p.sessionsPerDay, followUpEveryDays: p.followUpEveryDays, expectedWeeks: [p.weeksMin, p.weeksMax], source: AUTHORED_TAG })),
     measures: [
@@ -336,6 +338,7 @@ export function slimDraft(d: ConditionDraft): Record<string, unknown> {
   for (const k of ['exercises', 'measures', 'gates', 'rules', 'precautions', 'signs', 'curves']) if (!x[k]?.length) delete x[k];
   if (x.version === 1) delete x.version;
   if (!x.previousId) delete x.previousId;
+  delete x.aiDraft; // quotes stay on the physio's device; they would only lengthen the invite link
   for (const e of x.exercises ?? []) if (!e.doseText || (!e.doseText.en && !e.doseText.hi)) delete e.doseText;
   if (JSON.stringify(x.alerts) === JSON.stringify(placeholderAlerts())) x.alerts = 'P';
   return x;

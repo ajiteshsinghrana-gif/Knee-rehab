@@ -19,6 +19,7 @@ import { LineChart } from './Charts';
 import { Onboarding } from './Onboarding';
 import { ImportProtocol } from './Import';
 import { NewCondition } from './Condition';
+import type { ConditionDraft } from '../author/condition';
 import { applyAction, applyManual, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
 import { effectivePack, listOverridable } from '../engine/overrides';
 import { curveOrigin, PLACEHOLDER_NOTE } from '../engine/curves';
@@ -47,6 +48,7 @@ export function Clinician({ state }: { state: AppState }) {
   );
   const [sel, setSel] = useState(state.activeId);
   const [mode, setMode] = useState<'dash' | 'add' | 'import' | 'condition' | 'past'>('dash');
+  const [aiDraft, setAiDraft] = useState<{ d: ConditionDraft; notes: string[] } | null>(null);
   const activeRows = rows.filter((x) => isActive(x.p));
   const pastRows = rows.filter((x) => !isActive(x.p));
   const cur = rows.find((x) => x.p.id === sel) ?? activeRows[0] ?? rows[0];
@@ -81,8 +83,8 @@ export function Clinician({ state }: { state: AppState }) {
           </ul>
         </aside>
         {mode === 'add' && <Onboarding onClose={() => { setMode('dash'); setSel(getState().activeId); }} onNewCondition={() => setMode('condition')} />}
-        {mode === 'import' && <ImportProtocol onClose={() => setMode('dash')} />}
-        {mode === 'condition' && <NewCondition onClose={() => setMode('dash')} onAddPatient={() => setMode('add')} />}
+        {mode === 'import' && <ImportProtocol onClose={() => setMode('dash')} onDraft={(d, notes) => { setAiDraft({ d, notes }); setMode('condition'); }} />}
+        {mode === 'condition' && <NewCondition key={aiDraft?.d.id ?? 'blank'} initial={aiDraft?.d} initialNotes={aiDraft?.notes} onClose={() => { setAiDraft(null); setMode('dash'); }} onAddPatient={() => { setAiDraft(null); setMode('add'); }} />}
         {mode === 'past' && <PastPatients rows={pastRows.map((x) => x.p)} years={state.retentionYears ?? DEFAULT_RETENTION_YEARS} today={state.today} onOpen={(id) => { setSel(id); setMode('dash'); }} />}
         {mode === 'dash' && !cur && <section className="card"><p>No patients yet. Use + Add patient.</p></section>}
         {mode === 'dash' && cur && <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />}

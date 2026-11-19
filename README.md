@@ -86,7 +86,15 @@ Copy a pack in `src/packs/`, register it in `src/engine/packs.ts`, run `npm test
 - **Invite**: a link (`#join=...`) and a QR code carrying the patient and plan. Opening it on the patient's phone adds the patient. For a patient on an imported protocol the link also carries the changed fields so the other device rebuilds the same pack. The QR is a small built-in encoder (`src/qr.ts`), checked against OpenCV; very large plans fall back to link only.
 - **Import protocol** (`src/import/`): the physio types or pastes the protocol, or uploads a PDF, text, CSV or JSON file. A deterministic reader (no AI) matches lines to known fields (gates, rule thresholds, response hours, phase follow-up, sessions, exercise lists). "Download template" gives lines like `Label [target]: value`. Ambiguous lines are chosen by the physio; values outside range and unknown exercises are reported, not guessed.
 - **The physio approves each field.** Untouched fields keep the base pack's defaults. Changed values are tagged `PHYSIO_IMPORTED: <file name>`, the new pack records `basedOn` and the changed fields, and it passes the same validator as built-in packs.
-- AI-assisted extraction is deferred to Phase 6 (needs a backend). Scanned PDFs have no text layer: paste the text instead.
+- Scanned PDFs have no text layer: paste the text instead.
+
+## AI drafting of a new condition (Phase 6.6)
+Import protocol, then **Draft a new condition (AI)** reads an uploaded or pasted document for a condition the app does not ship.
+- **The AI is a reader, not a clinician.** A Supabase Edge Function (`supabase/functions/draft-protocol`) asks Claude to copy phases, exercises, weekly measures, gate criteria, alert thresholds, warning signs and restricted movements into a fixed form. It must give the exact quote for every item, use null instead of guessing a number, and list what the document does not say. Only a signed-in physio can call it (the anon key alone is refused).
+- **The physio approves every item.** The app shows each item beside its quote and checks the quote really appears in the file. Items whose quote is not found start unticked. Only ticked items reach the draft, which opens in the normal "Add a condition" editor and passes the same validator as every other protocol. The quotes stay with the condition.
+- **Nothing is invented.** Values the document does not give (sessions per day, review interval, alert timings) stay as the project placeholders tagged `NEEDS_PHYSIO_SIGNOFF`. The Hindi wording is written by the AI and is flagged for a Hindi-speaking clinician to check.
+- **No AI in triage.** Tiers still come only from deterministic rules.
+- **Setup (once):** `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...` then `supabase functions deploy draft-protocol`. Optional secrets: `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`), `DRAFT_MAX_CHARS` (default 80000). Sign in as a physio (live mode) to use it. The function is untested against the live API in this repo (the tests cover the reader, quote check and mapping); try one document before relying on it.
 - The invite link carries the patient's name and plan, so share it privately. Until Phase 6, a patient's answers stay on the phone that opened the link.
 
 ## Any condition (Phase 3.3)
@@ -165,7 +173,7 @@ npm run signoff   # refresh the list below from the packs
 
 ## Known limits
 
-- Built: Phases 0 to 5, 7, live sync (6.1), physio sign-in (6.2) and patient accounts (6.3). Not built: FHIR, AI-assisted protocol extraction.
+- Built: Phases 0 to 5, 7, live sync (6.1), physio sign-in (6.2) and patient accounts (6.3). AI-assisted protocol drafting (6.6, needs the function deployed). Not built: FHIR.
 - The photo field stores the file name only. There is no upload yet.
 - The Overdue clock in the demo uses the demo calendar, not real time.
 - Adherence (A3) divides by the full 7-day window even in the first week after surgery, as in the previous build. A patient with few days of data can trip A3.

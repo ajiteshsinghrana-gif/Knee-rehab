@@ -34,10 +34,10 @@ function BiField({ label, value, onChange, hint }: { label: string; value: Bi; o
 }
 
 /** Phase 3.3: the physio writes a protocol for any condition. Every clinical choice is typed by the physio. */
-export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; onAddPatient: () => void }) {
-  const [d, setD] = useState<ConditionDraft>(() => blankDraft(newConditionId(clockMs(getState()))));
+export function NewCondition({ onClose, onAddPatient, initial, initialNotes }: { onClose: () => void; onAddPatient: () => void; initial?: ConditionDraft; initialNotes?: string[] }) {
+  const [d, setD] = useState<ConditionDraft>(() => initial ?? blankDraft(newConditionId(clockMs(getState()))));
   const [saved, setSaved] = useState('');
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState(() => (initial ? 'Loaded the AI draft. Nothing is saved yet. Check every item against its quote, fix the Hindi, and fill the gaps below.' : ''));
   const up = (fn: (c: ConditionDraft) => void) => setD((x) => { const c: ConditionDraft = JSON.parse(JSON.stringify(x)); fn(c); return c; });
   const saved_q = getState().questionnaires ?? [];
   const loadQuestionnaire = async (f?: File) => {
@@ -132,6 +132,13 @@ export function NewCondition({ onClose, onAddPatient }: { onClose: () => void; o
             <option value="">Choose a condition to copy</option>{written.map((w) => <option key={w.id} value={w.id}>{w.condition.en}</option>)}
           </select></label>)}
       {d.version > 1 && <p className="tiny">This is version {d.version}. Patients already on the earlier version stay on it. New patients can use this one.</p>}
+
+      {d.aiDraft && (
+        <details open className="subcard" data-testid="ai-sources">
+          <summary><b>Drafted by AI from {d.aiDraft.file}</b>: every item below came from this quote. You decide what stays.</summary>
+          {initialNotes && initialNotes.length > 0 && <ul className="audit">{initialNotes.map((n, i) => <li key={i}><small>{n}</small></li>)}</ul>}
+          <ul className="audit">{d.aiDraft.sources.map((x, i) => <li key={i}><small><b>{x.what}</b>: “{x.quote}”</small></li>)}</ul>
+        </details>)}
 
       <h3>1. Condition</h3>
       <BiField label="Condition name" value={d.condition} onChange={(b) => up((c) => { c.condition = b; })} />
