@@ -10,6 +10,7 @@ import { clockMs, getState, updatePatient } from '../store';
 import {
   activePrecautions, applyVoice, draftFromEntry, dueState, isComplete, newDraft, saveCheckIn, saveQuestionnaire, saveWeekly, toDaily,
   unansweredSigns, weeklyComplete, weeklyMeasures, type Draft,
+  allExercisesDone, canMarkNoWarnings, markAllExercisesDone, markNoWarnings, noWarningsAnswered,
 } from '../checkin';
 import { listen, parseVoice, voiceSupported } from '../voice/parser';
 import { speak, speakSupported } from '../voice/speak';
@@ -304,6 +305,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
             <h2>{T('exTodayTitle')}</h2>
             {R(`${T('exTodayTitle')}. ${exIds.map((id) => exerciseName(id, lang)).join('. ')}`)}
             <p className="sub">{T('exTodaySub')}</p>
+            <button type="button" className={`big secondary quickall ${allExercisesDone(draft) ? 'sel' : ''}`} data-testid="did-all" aria-pressed={allExercisesDone(draft)} onClick={() => setDraft(markAllExercisesDone(draft))}>✓ {T('exAllDone')}</button>
             <div className="excards">{exIds.map((id) => {
               const ex = getExercise(id);
               const r = draft.results[id];
@@ -379,6 +381,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
             <h2>{T('q_safety')}</h2>
             {R(`${T('q_safety')} ${pack.warningSigns.map((w) => L(w.label, lang)).join('. ')}`)}
             <p className="hint">{T('warnStepIntro')}</p>
+            {canMarkNoWarnings(draft) && <button type="button" className={`big secondary quickall ${noWarningsAnswered(draft) ? 'sel' : ''}`} data-testid="none-of-these" aria-pressed={noWarningsAnswered(draft)} onClick={() => setDraft(markNoWarnings(draft))}>{T('noneOfThese')}</button>}
             <div className="safety">{pack.warningSigns.map((w) => (
               <div className="srow" key={w.id}>
                 <span>{L(w.label, lang)}{draft.warnings[w.id] === null && draft.suggested[w.id] !== undefined && <><br /><span className="sugnote">{T('suggestedByVoice')}</span></>}</span>
