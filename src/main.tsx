@@ -29,5 +29,5 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 createRoot(document.getElementById('root')!).render(<App />);
 
 // Live sync starts only when sync.json has a Supabase URL and key; otherwise the app is exactly as before.
-// The demo never syncs. Only the live clinic and patient phones talk to the cloud.
-if (getMode() === 'live' || isPatientDevice()) void startSync(getState, setState, subscribe);
+// The demo syncs too (Phase 6.9), but only patients added in the demo: the six built-in demo patients have no sync key, so they stay on this device.
+void startSync(getState, setState, subscribe);

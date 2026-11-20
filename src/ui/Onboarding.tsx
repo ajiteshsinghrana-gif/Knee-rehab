@@ -4,6 +4,7 @@ import { PACKS } from '../engine/packs';
 import { LIBRARY, exerciseName } from '../exercises/library';
 import { listOverridable } from '../engine/overrides';
 import { getSyncStatus } from '../sync/engine';
+import { getMode } from '../mode';
 import { newClaimPin, newSyncKey } from '../sync/client';
 import { buildPatient, inviteUrl, validateOnboard, type OnboardDraft } from '../onboarding';
 import { qrSvg } from '../qr';
@@ -45,7 +46,7 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
     try {
       const st = getState();
       let p = buildPatient(d, { nowMs: clockMs(st), today: st.today });
-      if (getSyncStatus().enabled) p = { ...p, syncKey: newSyncKey(), syncRole: 'physio' as const, ...(getSyncStatus().auth ? { claimPin: newClaimPin() } : {}), ...(st.clinicContact ? { clinicContact: st.clinicContact } : {}) }; // live sync: this computer is the physio's side
+      if (getSyncStatus().enabled) p = { ...p, ...(getMode() === 'demo' ? { demoPatient: true } : {}), syncKey: newSyncKey(), syncRole: 'physio' as const, ...(getSyncStatus().auth ? { claimPin: newClaimPin() } : {}), ...(st.clinicContact ? { clinicContact: st.clinicContact } : {}) }; // live sync: this computer is the physio's side
       setState({ ...st, patients: [...st.patients, p] });
       const base = window.location.href.split('#')[0];
       setMade({ id: p.id, url: inviteUrl(p, base) });

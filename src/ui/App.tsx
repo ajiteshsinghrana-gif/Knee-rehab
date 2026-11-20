@@ -6,7 +6,7 @@ import { getPack } from '../engine/packs';
 import { decodeInvite } from '../onboarding';
 import { PatientView } from './Patient';
 import { Clinician } from './Clinician';
-import { getSyncStatus, subscribeSync } from '../sync/engine';
+import { getSyncStatus, physioErasePatient, subscribeSync } from '../sync/engine';
 import { isPatientDevice } from '../device';
 import { getMode, setMode } from '../mode';
 import { LoginCard } from './Login';
@@ -23,7 +23,7 @@ function SyncChip() {
   const t = s.lastOkAt ? new Date(s.lastOkAt).toLocaleTimeString() : '';
   if (s.state === 'login') return <span className="syncchip bad" role="status" data-testid="sync-chip">● Sign in as a physio (Physio dashboard tab) to sync your patients. Their data stays on this device until then.</span>;
   if (s.state === 'error') return <span className="syncchip bad" role="status" data-testid="sync-chip">⚠ Sync problem. Your data is safe on this device and will send when it works. ({s.error})</span>;
-  return <span className="syncchip" role="status" data-testid="sync-chip">● Live sync on{s.patients ? ` · ${s.patients} patient${s.patients === 1 ? '' : 's'}` : ''}{t ? ` · last ${t}` : ''}</span>;
+  return <span className="syncchip" role="status" data-testid="sync-chip">● Live sync on{s.patients ? ` · ${s.patients} patient${s.patients === 1 ? '' : 's'}` : ''}{t ? ` · last ${t}` : ''}{getMode() === 'demo' ? ' · demo: only patients you add sync; the six built-in ones stay on this device' : ''}</span>;
 }
 
 export function App() {
@@ -105,6 +105,12 @@ function LiveApp() {
   );
 }
 
+/** Reset restores the six demo patients. Demo patients that were synced lose their cloud copy too (best effort: needs the physio sign-in). */
+function resetDemo() {
+  for (const p of getState().patients) if (p.demoPatient && p.syncKey && p.syncRole === 'physio') void physioErasePatient(p.syncKey).catch(() => { /* signed out or offline: the cloud copy stays until erased from a patient's card */ });
+  resetState();
+}
+
 function DemoApp() {
   const state = useSyncExternalStore(subscribe, getState);
   const [view, setView] = useState(route);
@@ -150,7 +156,7 @@ function DemoApp() {
         </span>
         <span className="demobtns">
           <button className="btn primary" disabled={!s} onClick={fastForward}>⏩ Fast-forward ({Math.min(step + 1, DEMO_STEPS.length)}/{DEMO_STEPS.length})</button>
-          <button className="btn" onClick={resetState}>↺ Reset</button>
+          <button className="btn" onClick={resetDemo}>↺ Reset</button>
           <button className="btn" data-testid="to-live" onClick={() => { setMode('live'); window.location.reload(); }}>Go to live clinic →</button>
         </span>
       </div>
