@@ -105,7 +105,7 @@ function liveFromDemo(storage: Storage | null, patientDevice: boolean): AppState
     if (!s || !Array.isArray(s.patients)) return empty;
     for (const cp of s.customPacks ?? []) { try { restoreAuthoredPack(cp); } catch { /* ignored */ } }
     const known = (id: string) => { try { getPack(id); return true; } catch { return false; } };
-    const patients = s.patients.filter((x) => (patientDevice ? x.syncRole === 'patient' : !!x.syncRole) && known(x.packId)).map(normalizePatient);
+    const patients = s.patients.filter((x) => (patientDevice ? x.syncRole === 'patient' : !!x.syncRole && !x.demoPatient) && known(x.packId)).map(normalizePatient);
     return { ...empty, patients, activeId: patients[0]?.id ?? '', customPacks: s.customPacks, clinicContact: s.clinicContact, retentionYears: s.retentionYears, questionnaires: s.questionnaires };
   } catch { return empty; }
 }

@@ -311,6 +311,8 @@ export interface Patient {
   syncKey?: string;
   /** Which side of the sync this device is: the physio who created the patient, or the patient's own phone. */
   syncRole?: 'physio' | 'patient';
+  /** Added in demo mode (Phase 6.9). It syncs like any patient so a real phone can join the demo, but it is never carried into the live clinic. */
+  demoPatient?: boolean;
   /** Set on a patient's own phone once their account (Phase 6.3) has claimed this patient. Not sent in invites. */
   accountEmail?: string;
   /** Treatment finished (Phase 6.4). A completed patient leaves the worklist and sits under Past patients; nothing else about the record changes. */

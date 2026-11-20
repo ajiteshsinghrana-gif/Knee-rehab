@@ -427,7 +427,7 @@ If step 1 is done without step 3 (or the reverse), the physio device shows "Sync
 ## Demo and live clinic (Phase 6.5)
 
 One website, two modes that never share data:
-- **Demo** (the default): the six made-up patients, the demo bar, fast-forward. No cloud sync. Works exactly as before. A "Go to live clinic" button is on the demo bar.
+- **Demo** (the default): the six made-up patients, the demo bar, fast-forward. The six built-in patients never leave the device. A patient you add in the demo gets a sync key like a live one (sign in as a physio on the dashboard tab first), so a real phone can join the demo; it is flagged `demoPatient` and never carried into the live clinic. Reset erases those patients' cloud copies (best effort, needs sign-in). A "Go to live clinic" button is on the demo bar.
 - **Live clinic**: the running app. Real patients only, real dates, cloud sync. Nothing is shown until the physio signs in. Tabs: *Physio dashboard* and *View as patient*. The preview shows a patient's phone screen exactly as they see it, **read-only** (the preview is inert: nothing tapped there changes the record).
 - Switch with the buttons at the top, or by opening `#live` or `#demo` on the site address.
 - The first time you open the live clinic, your real patients (the ones with a sync link) are carried over from the old shared store. Demo patients are never carried over. The demo and live stores are separate in the browser (`rehabpath-v1` and `rehabpath-live-v1`).

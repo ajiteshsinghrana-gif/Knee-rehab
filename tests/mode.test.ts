@@ -23,6 +23,11 @@ describe('demo and live clinic are separate (Phase 6.5)', () => {
     const s = loadState(fake({ [STORAGE_KEY]: demoWith([mk('real1', 'physio')]) }), 'live', false);
     expect(s.patients.map((p) => p.id)).toEqual(['real1']);
   });
+  it('a patient added in the demo syncs but is never carried into the live clinic (Phase 6.9)', () => {
+    const d = { ...mk('demo-added', 'physio'), demoPatient: true };
+    expect(loadState(fake({ [STORAGE_KEY]: demoWith([d, mk('real1', 'physio')]) }), 'live', false).patients.map((p) => p.id)).toEqual(['real1']);
+    expect(loadState(fake({ [STORAGE_KEY]: demoWith([d]) }), 'demo', false).patients.map((p) => p.id)).toContain('demo-added'); // still in the demo
+  });
   it('once the live clinic has its own data, the demo storage is ignored', () => {
     const storage = fake({ [STORAGE_KEY]: demoWith([mk('real1', 'physio')]), [LIVE_KEY]: JSON.stringify({ ...seedState(), patients: [mk('live2', 'physio')], activeId: 'live2', live: true }) });
     expect(loadState(storage, 'live', false).patients.map((p) => p.id)).toEqual(['live2']);

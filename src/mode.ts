@@ -1,6 +1,6 @@
 /**
  * Demo and live clinic (Phase 6.5). The same website runs in two modes that never share data:
- *  - demo: six made-up patients, the demo bar and fast-forward. No cloud sync. Exactly as before.
+ *  - demo: six made-up patients, the demo bar and fast-forward. The six built-in patients stay on the device; a patient you add in the demo syncs to the cloud (so a real phone can join) but is never brought into the live clinic.
  *  - live: the running app. Only real patients, real dates, cloud sync, physio sign-in. The physio can preview any patient's screen.
  * A patient's phone is always live (patients never see the demo or the physio side).
  */
