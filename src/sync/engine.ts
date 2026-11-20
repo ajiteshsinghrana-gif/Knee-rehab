@@ -8,6 +8,7 @@ import type { AppState } from '../store';
 import { applyDown, applyUp, downSlice, sliceKey, upSlice } from './slices';
 import { claimKey, deleteMyAccount, eraseKeyData, newClaimPin, setClaimHash, sha256Hex, listPatientLinks, loadConfig, pullSlice, pushSlice, resetPatientLink, type FetchFn, type SyncConfig } from './client';
 import { createPatientAccount, signInPatient, type Restored } from './account';
+import { deleteDemoVideo, uploadDemoVideo } from '../exercises/upload';
 import { requestPasswordReset, setNewPassword, getAccessToken, getSession, signIn, signOut, signUp, subscribeAuth } from './auth';
 
 /** state 'login': sign-in is required (Phase 6.2) and nobody is signed in, so the physio's patients are not syncing yet. */
@@ -73,7 +74,7 @@ export async function syncOnce(env: Env, memo: Memo): Promise<void> {
       const mine = physioSide ? 'down' : 'up';
       const theirs = physioSide ? 'up' : 'down';
       const latest = env.getState().patients.find((p) => p.id === t.id) ?? t;
-      const body = physioSide ? downSlice(latest) : upSlice(latest);
+      const body = physioSide ? downSlice(latest, env.getState().exerciseDemos) : upSlice(latest);
       const k = sliceKey(body);
       if (memo.pushed.get(t.id) !== k) { await pushSlice(env.config, t.syncKey!, mine, body, f, tok); memo.pushed.set(t.id, k); }
       const row = await pullSlice(env.config, t.syncKey!, theirs, f, tok);
@@ -201,4 +202,28 @@ export async function startSync(getState: Env['getState'], setState: Env['setSta
   const iv = setInterval(run, 5000);
   void run();
   return () => { clearInterval(iv); clearTimeout(timer); unsub(); unsubAuth(); kick = () => {}; };
+}
+
+/**
+ * Physio: upload a demonstration video to the clinic's cloud storage (Phase 7.2).
+ * Returns null when the cloud cannot be used right now (sync is off, or nobody is signed in): the caller keeps the video on this device instead.
+ * Throws an Error with a message that is safe to show when the cloud IS available but the upload failed.
+ */
+export async function physioUploadDemo(body: Blob, mime: string, ext: string): Promise<{ url: string } | null> {
+  if (!activeConfig || !activeConfig.auth) return null;
+  const token = await getAccessToken(activeConfig);
+  if (!token) return null;
+  const { url } = await uploadDemoVideo(activeConfig, token, body, mime, ext);
+  return { url };
+}
+/** Physio: whether uploads would go to the cloud right now (sync is on and a physio is signed in). */
+export async function physioCanUploadToCloud(): Promise<boolean> {
+  if (!activeConfig || !activeConfig.auth) return false;
+  return !!(await getAccessToken(activeConfig));
+}
+/** Physio: remove a video this app uploaded. Best effort; the clinic's list is updated by the caller either way. */
+export async function physioDeleteDemo(url: string): Promise<void> {
+  if (!activeConfig || !activeConfig.auth) return;
+  const token = await getAccessToken(activeConfig);
+  if (token) await deleteDemoVideo(activeConfig, token, url);
 }

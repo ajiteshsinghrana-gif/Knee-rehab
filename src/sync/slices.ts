@@ -9,7 +9,8 @@
  * Everything that arrives is checked and copied field by field. Unknown fields are dropped, so a damaged or
  * tampered row cannot change anything it should not, and the physio's private reasons never leave his computer.
  */
-import type { DailyCheckIn, Notice, Patient, PeriodicEntry, Plan } from '../types';
+import type { DailyCheckIn, ExerciseDemo, Notice, Patient, PeriodicEntry, Plan, SyncedDemo } from '../types';
+import { cleanSyncedDemos, demosForPatient } from '../exercises/demos';
 import { isLang } from '../types';
 import { getPack } from '../engine/packs';
 
@@ -18,6 +19,8 @@ export interface DownSlice {
   v: 1; name: string; age: number; anchorDate: string; enrolledOn?: string; currentPhase: string; phaseStartDate: string;
   sessionsPrescribedPerDay: number; plan: Plan; notices: Notice[];
   status?: 'completed'; completedAt?: string; erasureNote?: string; clinicContact?: string;
+  /** Demonstration links and cloud videos for this patient's exercises (Phase 7.2). Teaching material only; never affects triage. */
+  demos?: Record<string, SyncedDemo>;
 }
 
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -87,11 +90,15 @@ const redactPlan = (pl: Plan): Plan => ({
   overrides: pl.overrides.map((o) => ({ ...o, reason: '' })),
   ...(pl.curveOverrides ? { curveOverrides: pl.curveOverrides.map((c) => ({ ...c, reason: '' })) } : {}),
 });
-export function downSlice(p: Patient): DownSlice {
+/** Exercises in the patient's protocol phases. A pack that cannot be found has none (the slice then carries no demos). */
+const phaseExercises = (p: Patient): string[] => { try { return getPack(p.packId).phases.flatMap((x) => x.exercises); } catch { return []; } };
+export function downSlice(p: Patient, clinicDemos?: Record<string, ExerciseDemo>): DownSlice {
+  const demos = demosForPatient(p, phaseExercises(p), clinicDemos);
   return {
     v: 1, name: p.name, age: p.age, anchorDate: p.anchorDate, ...(p.enrolledOn ? { enrolledOn: p.enrolledOn } : {}), currentPhase: p.currentPhase, phaseStartDate: p.phaseStartDate,
     sessionsPrescribedPerDay: p.sessionsPrescribedPerDay, plan: redactPlan(p.plan), notices: p.notices,
     ...(p.status === 'completed' ? { status: 'completed' as const, ...(p.completedAt ? { completedAt: p.completedAt } : {}) } : {}), ...(p.erasureNote ? { erasureNote: p.erasureNote } : {}), ...(p.clinicContact ? { clinicContact: p.clinicContact } : {}),
+    ...(clinicDemos ? { demos } : {}),
   };
 }
 const validNotice = (n: unknown): n is Notice => isObj(n) && typeof n.id === 'string' && typeof n.at === 'string' && typeof n.seen === 'boolean' && Array.isArray(n.changes) && n.changes.every((c) => isObj(c) && typeof c.kind === 'string');
@@ -116,6 +123,8 @@ export function applyDown(p: Patient, raw: unknown): Patient {
     completedAt: raw.status === 'completed' && typeof raw.completedAt === 'string' ? raw.completedAt.slice(0, 40) : undefined,
     erasureNote: typeof raw.erasureNote === 'string' ? raw.erasureNote.slice(0, 300) : undefined,
     clinicContact: typeof raw.clinicContact === 'string' ? raw.clinicContact.slice(0, 120) : p.clinicContact,
+    // An older physio build sends no demos: keep what this phone has. Otherwise take exactly what the physio sent, so a removed video disappears.
+    ...(raw.demos !== undefined ? { demos: cleanSyncedDemos(raw.demos) } : {}),
   };
 }
 

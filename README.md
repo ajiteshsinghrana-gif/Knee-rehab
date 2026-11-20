@@ -145,6 +145,19 @@ The physio can change a patient's treatment on his own, without waiting for a su
 - Triage does not change: these are physio actions through `applyManual` in `src/engine/plan.ts`, the only way the plan changes (safety rule 2). The physio can still choose any change; the app only makes sure it is deliberate, explained and told to the patient.
 - Not built: showing the reason to the patient, or free-text patient messages. Reasons are typed in English and could not be translated safely.
 
+## Exercise videos (Phase 7.2)
+
+The physio can show patients the ideal way to do each exercise. On the physio dashboard, **🎬 Exercise videos** lists every exercise; each one takes a **link** or an **uploaded video**. Patients then see a **Watch how to do it** button on that exercise, in their exercise list and on the exercise cards of the daily check-in, in English, Hindi or Bengali.
+
+- **Links**: only `https://` addresses are accepted. YouTube links (watch, youtu.be, shorts, embed) play inside the app through `youtube-nocookie.com`; a direct `.mp4`/`.webm`/`.mov` link plays in the phone's video player; any other page opens in the browser (`noopener`).
+- **Uploads**: MP4, WebM or MOV, up to 50 MB (Supabase's free-plan cap). Signed in as a physio, the file goes to the `exercise-demos` storage bucket and its public address travels to patients. Not signed in, or with sync off, it is kept in this browser only (IndexedDB) and the screen says patients cannot see it. Replacing or removing a video deletes the stored file.
+- **Clinic-wide**: a demo belongs to the exercise, so every patient who has that exercise sees it (including an exercise the physio adds or swaps in for one patient). The plan card shows 🎬 video / no video next to each exercise.
+- **Sync**: the physio's side owns this (it rides the existing "down" slice, only for that patient's own exercises). The phone checks every address again before using it. A removed demo disappears from the phone; a device-only video is never sent.
+- **Not a plan change**: it never touches triage, thresholds or the prescribed exercises, so it is not an audit-log item and needs no reason.
+- **Setup for cloud uploads (once):** run `supabase/schema-exercise-videos.sql` in the Supabase SQL editor after `schema-v3.sql`. It makes the public-read bucket, lets signed-in non-patient accounts upload, and lets only the uploader delete. The upload code is tested against a stub of Supabase Storage, not the live service: upload one short clip and open it on a phone before relying on it.
+- **Privacy**: the bucket is public (a patient's phone has no account to play with), and files have random names. Teaching videos only: the upload form warns never to upload a video of a patient. The Hindi and Bengali button wording needs a native reader (NEEDS_NATIVE_REVIEW).
+- Not built: video captions or a Hindi/Bengali voice-over, thumbnails, per-patient videos, and compressing large videos in the browser.
+
 ## Demo (Phase 7)
 
 Six demo patients: Ravi, Meera, Arjun, Sana (ACL), Kamla (knee replacement, Hindi, answered by her carer, below the expected curve) and Imran (rotator cuff, sling phase, Bengali, took the arm out of the sling). `DEMO.md` has a four-minute walk-through. Ravi's fast-forward and Meera's SAFETY flag are unchanged and tested.

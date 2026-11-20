@@ -26,6 +26,11 @@ Still on **Kamla**. Her knee-bend chart shows "Placeholder curve: not clinically
 3. The chart note now says who set the curve and why, the alert clears, and every knee replacement patient's audit log has the entry.
 Say: "The demo curves are placeholders and the app says so. The physio replaces them with his protocol's numbers, once, for the whole clinic."
 
+### 3c. The physio shows the ideal way to do an exercise (30 s)
+Physio dashboard, **🎬 Exercise videos**. Find **Ankle pumps**, press **Add video or link**, paste a YouTube link and save. (Upload also works; signed out, the video stays on this device.)
+Then **Patient phone**, patient **Kamla**: her exercise list now shows **▶ देखें** next to Ankle pumps, and the same button appears on its card in the daily check-in.
+Say: "The physio records the ideal movement once; every patient with that exercise can watch it in their own language."
+
 ## 4. The patient is told (45 s)
 Switch to **Patient phone**, patient Kamla. The home screen shows "Message from your physio" in Hindi, with a read-aloud button. Kamla's daughter answers for her: tick "I am answering for Kamla" (already on); every question has a read-aloud button; the physio screen shows "7 of the last 7 check-ins were answered by a caregiver".
 

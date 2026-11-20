@@ -19,6 +19,8 @@ import { LineChart } from './Charts';
 import { Onboarding } from './Onboarding';
 import { ImportProtocol } from './Import';
 import { NewCondition } from './Condition';
+import { ExerciseVideos } from './Demos';
+import { getDemo } from '../exercises/demos';
 import type { ConditionDraft } from '../author/condition';
 import { applyAction, applyManual, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
 import { effectivePack, listOverridable } from '../engine/overrides';
@@ -47,7 +49,7 @@ export function Clinician({ state }: { state: AppState }) {
     [state.patients, now],
   );
   const [sel, setSel] = useState(state.activeId);
-  const [mode, setMode] = useState<'dash' | 'add' | 'import' | 'condition' | 'past'>('dash');
+  const [mode, setMode] = useState<'dash' | 'add' | 'import' | 'condition' | 'past' | 'videos'>('dash');
   const [aiDraft, setAiDraft] = useState<{ d: ConditionDraft; notes: string[] } | null>(null);
   const activeRows = rows.filter((x) => isActive(x.p));
   const pastRows = rows.filter((x) => !isActive(x.p));
@@ -63,6 +65,7 @@ export function Clinician({ state }: { state: AppState }) {
         <aside className="worklist">
           <h2>Worklist</h2>
           <div className="btnrow"><button className="btn primary" onClick={() => setMode('add')}>+ Add patient</button><button className="btn" onClick={() => setMode('import')}>Import protocol</button><button className="btn" onClick={() => setMode('condition')}>+ Add a condition</button></div>
+          <div className="btnrow"><button className={`btn ${mode === 'videos' ? 'primary' : ''}`} data-testid="videos-btn" onClick={() => setMode(mode === 'videos' ? 'dash' : 'videos')}>🎬 Exercise videos</button></div>
           <div className="btnrow"><button className={`btn ${mode === 'past' ? 'primary' : ''}`} data-testid="past-btn" onClick={() => setMode(mode === 'past' ? 'dash' : 'past')}>Past patients ({pastRows.length}){asks ? ` · ${asks} erasure request${asks === 1 ? '' : 's'}` : ''}</button></div>
           <p className="counts">{counts.map(([t, n]) => <span key={t}><Tier tier={t} /> {n}</span>)}</p>
           <ul>
@@ -85,6 +88,7 @@ export function Clinician({ state }: { state: AppState }) {
         {mode === 'add' && <Onboarding onClose={() => { setMode('dash'); setSel(getState().activeId); }} onNewCondition={() => setMode('condition')} />}
         {mode === 'import' && <ImportProtocol onClose={() => setMode('dash')} onDraft={(d, notes) => { setAiDraft({ d, notes }); setMode('condition'); }} />}
         {mode === 'condition' && <NewCondition key={aiDraft?.d.id ?? 'blank'} initial={aiDraft?.d} initialNotes={aiDraft?.notes} onClose={() => { setAiDraft(null); setMode('dash'); }} onAddPatient={() => { setAiDraft(null); setMode('add'); }} />}
+        {mode === 'videos' && <ExerciseVideos onClose={() => setMode('dash')} />}
         {mode === 'past' && <PastPatients rows={pastRows.map((x) => x.p)} years={state.retentionYears ?? DEFAULT_RETENTION_YEARS} today={state.today} onOpen={(id) => { setSel(id); setMode('dash'); }} />}
         {mode === 'dash' && !cur && <section className="card"><p>No patients yet. Use + Add patient.</p></section>}
         {mode === 'dash' && cur && <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />}
@@ -502,7 +506,7 @@ function PlanCard({ patient: p, pack, now, onApply, err }: { patient: Patient; p
       <ul className="planlist">
         {exs.map((id) => {
           const orig = swapped.find(([, v]) => v === id)?.[0];
-          return <li key={id}>{exerciseName(id, 'en')}{orig && <> <small>(easier version of {exerciseName(orig, 'en')})</small> <button className="btn" onClick={() => onApply({ type: 'restore-exercise', exerciseId: id })}>Restore</button></>}</li>;
+          return <li key={id}>{exerciseName(id, 'en')}{getDemo(id) ? <span className="demobadge" title="Patients can watch a demonstration of this exercise">🎬 video</span> : <span className="demobadge none" title="No demonstration attached yet. Add one under Exercise videos.">no video</span>}{orig && <> <small>(easier version of {exerciseName(orig, 'en')})</small> <button className="btn" onClick={() => onApply({ type: 'restore-exercise', exerciseId: id })}>Restore</button></>}</li>;
         })}
       </ul>
       <p>Check-ins: every <b>{fu.checkInEveryDays}</b> day(s) · Next review: <b>{fu.nextReviewDate ?? 'not set'}</b>{p.plan.followUp?.until && <> <small>(until {p.plan.followUp.until})</small></>}</p>

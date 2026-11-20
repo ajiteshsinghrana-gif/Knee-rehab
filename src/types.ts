@@ -85,6 +85,18 @@ export interface Exercise {
   /** pack id -> phase ids that prescribe it (checked against the packs by the validator). */
   usedIn: Record<string, string[]>;
 }
+/**
+ * A demonstration of the ideal way to do one exercise, attached by the physio (Phase 7.2).
+ *  - link:  an https page (YouTube plays inside the app; anything else opens in the browser).
+ *  - video: a file the physio uploaded to the clinic's cloud storage; the public https address travels to patients.
+ *  - local: a file kept in this browser only (no cloud, or not signed in). It never travels to a patient's phone.
+ */
+export type ExerciseDemo =
+  | { kind: 'link'; url: string; addedAt: string }
+  | { kind: 'video'; url: string; name: string; mime: string; size: number; addedAt: string }
+  | { kind: 'local'; id: string; name: string; mime: string; size: number; addedAt: string };
+export type SyncedDemo = Exclude<ExerciseDemo, { kind: 'local' }>;
+
 export interface Phase {
   id: string;
   order: number;
@@ -328,6 +340,8 @@ export interface Patient {
   erasureNote?: string;
   /** Who to contact about this data (clinic phone or email). Set once by the physio and shown in the privacy notice. */
   clinicContact?: string;
+  /** Demonstration links and videos the physio attached to this patient's exercises, received from the physio (Phase 7.2). Patient's phone only. */
+  demos?: Record<string, SyncedDemo>;
   /** One-time PIN the patient needs to claim the link. Physio's computer only; never put in a link or a slice. */
   claimPin?: string;
   anchorDate: string; // surgery date
