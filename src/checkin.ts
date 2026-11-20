@@ -20,6 +20,21 @@ export interface Draft {
   heard?: string;
 }
 
+/** "I did them all": every prescribed exercise done. Individual answers can still be changed afterwards. */
+export const markAllExercisesDone = (d: Draft): Draft => ({ ...d, results: Object.fromEntries(Object.keys(d.results).map((id) => [id, { done: true, reason: null }])) });
+export const allExercisesDone = (d: Draft): boolean => { const ids = Object.keys(d.results); return ids.length > 0 && ids.every((id) => d.results[id].done === true); };
+
+/**
+ * "None of these" on the warning signs: answers "no" for every sign still unanswered.
+ * Safety first: a sign the patient already tapped "yes" is never changed (and the shortcut is not offered then), and a sign that voice
+ * heard as a possible "yes" stays unanswered, so the patient has to confirm that one by tapping it.
+ */
+export const canMarkNoWarnings = (d: Draft): boolean => Object.values(d.warnings).every((v) => v !== true);
+export const markNoWarnings = (d: Draft): Draft => canMarkNoWarnings(d)
+  ? { ...d, warnings: Object.fromEntries(Object.entries(d.warnings).map(([id, v]) => [id, v === null && d.suggested[id] !== true ? false : v])) }
+  : d;
+export const noWarningsAnswered = (d: Draft): boolean => { const v = Object.values(d.warnings); return v.length > 0 && v.every((x) => x === false); };
+
 export const activePrecautions = (pack: ProtocolPack, p: Patient) => pack.precautions.filter((x) => x.phases.includes(p.currentPhase));
 
 export function newDraft(pack: ProtocolPack, p: Patient): Draft {
