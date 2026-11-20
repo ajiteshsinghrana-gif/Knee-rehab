@@ -145,6 +145,19 @@ The physio can change a patient's treatment on his own, without waiting for a su
 - Triage does not change: these are physio actions through `applyManual` in `src/engine/plan.ts`, the only way the plan changes (safety rule 2). The physio can still choose any change; the app only makes sure it is deliberate, explained and told to the patient.
 - Not built: showing the reason to the patient, or free-text patient messages. Reasons are typed in English and could not be translated safely.
 
+## Install and offline use (Phase 7.3)
+
+RehabPath is a progressive web app. On Android (Chrome) use **Install app / Add to Home screen**; on iPhone and iPad open it in Safari and use **Share, Add to Home Screen**. It then opens full screen with its own icon and **opens with no internet**.
+
+- **What is saved:** the app's own files (page, script, styles, icons, exercise pictures), about 40 files. `scripts/build.mjs` writes `docs/sw.js` from `scripts/sw.template.js` last, with a version that is a hash of those files, so every deploy that changes the app is a new version.
+- **What is never saved by the service worker:** anything from another address (Supabase, YouTube, uploaded videos), so sign-in, sync and patient data never pass through it. Patient data stays in the app's own storage on the device as before, and sync sends it when the connection is back.
+- **Updates are the person's choice:** a new version downloads in the background and waits. The bar at the bottom says "A new version of the app is ready" with **Update now** (English, Hindi, Bengali). This keeps clinical rules from changing in the middle of a check-in. An app left open checks again each time it is reopened and hourly.
+- **Offline bar:** shows when the phone reports no network. A phone on wifi with no internet still reports "online"; the sync chip then shows the sync problem.
+- **Always rebuild before you push:** `npm run build`, then commit `docs/`. `tests/pwa.test.ts` fails if `docs/sw.js` is out of date with the files it caches.
+- **iPhone note:** the Home Screen app has its own storage, separate from Safari. A patient who opened their invite link in Safari and then installs the app starts with an empty app. Have patients install first and open the invite link from the installed app, or join again after installing. Safari may also clear a web app's storage after weeks without opening it.
+- **Not offline:** sign-in, sync, AI protocol import, YouTube and cloud videos, and (in Chrome) voice answers.
+- Not built: push notifications and background sync (a PWA on iPhone supports push only for installed apps, from iOS 16.4); store listings (use Capacitor for that).
+
 ## Exercise videos (Phase 7.2)
 
 The physio can show patients the ideal way to do each exercise. On the physio dashboard, **🎬 Exercise videos** lists every exercise; each one takes a **link** or an **uploaded video**. Patients then see a **Watch how to do it** button on that exercise, in their exercise list and on the exercise cards of the daily check-in, in English, Hindi or Bengali.

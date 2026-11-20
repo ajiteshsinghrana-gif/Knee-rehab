@@ -1,6 +1,7 @@
 // Builds the static site into docs/ (GitHub Pages serves this folder only).
 import { build } from 'esbuild';
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { writeServiceWorker } from './pwa.mjs';
 
 mkdirSync('docs', { recursive: true });
 await build({
@@ -18,3 +19,9 @@ for (const f of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {
 }
 mkdirSync('docs/media', { recursive: true });
 for (const f of readdirSync('public/media')) copyFileSync(`public/media/${f}`, `docs/media/${f}`);
+// Installable + offline (Phase 7.3): manifest and icons, then the service worker, which must be written LAST because its version is a hash of everything above.
+copyFileSync('public/manifest.webmanifest', 'docs/manifest.webmanifest');
+mkdirSync('docs/icons', { recursive: true });
+for (const f of readdirSync('public/icons')) copyFileSync(`public/icons/${f}`, `docs/icons/${f}`);
+const sw = writeServiceWorker();
+console.log(`  docs/sw.js    version ${sw.version}, ${sw.files} files cached for offline`);

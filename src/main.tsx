@@ -1,5 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './ui/App';
+import { PwaBanner } from './ui/PwaBanner';
+import { registerServiceWorker } from './pwa/register';
 import { getState, refreshToday, setState, subscribe } from './store';
 import { startSync } from './sync/engine';
 import { setAuthScope } from './sync/auth';
@@ -26,7 +28,9 @@ refreshToday();
 setInterval(refreshToday, 60_000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshToday(); });
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(<><App /><PwaBanner /></>);
+// Offline use and update prompts (Phase 7.3).
+registerServiceWorker();
 
 // Live sync starts only when sync.json has a Supabase URL and key; otherwise the app is exactly as before.
 // The demo syncs too (Phase 6.9), but only patients added in the demo: the six built-in demo patients have no sync key, so they stay on this device.
