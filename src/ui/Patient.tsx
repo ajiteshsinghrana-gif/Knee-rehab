@@ -15,6 +15,7 @@ import { listen, parseVoice, voiceSupported } from '../voice/parser';
 import { speak, speakSupported } from '../voice/speak';
 import { currentExercises } from '../engine/plan';
 import { exerciseName, getExercise } from '../exercises/library';
+import { DemoButton } from './Demo';
 import { AngleTool } from './AngleTool';
 import { noticeText } from '../notices';
 
@@ -112,7 +113,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
       {exs.length > 0 && (
         <div>
           <h3>{T('yourExercises')}</h3>
-          <ul className="exlist">{exs.map((id) => <li key={id}>{exerciseName(id, lang)}</li>)}</ul>
+          <ul className="exlist">{exs.map((id) => <li key={id} className="exitem"><span>{exerciseName(id, lang)}</span><DemoButton patient={patient} exerciseId={id} lang={lang} compact /></li>)}</ul>
         </div>
       )}
       <div className="homecards">
@@ -313,6 +314,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
                     {ex && <img src={ex.picture} alt="" width={64} height={64} />}
                     <div><b>{exerciseName(id, lang)}</b>{ex && <small>{T('exDose')}: {L(ex.dose.text, lang)}</small>}</div>
                   </div>
+                  <DemoButton patient={patient} exerciseId={id} lang={lang} />
                   <div className="yn">
                     <button className={r.done === true ? 'sel yes' : ''} aria-pressed={r.done === true} onClick={() => setR({ done: true, reason: null })}>✓ {T('exDone')}</button>
                     <button className={r.done === false ? 'sel no' : ''} aria-pressed={r.done === false} onClick={() => setR({ done: false, reason: r.reason })}>✕ {T('exCouldnt')}</button>

@@ -1,5 +1,7 @@
 import { isLang } from './types';
-import type { CurveEdit } from './types';
+import type { CurveEdit, ExerciseDemo } from './types';
+import { cleanClinicDemos, cleanDemo, setDemoRegistry } from './exercises/demos';
+import { getExercise } from './exercises/library';
 import { setClinicCurves, validateCurve } from './engine/curves';
 import type { Patient, PeriodicEntry, ProtocolPack, Value } from './types';
 import { addDays } from './engine/dates';
@@ -31,6 +33,8 @@ export interface AppState {
   questionnaires?: SavedQuestionnaire[];
   /** Expected-recovery curves the physio set for every patient of a condition, by pack id (Phase 7.1). */
   clinicCurves?: Record<string, CurveEdit[]>;
+  /** Demonstration links and videos the physio attached to exercises, by exercise id. Clinic-wide: every patient with that exercise sees it (Phase 7.2). */
+  exerciseDemos?: Record<string, ExerciseDemo>;
   /** Clinic settings for patient data (Phase 6.4). */
   retentionYears?: number;
   clinicContact?: string;
@@ -106,7 +110,7 @@ function liveFromDemo(storage: Storage | null, patientDevice: boolean): AppState
     for (const cp of s.customPacks ?? []) { try { restoreAuthoredPack(cp); } catch { /* ignored */ } }
     const known = (id: string) => { try { getPack(id); return true; } catch { return false; } };
     const patients = s.patients.filter((x) => (patientDevice ? x.syncRole === 'patient' : !!x.syncRole && !x.demoPatient) && known(x.packId)).map(normalizePatient);
-    return { ...empty, patients, activeId: patients[0]?.id ?? '', customPacks: s.customPacks, clinicContact: s.clinicContact, retentionYears: s.retentionYears, questionnaires: s.questionnaires };
+    return { ...empty, patients, activeId: patients[0]?.id ?? '', customPacks: s.customPacks, clinicContact: s.clinicContact, retentionYears: s.retentionYears, questionnaires: s.questionnaires, exerciseDemos: s.exerciseDemos };
   } catch { return empty; }
 }
 
@@ -151,13 +155,14 @@ export function loadState(storage: Storage | null = typeof localStorage === 'und
 let state: AppState | null = null;
 const subs = new Set<() => void>();
 export const getState = (): AppState => {
-  if (!state) { state = loadState(); setClinicCurves(state.clinicCurves); }
+  if (!state) { state = loadState(); setClinicCurves(state.clinicCurves); if (state.exerciseDemos) state = { ...state, exerciseDemos: cleanClinicDemos(state.exerciseDemos) }; setDemoRegistry(state.exerciseDemos); }
   return state;
 };
 export const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
 export function setState(next: AppState): void {
   state = next;
   setClinicCurves(next.clinicCurves);
+  setDemoRegistry(next.exerciseDemos);
   try { localStorage.setItem(isPatientDevice() ? PATIENT_KEY : getMode() === 'live' ? LIVE_KEY : STORAGE_KEY, JSON.stringify(next)); } catch { /* offline demo still works in memory */ }
   subs.forEach((f) => f());
 }
@@ -213,4 +218,21 @@ export function removeClinicCurve(packId: string, measure: string, reason: strin
     clinicCurves: { ...(st.clinicCurves ?? {}), [packId]: left },
     patients: st.patients.map((p) => (p.packId !== packId ? p : withAuditNote(p, 'remove-clinic-curve', `Clinic default expected curve for ${measure} removed (back to the protocol curve)`, { points: prev.points, tolerance: prev.tolerance }, null, why, { nowMs, today: st.today }))),
   });
+}
+
+/**
+ * Attach (or, with null, remove) the demonstration of one exercise. Clinic-wide: it shows for every patient who has this exercise.
+ * This is teaching material, not a plan change, so it is not an audit-log item and needs no reason; it never touches triage.
+ */
+export function setExerciseDemo(exerciseId: string, demo: ExerciseDemo | null): void {
+  if (!getExercise(exerciseId)) throw new Error('Unknown exercise');
+  const st = getState();
+  const rest = { ...(st.exerciseDemos ?? {}) };
+  if (demo === null) delete rest[exerciseId];
+  else {
+    const clean = cleanDemo(demo);
+    if (!clean) throw new Error('That video or link is not valid');
+    rest[exerciseId] = clean;
+  }
+  setState({ ...st, exerciseDemos: rest });
 }

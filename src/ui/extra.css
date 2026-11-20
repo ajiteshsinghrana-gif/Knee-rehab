@@ -102,3 +102,33 @@
 .livebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:#0b3d2e;color:#fff}.livebar .tag.live{background:#19c37d;color:#04281d;border-radius:6px;padding:2px 8px;font-weight:700}.livebar .demotext{flex:1;font-size:.85rem}
 .previewbar{background:#fff7e0;border:1px solid #f0c36d;border-radius:12px;padding:8px 12px;margin:8px auto;max-width:560px;font-size:.9rem}
 .previewwrap{max-width:420px;margin:8px auto;border:6px solid #1c1c1e;border-radius:28px;overflow:hidden;pointer-events:none;user-select:none;background:#fff}
+
+/* Phase 7.2: exercise demonstration videos */
+.exlist li.exitem{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.demo{display:grid;gap:8px;min-width:0;flex:0 1 auto}
+.excard .demo,.exitem .demo{width:100%}
+.exitem .demo{width:auto}
+.exitem .demo:has(.demoplayer){width:100%;flex-basis:100%}
+.demobtn{min-height:48px;padding:0 16px;border:2px solid var(--brand);border-radius:12px;background:#fff;color:var(--brand);font-weight:700}
+.demoplayer{display:grid;gap:8px;background:#f1f7f7;border:1px solid var(--line);border-radius:12px;padding:10px}
+.demofrom{margin:0;font-size:.85rem;color:#33474f}
+.demoframe{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#000}
+.demoframe iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.demovideo{width:100%;max-height:60vh;border-radius:10px;background:#000}
+.demolink{display:flex;align-items:center;justify-content:center;min-height:56px;border:2px solid var(--brand);border-radius:12px;background:#fff;color:var(--brand);font-weight:700;text-decoration:none}
+.democlose{min-height:48px;border:2px solid var(--line);border-radius:12px;background:#fff;font-weight:700}
+
+/* Phase 7.2: the physio's Exercise videos panel */
+.demos{display:grid;gap:10px;max-width:900px}
+.demos .demorow{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.demos .demorow img{border-radius:8px;background:#eef3f8}
+.demos .demostatus{display:block;font-size:.8rem;color:#33474f}
+.demos .demostatus.has{color:#1d6f42;font-weight:700}
+.demos .demoedit{grid-column:1/-1;display:grid;gap:8px;background:#f6f9f9;border:1px solid var(--line);border-radius:10px;padding:10px}
+.demos .demoedit input[type=url],.demos .demoedit input[type=search],.demos input[type=search]{padding:8px;border:1px solid #9aa7b3;border-radius:8px;font:inherit;min-width:0}
+.demos .demochoice{display:flex;gap:16px;flex-wrap:wrap}
+.demos .demochoice label{display:flex;gap:6px;align-items:center}
+.demos .demowarn{background:#fff3e0;border:1px solid #e0b36a;border-radius:10px;padding:8px 10px;margin:0;font-size:.85rem}
+.demos .demoprev{max-width:520px}
+.demobadge{font-size:.75rem;font-weight:800;border:1px solid #1d6f42;color:#1d6f42;border-radius:6px;padding:1px 6px;margin-left:6px;white-space:nowrap}
+.demobadge.none{border-color:#9aa7b3;color:#5a6a72;font-weight:600}
