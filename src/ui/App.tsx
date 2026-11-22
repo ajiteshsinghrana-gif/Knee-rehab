@@ -14,6 +14,8 @@ import { isActive } from '../lifecycle';
 import { PatientShell } from './PatientShell';
 import { ResetPassword } from './ResetPassword';
 import { recoveryTokenFromHash } from '../sync/auth';
+import { WhatsAppSim } from './WhatsAppSim';
+import { WhatsAppSetup } from './WhatsAppSetup';
 
 const route = (): 'patient' | 'clinician' => (window.location.hash === '#clinician' ? 'clinician' : 'patient');
 
@@ -56,7 +58,7 @@ function PatientApp() {
 function LiveApp() {
   const state = useSyncExternalStore(subscribe, getState);
   const sync = useSyncExternalStore(subscribeSync, getSyncStatus);
-  const [view, setView] = useState<'physio' | 'preview'>('physio');
+  const [view, setView] = useState<'physio' | 'preview' | 'whatsapp'>('physio');
   const [previewId, setPreviewId] = useState('');
   const gated = sync.ready && sync.enabled && sync.auth && !sync.user; // nobody sees any patient until the physio signs in
   const people = state.patients.filter(isActive);
@@ -80,8 +82,9 @@ function LiveApp() {
           <nav className="tabs">
             <button className={view === 'physio' ? 'on' : ''} onClick={() => setView('physio')}>Physio dashboard</button>
             <button className={view === 'preview' ? 'on' : ''} data-testid="preview-tab" onClick={() => setView('preview')}>View as patient</button>
+            <button className={view === 'whatsapp' ? 'on' : ''} data-testid="whatsapp-tab" onClick={() => setView('whatsapp')}>WhatsApp</button>
           </nav>
-          {view === 'physio' ? <Clinician state={state} /> : (
+          {view === 'physio' ? <Clinician state={state} /> : view === 'whatsapp' ? <WhatsAppSetup patients={state.patients} /> : (
             <section data-testid="preview">
               {!shown ? <p className="card">No active patients yet. Add one on the Physio dashboard.</p> : (
                 <>
@@ -134,6 +137,7 @@ function DemoApp() {
   const step = state.demoStep;
   const s = DEMO_STEPS[step];
   const isRavi = patient.id === 'ravi';
+  const [wa, setWa] = useState(false);
 
   const fastForward = () => {
     const ravi = state.patients.find((p) => p.id === 'ravi');
@@ -156,6 +160,7 @@ function DemoApp() {
         </span>
         <span className="demobtns">
           <button className="btn primary" disabled={!s} onClick={fastForward}>⏩ Fast-forward ({Math.min(step + 1, DEMO_STEPS.length)}/{DEMO_STEPS.length})</button>
+          <button className="btn" data-testid="whatsapp-btn" onClick={() => setWa(true)}>💬 WhatsApp</button>
           <button className="btn" onClick={resetDemo}>↺ Reset</button>
           <button className="btn" data-testid="to-live" onClick={() => { setMode('live'); window.location.reload(); }}>Go to live clinic →</button>
         </span>
@@ -167,6 +172,7 @@ function DemoApp() {
       </nav>
       {view === 'patient' ? <PatientView key={patient.id} patient={patient} /> : <Clinician state={state} />}
       {!isRavi && view === 'patient' && null}
+      {wa && <WhatsAppSim key={patient.id} patient={patient} canSave onClose={() => setWa(false)} />}
     </>
   );
 }
