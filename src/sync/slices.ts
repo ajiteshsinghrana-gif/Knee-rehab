@@ -9,18 +9,20 @@
  * Everything that arrives is checked and copied field by field. Unknown fields are dropped, so a damaged or
  * tampered row cannot change anything it should not, and the physio's private reasons never leave his computer.
  */
-import type { DailyCheckIn, ExerciseDemo, Notice, Patient, PeriodicEntry, Plan, SessionLog, SyncedDemo } from '../types';
+import type { DailyCheckIn, ExerciseDemo, Notice, Patient, PeriodicEntry, Plan, SessionLog, SyncedDemo, FormRequest, FormReply } from '../types';
 import { cleanSyncedDemos, demosForPatient } from '../exercises/demos';
 import { isLang } from '../types';
 import { getPack } from '../engine/packs';
 
-export interface UpSlice { v: 1; daily: DailyCheckIn[]; periodic: PeriodicEntry[]; language: string; caregiverMode: boolean; seen: string[]; sessions?: SessionLog[]; consent?: { version: string; at: string }; erasureRequestedAt?: string }
+export interface UpSlice { v: 1; daily: DailyCheckIn[]; periodic: PeriodicEntry[]; language: string; caregiverMode: boolean; seen: string[]; sessions?: SessionLog[]; forms?: FormRequest[]; consent?: { version: string; at: string }; erasureRequestedAt?: string }
 export interface DownSlice {
   v: 1; name: string; age: number; anchorDate: string; enrolledOn?: string; currentPhase: string; phaseStartDate: string;
   sessionsPrescribedPerDay: number; plan: Plan; notices: Notice[];
   status?: 'completed'; completedAt?: string; erasureNote?: string; clinicContact?: string;
   /** Demonstration links and cloud videos for this patient's exercises (Phase 7.2). Teaching material only; never affects triage. */
   demos?: Record<string, SyncedDemo>;
+  /** The physio's replies to form-check videos, and clips he deleted, keyed by request id. */
+  forms?: Record<string, { reply?: FormReply; clipGone?: string; deleteAfter?: string }>;
 }
 
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -72,9 +74,64 @@ const mergeSessions = (local: SessionLog[] | undefined, raw: unknown): SessionLo
   return [...m.values()].sort((a, b) => a.startedAt - b.startedAt).slice(-60);
 };
 
+// ---- form-check video requests (patient-owned request; physio-owned reply) ----
+const ISO = /^\d{4}-\d{2}-\d{2}/;
+const cleanReply = (raw: unknown): FormReply | undefined => {
+  if (!isObj(raw) || !str(raw.at, 40) || !str(raw.by, 80) || !str(raw.text, 1000) || !Array.isArray(raw.points)) return undefined;
+  return { at: raw.at, by: raw.by, text: raw.text, points: raw.points.filter((x): x is string => typeof x === 'string' && x.length <= 30).slice(0, 12) };
+};
+const cleanForm = (raw: unknown): FormRequest | null => {
+  if (!isObj(raw) || !str(raw.id, 60) || !/^[A-Za-z0-9_-]{4,60}$/.test(raw.id) || !str(raw.exerciseId, 60) || !str(raw.at, 40) || !ISO.test(raw.at) || !str(raw.note, 500)) return null;
+  const c = raw.consent;
+  if (!isObj(c) || (c.by !== 'patient' && c.by !== 'caregiver') || !str(c.at, 40) || !str(c.version, 40)) return null;
+  let clip: FormRequest['clip'] = null;
+  const k = raw.clip;
+  if (isObj(k) && (k.where === 'device' || k.where === 'cloud') && str(k.ref, 200) && str(k.mime, 60) && num(k.size) && str(k.deleteAfter, 10) && ISO.test(k.deleteAfter)) {
+    clip = { where: k.where, ref: k.ref, mime: k.mime, size: k.size, durationSec: num(k.durationSec) ? k.durationSec : null, deleteAfter: k.deleteAfter };
+  }
+  return { id: raw.id, exerciseId: raw.exerciseId, at: raw.at, note: raw.note, consent: { by: c.by, at: c.at, version: c.version },
+    ...(raw.via === 'app' || raw.via === 'whatsapp' ? { via: raw.via } : {}), clip,
+    ...(str(raw.clipGone, 40) ? { clipGone: raw.clipGone } : {}), ...(str(raw.replySeenAt, 40) ? { replySeenAt: raw.replySeenAt } : {}) };
+};
+/** The patient's request without the physio's reply (which the patient's phone only ever receives, never sends back). */
+const formUp = (r: FormRequest): FormRequest => { const { reply: _r, ...rest } = r; return rest; };
+/** Physio side: take the patient's requests. A deletion on either side wins: a clip is never brought back. The physio's reply is kept. */
+const mergeFormsUp = (local: FormRequest[] | undefined, raw: unknown): FormRequest[] | undefined => {
+  const incoming = (Array.isArray(raw) ? raw : []).slice(0, 200).map(cleanForm).filter((x): x is FormRequest => !!x);
+  if (!local?.length && !incoming.length) return local;
+  const m = new Map<string, FormRequest>((local ?? []).map((x) => [x.id, x]));
+  for (const inc of incoming) {
+    const cur = m.get(inc.id);
+    const gone = cur?.clipGone ?? inc.clipGone;
+    const clip = gone ? null : inc.clip && cur?.clip && cur.clip.deleteAfter < inc.clip.deleteAfter ? { ...inc.clip, deleteAfter: cur.clip.deleteAfter } : inc.clip;
+    m.set(inc.id, { ...inc, clip, ...(gone ? { clipGone: gone } : {}), ...(cur?.reply ? { reply: cur.reply } : {}) });
+  }
+  return [...m.values()].sort((a, b) => a.at.localeCompare(b.at)).slice(-200);
+};
+/** What the physio sends down about each request. */
+const formsDown = (p: Patient): Record<string, { reply?: FormReply; clipGone?: string; deleteAfter?: string }> | undefined => {
+  const rs = (p.formRequests ?? []).filter((r) => r.reply || r.clipGone);
+  if (!rs.length) return undefined;
+  return Object.fromEntries(rs.map((r) => [r.id, { ...(r.reply ? { reply: r.reply } : {}), ...(r.clipGone ? { clipGone: r.clipGone } : {}), ...(r.clip ? { deleteAfter: r.clip.deleteAfter } : {}) }]));
+};
+/** Patient side: take the physio's replies and deletions. A clip the physio deleted is marked due now, so the phone's clean-up removes the file. */
+const applyForms = (local: FormRequest[] | undefined, raw: unknown): FormRequest[] | undefined => {
+  if (!local?.length || !isObj(raw)) return local;
+  return local.map((r) => {
+    const d = raw[r.id];
+    if (!isObj(d)) return r;
+    const reply = cleanReply(d.reply);
+    const gone = str(d.clipGone, 40) ? d.clipGone : undefined;
+    let clip = r.clip;
+    if (clip && gone) clip = { ...clip, deleteAfter: '1970-01-01' };
+    else if (clip && str(d.deleteAfter, 10) && ISO.test(d.deleteAfter) && d.deleteAfter < clip.deleteAfter) clip = { ...clip, deleteAfter: d.deleteAfter };
+    return { ...r, ...(reply ? { reply } : {}), ...(gone ? { clipGone: gone } : {}), clip };
+  });
+};
+
 // ---------------- patient -> physio ----------------
 export function upSlice(p: Patient): UpSlice {
-  return { v: 1, daily: p.daily, periodic: p.periodic, language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id), ...(p.sessions?.length ? { sessions: p.sessions.slice(-60) } : {}), ...(p.consent ? { consent: p.consent } : {}), ...(p.erasureRequestedAt ? { erasureRequestedAt: p.erasureRequestedAt } : {}) };
+  return { v: 1, daily: p.daily, periodic: p.periodic, language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id), ...(p.sessions?.length ? { sessions: p.sessions.slice(-60) } : {}), ...(p.formRequests?.length ? { forms: p.formRequests.slice(-200).map(formUp) } : {}), ...(p.consent ? { consent: p.consent } : {}), ...(p.erasureRequestedAt ? { erasureRequestedAt: p.erasureRequestedAt } : {}) };
 }
 const stamp = (e: object): number => (e as { recordedAt?: number }).recordedAt ?? 0;
 /** Same day: the later recording wins; an entry is never lost because the other side has fewer. */
@@ -98,6 +155,7 @@ export function applyUp(p: Patient, raw: unknown): Patient {
   return {
     ...p, daily, periodic, language: isLang(raw.language) ? raw.language : p.language,
     ...(() => { const ss = mergeSessions(p.sessions, raw.sessions); return ss ? { sessions: ss } : {}; })(),
+    ...(() => { const ff = mergeFormsUp(p.formRequests, raw.forms); return ff ? { formRequests: ff } : {}; })(),
     ...(raw.caregiverMode === true ? { caregiverMode: true } : { caregiverMode: false }),
     notices: p.notices.map((n) => (seen.has(n.id) ? { ...n, seen: true } : n)),
     ...(isObj(raw.consent) && typeof raw.consent.version === 'string' && typeof raw.consent.at === 'string' ? { consent: { version: raw.consent.version.slice(0, 40), at: raw.consent.at.slice(0, 40) } } : {}),
@@ -122,6 +180,7 @@ export function downSlice(p: Patient, clinicDemos?: Record<string, ExerciseDemo>
     sessionsPrescribedPerDay: p.sessionsPrescribedPerDay, plan: redactPlan(p.plan), notices: p.notices,
     ...(p.status === 'completed' ? { status: 'completed' as const, ...(p.completedAt ? { completedAt: p.completedAt } : {}) } : {}), ...(p.erasureNote ? { erasureNote: p.erasureNote } : {}), ...(p.clinicContact ? { clinicContact: p.clinicContact } : {}),
     ...(clinicDemos ? { demos } : {}),
+    ...(formsDown(p) ? { forms: formsDown(p) } : {}),
   };
 }
 const validNotice = (n: unknown): n is Notice => isObj(n) && typeof n.id === 'string' && typeof n.at === 'string' && typeof n.seen === 'boolean' && Array.isArray(n.changes) && n.changes.every((c) => isObj(c) && typeof c.kind === 'string');
@@ -148,6 +207,7 @@ export function applyDown(p: Patient, raw: unknown): Patient {
     clinicContact: typeof raw.clinicContact === 'string' ? raw.clinicContact.slice(0, 120) : p.clinicContact,
     // An older physio build sends no demos: keep what this phone has. Otherwise take exactly what the physio sent, so a removed video disappears.
     ...(raw.demos !== undefined ? { demos: cleanSyncedDemos(raw.demos) } : {}),
+    ...(() => { const ff = applyForms(p.formRequests, raw.forms); return ff ? { formRequests: ff } : {}; })(),
   };
 }
 

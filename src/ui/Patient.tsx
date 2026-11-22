@@ -20,6 +20,9 @@ import { DemoButton } from './Demo';
 import { AngleTool } from './AngleTool';
 import { noticeText } from '../notices';
 import { GuidedSession } from './GuidedSession';
+import { FormRequestScreen } from './FormRequest';
+import { fs } from '../forms/strings';
+import { unreadReplies } from '../forms/model';
 import { prefillFromSessions } from '../session/engine';
 import { ss } from '../session/strings';
 
@@ -28,13 +31,14 @@ const SKIP_EMOJI: Record<string, string> = { pain: '😣', fear: '😨', time: '
 const EXS = [['all', '✅'], ['some', '🟡'], ['none', '❌']] as const;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-type Screen = 'home' | 'checkin' | 'weekly' | 'monthly' | 'done' | 'session';
+type Screen = 'home' | 'checkin' | 'weekly' | 'monthly' | 'done' | 'session' | 'forms';
 
 export function PatientView({ patient }: { patient: Patient }) {
   const pack = getPack(patient.packId);
   const lang = patient.language;
   const T = (k: string, p?: Record<string, string | number>) => t(lang, k, p);
   const [screen, setScreen] = useState<Screen>('home');
+  const [formEx, setFormEx] = useState<string | null>(null);
   const setLang = (l: Lang) => updatePatient(patient.id, (p) => ({ ...p, language: l }));
   return (
     <div className="app" lang={lang}>
@@ -42,8 +46,9 @@ export function PatientView({ patient }: { patient: Patient }) {
         <h1>{T('appName')}</h1>
         <button className="lang" onClick={() => setLang(LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length])} aria-label="Language">{LANG_NAME[LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length]]}</button>
       </header>
-      {screen === 'home' && <Home patient={patient} pack={pack} lang={lang} go={setScreen} />}
-      {screen === 'session' && <GuidedSession key={patient.id} patient={patient} pack={pack} lang={lang} onExit={(toCheckIn) => setScreen(toCheckIn ? 'checkin' : 'home')} />}
+      {screen === 'home' && <Home patient={patient} pack={pack} lang={lang} go={(sc) => { if (sc === 'forms') setFormEx(null); setScreen(sc); }} />}
+      {screen === 'session' && <GuidedSession key={patient.id} patient={patient} pack={pack} lang={lang} onExit={(toCheckIn) => setScreen(toCheckIn ? 'checkin' : 'home')} onNeedHelp={(id) => { setFormEx(id); setScreen('forms'); }} />}
+      {screen === 'forms' && <FormRequestScreen key={patient.id + (formEx ?? '')} patient={patient} pack={pack} lang={lang} exerciseId={formEx} onBack={() => { setFormEx(null); setScreen('home'); }} />}
       {screen === 'checkin' && <CheckIn key={patient.id} patient={patient} pack={pack} lang={lang} onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
       {screen === 'weekly' && <Weekly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
       {screen === 'monthly' && <Monthly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
@@ -98,6 +103,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
       </label>
       {doneToday && <p className="okline">{T('doneToday')}</p>}
       {exs.length > 0 && <button className="big secondary" data-testid="start-session" onClick={() => go('session')}>🏃 {ss(lang, 'sStart')}</button>}
+      {exs.length > 0 && <button className="big secondary" data-testid="open-forms" onClick={() => go('forms')}>📹 {(patient.formRequests ?? []).length ? fs(lang, 'fMine') : fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</button>}
       <button className="big primary" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('startCheckIn')}</button>
       <div>
         <h3>{T('last7')}</h3>

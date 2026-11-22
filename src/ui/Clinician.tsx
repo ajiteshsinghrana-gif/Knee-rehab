@@ -27,6 +27,8 @@ import { effectivePack, listOverridable } from '../engine/overrides';
 import { curveOrigin, PLACEHOLDER_NOTE } from '../engine/curves';
 import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
 import { SessionsCard } from './SessionsCard';
+import { FormReview } from './FormReview';
+import { pendingForms } from '../forms/model';
 
 const TIER_LABEL: Record<Tier, string> = { SAFETY: 'SAFETY', URGENT: 'URGENT', REVIEW: 'REVIEW', ON_PLAN: 'ON PLAN' };
 const srcClass = (s: string) => s.split(/[;( ]/)[0].replace(/[^A-Z_]/g, '');
@@ -78,6 +80,7 @@ export function Clinician({ state }: { state: AppState }) {
                   <span className="pmain">
                     <b>{p.name}, {p.age}{r.overdue && <span className="overdue">Overdue</span>}</b>
                     <small>{pack.condition.en}</small>
+                    {pendingForms(p).length > 0 && <span className="chips"><i data-testid="form-chip">📹 {pendingForms(p).length} video{pendingForms(p).length === 1 ? '' : 's'} to review</i></span>}
                     <span className="chips">{r.triggers.slice(0, 5).map((t) => <i key={t.ruleId}>{t.ruleId}</i>)}</span>
                   </span>
                   <span className="pdl"><strong className={r.tier}>{TIER_LABEL[r.tier]}</strong><small className={r.reviewedAt ? 'rev' : ''}>{dueText(r, now)}</small></span>
@@ -259,6 +262,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
         })}
       </div>
 
+      <FormReview patient={p} pack={pack} now={now} />
       <SessionsCard patient={p} pack={pack} />
 
       <div className="card">
