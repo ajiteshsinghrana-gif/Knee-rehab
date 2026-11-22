@@ -52,3 +52,7 @@ Add a patient, open the invite link on a phone, do a check-in. The physio screen
 ## Optional: WhatsApp (45 s)
 
 Yellow demo bar, **💬 WhatsApp**. Say: "This is how the patient answers on WhatsApp. Same questions, same rules." Tap through, answer Yes to chest pain, and show the red message. Leave the "also save" box unticked unless you want the dashboard to react (Reset undoes it). It is a simulation: no number is connected yet.
+
+## Optional: guided session and a video request (60 s; rehearse first)
+
+Patient screen: **Start my exercises**. Tap through one exercise (Rep done, rest, pain 0 to 10), then **I need help**, tick the consent and pick any short video. Say: "The patient asks the physio to look at it, with consent." Switch to the Physio tab: a **📹 1 video to review** chip; open it, tick a cue, write a reply, **Send reply**. Back on the patient screen the reply shows under **My videos**. In the demo (no cloud) the clip stays on the device and the physio card says so: say that, do not imply it was uploaded. Not tested on a real phone or iPad: do not use in front of the investor unless rehearsed on that device. Reset undoes it.

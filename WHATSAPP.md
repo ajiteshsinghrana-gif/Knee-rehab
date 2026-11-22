@@ -7,7 +7,7 @@ Patients get reminders on WhatsApp and can answer the daily check-in there. Tria
 | Where | What |
 |---|---|
 | Demo, yellow bar, **💬 WhatsApp** | A simulated WhatsApp chat for the selected patient, in English, Hindi or Bengali. It runs the real check-in logic. A tick-box can also save the answers to the patient, so the Physio dashboard reacts (for example a "Yes" to chest pain turns the patient SAFETY). Reset undoes it. Nothing is sent. |
-| Live clinic, **WhatsApp** tab | Setup checklist, the five templates to submit to Meta (with Hindi and Bengali), each patient's number and consent, a chat preview that never saves anything, and a **Send test** button that stays off until a backend reports WhatsApp is connected. |
+| Live clinic, **WhatsApp** tab | Setup checklist, the six templates to submit to Meta (with Hindi and Bengali), each patient's number and consent, a chat preview that never saves anything, and a **Send test** button that stays off until a backend reports WhatsApp is connected. |
 | `src/whatsapp/flow.ts` | The conversation as pure, tested logic (no network). |
 | `supabase/functions/whatsapp/` | Backend scaffold: webhook handshake, signature check, status, and sending one approved template. **Not tested against Meta** (no number yet). |
 
@@ -44,3 +44,12 @@ Patients get reminders on WhatsApp and can answer the daily check-in there. Tria
 ## Needs a native reader before real use (NEEDS_NATIVE_REVIEW)
 
 Hindi and Bengali wording in `src/whatsapp/strings.ts` and `src/whatsapp/templates.ts`. Reminder times and any escalation timings are placeholders for the physio to set.
+
+## Guided exercises and video requests on WhatsApp (simulated)
+
+The demo chat now has three modes: **Daily check-in**, **Guided exercises** and **Send a video**. Code: `src/whatsapp/sessionChat.ts` (pure logic, tested), reusing the app's session engine and consent wording.
+
+- **Guided exercises.** One message per exercise with the dose; buttons Done / It hurts, stop / I need help. WhatsApp cannot count reps, so a chat session records an exercise as done (all sets) or stopped with a reason from the protocol's own list. No pain score in chat. The summary reminds the patient to do the daily check-in.
+- **Video request.** The patient picks an exercise, sees the consent (with the 112 line), agrees, then sends a video. Saying no, or skipping the video, sends nothing. In the simulation the "video" is a button; the request is saved without a clip. With a real number, the video would arrive as a WhatsApp media message to the webhook, which would have to download it into the private `form-clips` bucket. **That webhook step is not built.**
+- **New template** `rp_form_reply` ("your physio replied to your video, open RehabPath"): no clinical detail. Submit it to Meta with the other five (the Setup tab lists it). The physio's actual reply is read in the app, not in the WhatsApp message.
+- Buttons are at most 20 characters and list rows at most 24 (tested in English, Hindi and Bengali). Hindi and Bengali wording is a draft: NEEDS_NATIVE_REVIEW.
