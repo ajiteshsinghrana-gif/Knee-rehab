@@ -19,13 +19,16 @@ import { exerciseName, getExercise } from '../exercises/library';
 import { DemoButton } from './Demo';
 import { AngleTool } from './AngleTool';
 import { noticeText } from '../notices';
+import { GuidedSession } from './GuidedSession';
+import { prefillFromSessions } from '../session/engine';
+import { ss } from '../session/strings';
 
 const FACES = ['😀', '🙂', '🙂', '😐', '😐', '😕', '😟', '😣', '😣', '😫', '😭'];
 const SKIP_EMOJI: Record<string, string> = { pain: '😣', fear: '😨', time: '⏰', access: '🚫', understand: '❓' };
 const EXS = [['all', '✅'], ['some', '🟡'], ['none', '❌']] as const;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-type Screen = 'home' | 'checkin' | 'weekly' | 'monthly' | 'done';
+type Screen = 'home' | 'checkin' | 'weekly' | 'monthly' | 'done' | 'session';
 
 export function PatientView({ patient }: { patient: Patient }) {
   const pack = getPack(patient.packId);
@@ -40,6 +43,7 @@ export function PatientView({ patient }: { patient: Patient }) {
         <button className="lang" onClick={() => setLang(LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length])} aria-label="Language">{LANG_NAME[LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length]]}</button>
       </header>
       {screen === 'home' && <Home patient={patient} pack={pack} lang={lang} go={setScreen} />}
+      {screen === 'session' && <GuidedSession key={patient.id} patient={patient} pack={pack} lang={lang} onExit={(toCheckIn) => setScreen(toCheckIn ? 'checkin' : 'home')} />}
       {screen === 'checkin' && <CheckIn key={patient.id} patient={patient} pack={pack} lang={lang} onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
       {screen === 'weekly' && <Weekly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
       {screen === 'monthly' && <Monthly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
@@ -93,6 +97,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
         <span><b>{T('caregiverToggle', { name: patient.name })}</b><small>{T('caregiverHint')}</small></span>
       </label>
       {doneToday && <p className="okline">{T('doneToday')}</p>}
+      {exs.length > 0 && <button className="big secondary" data-testid="start-session" onClick={() => go('session')}>🏃 {ss(lang, 'sStart')}</button>}
       <button className="big primary" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('startCheckIn')}</button>
       <div>
         <h3>{T('last7')}</h3>
@@ -173,7 +178,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
   const T = (k: string, p?: Record<string, string | number>) => t(lang, k, p);
   const s = getState();
   const existing = patient.daily.find((d) => d.date === s.today);
-  const [draft, setDraft] = useState<Draft>(() => (existing ? draftFromEntry(pack, patient, existing) : newDraft(pack, patient)));
+  const [draft, setDraft] = useState<Draft>(() => (existing ? draftFromEntry(pack, patient, existing) : prefillFromSessions(newDraft(pack, patient), patient, s.today)));
   const [step, setStep] = useState<Step>(existing ? 'review' : `m:${pack.checkIn.dailyMeasures[0]}`);
   const [fromReview, setFromReview] = useState(!!existing);
   const [listening, setListening] = useState(false);

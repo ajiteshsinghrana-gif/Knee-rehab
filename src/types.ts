@@ -279,6 +279,52 @@ export interface ProtocolPack {
   adherenceWindowDays: number;
 }
 
+
+// ---------- guided session and form-check videos ----------
+/** What happened with one exercise in a guided session. Reasons use the pack's skip reasons (pain, fear, time, access, ...). */
+export interface SessionExerciseLog {
+  id: string;
+  setsPlanned: number;
+  setsDone: number;
+  /** Reps per set (null: a hold or "do it as shown"). */
+  repsPlanned: number | null;
+  /** Reps counted over the whole exercise. */
+  repsDone: number;
+  /** Set when the patient stopped or skipped this exercise, with their reason. */
+  stopped?: string;
+  /** Pain right after this exercise (0 to 10), when the patient chose to say. */
+  pain?: number;
+  /** The patient said they were struggling with the form. */
+  struggling?: boolean;
+}
+export interface SessionLog {
+  id: string;
+  date: string;
+  startedAt: number;
+  endedAt: number;
+  exercises: SessionExerciseLog[];
+  answeredBy?: AnsweredBy;
+  via?: 'app' | 'whatsapp';
+}
+/** Where a patient's clip is kept: on the phone that recorded it, or in the clinic's private cloud store. */
+export interface FormClip { where: 'device' | 'cloud'; ref: string; mime: string; size: number; durationSec: number | null; deleteAfter: string }
+export interface FormReply { at: string; by: string; text: string; /** ids from forms/model.ts CUES */ points: string[] }
+/** A patient's request for a form check on one exercise: a short clip, a note and the consent for the video. */
+export interface FormRequest {
+  id: string;
+  exerciseId: string;
+  at: string;
+  note: string;
+  consent: { by: AnsweredBy; at: string; version: string };
+  via?: 'app' | 'whatsapp';
+  clip: FormClip | null;
+  /** When the clip was deleted (by either side, or by the retention rule). */
+  clipGone?: string;
+  reply?: FormReply;
+  /** The patient has read the reply (patient's phone sets it). */
+  replySeenAt?: string;
+}
+
 // ---------- patient data ----------
 export type AnsweredBy = 'patient' | 'caregiver';
 export type Exercises = 'all' | 'some' | 'none';
@@ -344,6 +390,10 @@ export interface Patient {
   demos?: Record<string, SyncedDemo>;
   /** One-time PIN the patient needs to claim the link. Physio's computer only; never put in a link or a slice. */
   claimPin?: string;
+  /** Guided exercise sessions the patient did (kept to the last 60). */
+  sessions?: SessionLog[];
+  /** Form-check video requests and the physio's replies. */
+  formRequests?: FormRequest[];
   anchorDate: string; // surgery date
   currentPhase: string; // phase id
   phaseStartDate: string;

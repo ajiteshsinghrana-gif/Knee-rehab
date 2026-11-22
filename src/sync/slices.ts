@@ -9,12 +9,12 @@
  * Everything that arrives is checked and copied field by field. Unknown fields are dropped, so a damaged or
  * tampered row cannot change anything it should not, and the physio's private reasons never leave his computer.
  */
-import type { DailyCheckIn, ExerciseDemo, Notice, Patient, PeriodicEntry, Plan, SyncedDemo } from '../types';
+import type { DailyCheckIn, ExerciseDemo, Notice, Patient, PeriodicEntry, Plan, SessionLog, SyncedDemo } from '../types';
 import { cleanSyncedDemos, demosForPatient } from '../exercises/demos';
 import { isLang } from '../types';
 import { getPack } from '../engine/packs';
 
-export interface UpSlice { v: 1; daily: DailyCheckIn[]; periodic: PeriodicEntry[]; language: string; caregiverMode: boolean; seen: string[]; consent?: { version: string; at: string }; erasureRequestedAt?: string }
+export interface UpSlice { v: 1; daily: DailyCheckIn[]; periodic: PeriodicEntry[]; language: string; caregiverMode: boolean; seen: string[]; sessions?: SessionLog[]; consent?: { version: string; at: string }; erasureRequestedAt?: string }
 export interface DownSlice {
   v: 1; name: string; age: number; anchorDate: string; enrolledOn?: string; currentPhase: string; phaseStartDate: string;
   sessionsPrescribedPerDay: number; plan: Plan; notices: Notice[];
@@ -50,9 +50,31 @@ const cleanPeriodic = (e: PeriodicEntry): PeriodicEntry => ({
   date: e.date, values: { ...e.values }, ...(e.photos ? { photos: { ...e.photos } } : {}), ...(e.methods ? { methods: { ...e.methods } } : {}), ...(e.answeredBy ? { answeredBy: e.answeredBy } : {}),
 });
 
+
+// ---- guided sessions (patient-owned, merged by id, newest 60 kept) ----
+const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
+const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const cleanSession = (raw: unknown): SessionLog | null => {
+  if (!isObj(raw) || !str(raw.id, 40) || !str(raw.date, 10) || !num(raw.startedAt) || !num(raw.endedAt) || !Array.isArray(raw.exercises)) return null;
+  const exercises = raw.exercises.slice(0, 40).flatMap((x: unknown) => {
+    if (!isObj(x) || !str(x.id, 60) || !num(x.setsPlanned) || !num(x.setsDone) || !num(x.repsDone)) return [];
+    return [{ id: x.id, setsPlanned: x.setsPlanned, setsDone: x.setsDone, repsPlanned: num(x.repsPlanned) ? x.repsPlanned : null, repsDone: x.repsDone,
+      ...(str(x.stopped, 30) ? { stopped: x.stopped } : {}), ...(num(x.pain) ? { pain: Math.max(0, Math.min(10, x.pain)) } : {}), ...(x.struggling === true ? { struggling: true } : {}) }];
+  });
+  return { id: raw.id, date: raw.date, startedAt: raw.startedAt, endedAt: raw.endedAt, exercises,
+    ...(raw.answeredBy === 'patient' || raw.answeredBy === 'caregiver' ? { answeredBy: raw.answeredBy } : {}), ...(raw.via === 'app' || raw.via === 'whatsapp' ? { via: raw.via } : {}) };
+};
+const mergeSessions = (local: SessionLog[] | undefined, raw: unknown): SessionLog[] | undefined => {
+  const incoming = (Array.isArray(raw) ? raw : []).map(cleanSession).filter((x): x is SessionLog => !!x);
+  if (!local?.length && !incoming.length) return local;
+  const m = new Map<string, SessionLog>((local ?? []).map((x) => [x.id, x]));
+  for (const x of incoming) m.set(x.id, x);
+  return [...m.values()].sort((a, b) => a.startedAt - b.startedAt).slice(-60);
+};
+
 // ---------------- patient -> physio ----------------
 export function upSlice(p: Patient): UpSlice {
-  return { v: 1, daily: p.daily, periodic: p.periodic, language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id), ...(p.consent ? { consent: p.consent } : {}), ...(p.erasureRequestedAt ? { erasureRequestedAt: p.erasureRequestedAt } : {}) };
+  return { v: 1, daily: p.daily, periodic: p.periodic, language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id), ...(p.sessions?.length ? { sessions: p.sessions.slice(-60) } : {}), ...(p.consent ? { consent: p.consent } : {}), ...(p.erasureRequestedAt ? { erasureRequestedAt: p.erasureRequestedAt } : {}) };
 }
 const stamp = (e: object): number => (e as { recordedAt?: number }).recordedAt ?? 0;
 /** Same day: the later recording wins; an entry is never lost because the other side has fewer. */
@@ -75,6 +97,7 @@ export function applyUp(p: Patient, raw: unknown): Patient {
   const seen = new Set((Array.isArray(raw.seen) ? raw.seen : []).filter((x): x is string => typeof x === 'string'));
   return {
     ...p, daily, periodic, language: isLang(raw.language) ? raw.language : p.language,
+    ...(() => { const ss = mergeSessions(p.sessions, raw.sessions); return ss ? { sessions: ss } : {}; })(),
     ...(raw.caregiverMode === true ? { caregiverMode: true } : { caregiverMode: false }),
     notices: p.notices.map((n) => (seen.has(n.id) ? { ...n, seen: true } : n)),
     ...(isObj(raw.consent) && typeof raw.consent.version === 'string' && typeof raw.consent.at === 'string' ? { consent: { version: raw.consent.version.slice(0, 40), at: raw.consent.at.slice(0, 40) } } : {}),

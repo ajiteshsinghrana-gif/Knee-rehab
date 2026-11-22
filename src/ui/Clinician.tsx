@@ -26,6 +26,7 @@ import { applyAction, applyManual, currentExercises, currentFollowUp, pendingPro
 import { effectivePack, listOverridable } from '../engine/overrides';
 import { curveOrigin, PLACEHOLDER_NOTE } from '../engine/curves';
 import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
+import { SessionsCard } from './SessionsCard';
 
 const TIER_LABEL: Record<Tier, string> = { SAFETY: 'SAFETY', URGENT: 'URGENT', REVIEW: 'REVIEW', ON_PLAN: 'ON PLAN' };
 const srcClass = (s: string) => s.split(/[;( ]/)[0].replace(/[^A-Z_]/g, '');
@@ -257,6 +258,8 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
           );
         })}
       </div>
+
+      <SessionsCard patient={p} pack={pack} />
 
       <div className="card">
         <h3>Last 7 days</h3>
