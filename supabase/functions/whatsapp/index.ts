@@ -19,7 +19,7 @@
 
 const GRAPH = Deno.env.get('WHATSAPP_GRAPH_VERSION') ?? 'v21.0';
 const REQUIRED = ['WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_APP_SECRET'];
-const ALLOWED_TEMPLATES = new Set(['rp_checkin_prompt', 'rp_daily_reminder', 'rp_missed_checkin', 'rp_appointment', 'rp_plan_changed']);
+const ALLOWED_TEMPLATES = new Set(['rp_checkin_prompt', 'rp_daily_reminder', 'rp_missed_checkin', 'rp_appointment', 'rp_plan_changed', 'rp_form_reply']);
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',

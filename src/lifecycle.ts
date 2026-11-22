@@ -63,6 +63,8 @@ export function exportMyData(p: Patient, packName: string, nowMs: number) {
     treatment: { condition: packName, anchorDate: p.anchorDate, currentPhase: p.currentPhase, status: p.status ?? 'active', completedAt: p.completedAt ?? null, instructionsFromPhysio: (p.plan.instructions ?? []).map((x) => x.text) },
     consent: p.consent ?? null,
     dailyCheckIns: p.daily,
+    guidedSessions: p.sessions ?? [],
+    videoRequests: (p.formRequests ?? []).map((r) => ({ sent: r.at, exercise: r.exerciseId, yourNote: r.note, consentGiven: r.consent, videoDeleted: r.clipGone ?? null, videoStoredUntil: r.clip?.deleteAfter ?? null, physioReply: r.reply ? { at: r.reply.at, text: r.reply.text, points: r.reply.points } : null })),
     periodicEntries: p.periodic,
     changesToYourPlan: p.notices.map((n) => ({ at: n.at, changes: n.changes })),
   };

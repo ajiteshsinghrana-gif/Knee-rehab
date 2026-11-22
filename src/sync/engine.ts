@@ -10,6 +10,7 @@ import { claimKey, deleteMyAccount, eraseKeyData, newClaimPin, setClaimHash, sha
 import { createPatientAccount, signInPatient, type Restored } from './account';
 import { deleteDemoVideo, uploadDemoVideo } from '../exercises/upload';
 import { requestPasswordReset, setNewPassword, getAccessToken, getSession, signIn, signOut, signUp, subscribeAuth } from './auth';
+import { deleteClipObject, eraseClips, signedClipUrl, uploadClip } from '../forms/cloud';
 
 /** state 'login': sign-in is required (Phase 6.2) and nobody is signed in, so the physio's patients are not syncing yet. */
 export interface SyncStatus {
@@ -170,6 +171,7 @@ export async function physioErasePatient(key: string): Promise<void> {
   if (!activeConfig) return;
   const token = await getAccessToken(activeConfig);
   if (!token) throw new Error('Sign in first so the cloud copy can be erased too.');
+  await eraseClips(activeConfig, token, key); // video clips first, so nothing is left behind if this fails
   await eraseKeyData(activeConfig, key, token);
   const { [key]: _gone, ...rest } = status.links;
   setStatus({ links: rest });
@@ -226,4 +228,31 @@ export async function physioDeleteDemo(url: string): Promise<void> {
   if (!activeConfig || !activeConfig.auth) return;
   const token = await getAccessToken(activeConfig);
   if (token) await deleteDemoVideo(activeConfig, token, url);
+}
+
+// ---------------- form-check clips (cloud) ----------------
+/** Who is signed in on this side, for Storage calls: the physio, or a patient with a login. A patient on the plain link sends no token. */
+async function clipToken(patient: Patient): Promise<string | undefined> {
+  if (!activeConfig?.auth) return undefined;
+  if (patient.syncRole === 'physio' || patient.accountEmail) return (await getAccessToken(activeConfig)) ?? undefined;
+  return undefined;
+}
+/** Whether this patient's phone can send clips to the cloud right now. When false, the clip stays on the phone. */
+export const clipCloudReady = (patient: Patient): boolean => !!activeConfig && !!patient.syncKey && patient.syncRole === 'patient';
+/** Patient: upload a clip. Returns the stored path, or null when the cloud is not available. Throws a safe message when it is but failed. */
+export async function patientUploadClip(patient: Patient, requestId: string, body: Blob, mime: string): Promise<string | null> {
+  if (!activeConfig || !clipCloudReady(patient)) return null;
+  return uploadClip(activeConfig, patient.syncKey!, requestId, body, mime, await clipToken(patient));
+}
+/** Physio: a short-lived address to play a clip. */
+export async function physioClipUrl(patient: Patient, path: string): Promise<string> {
+  if (!activeConfig) throw new Error('Live sync is not set up.');
+  const token = await getAccessToken(activeConfig);
+  if (!token) throw new Error('Sign in first to watch the clip.');
+  return signedClipUrl(activeConfig, token, path);
+}
+/** Either side: delete one cloud clip. True when it is gone. */
+export async function removeCloudClip(patient: Patient, path: string): Promise<boolean> {
+  if (!activeConfig || !patient.syncKey) return false;
+  return deleteClipObject(activeConfig, patient.syncKey, path, await clipToken(patient));
 }

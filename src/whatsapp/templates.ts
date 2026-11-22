@@ -74,6 +74,17 @@ export const TEMPLATES: WaTemplate[] = [
     buttons: [],
     vars: ['Patient first name'],
   },
+  {
+    name: 'rp_form_reply',
+    purpose: 'The physio replied to a form-check video',
+    body: {
+      en: 'Hi {{1}}, your physio replied to your video. Open RehabPath to read it.',
+      hi: 'नमस्ते {{1}}। आपके फ़िज़ियो ने आपके वीडियो का जवाब दिया है। पढ़ने के लिए RehabPath खोलें।',
+      bn: 'নমস্কার {{1}}। আপনার ফিজিও আপনার ভিডিওর উত্তর দিয়েছেন। পড়তে RehabPath খুলুন।',
+    },
+    buttons: [],
+    vars: ['Patient first name'],
+  },
 ];
 
 export const templateByName = (name: string): WaTemplate | undefined => TEMPLATES.find((t) => t.name === name);
