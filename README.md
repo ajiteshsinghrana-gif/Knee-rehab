@@ -471,3 +471,7 @@ One website, two modes that never share data:
 - **Exercises step:** an "✓ I did them all" button marks every prescribed exercise done in one tap. Individual exercises can still be changed afterwards.
 - **Warning signs step:** a "None of these" button answers every unanswered sign "No". It is hidden once the patient has tapped "Yes" on any sign, and it never touches a sign the voice input only *suggested* as "Yes" — the patient must still tap those themselves, so the app never answers a safety question on its own.
 - Labels in English, Hindi and Bengali (Hindi/Bengali still need native-speaker review). Tests: `tests/quick-checkin.test.ts`.
+
+## WhatsApp channel
+
+Demo: yellow bar, **WhatsApp** shows a simulated chat of the daily check-in. Live: **WhatsApp** tab has setup, templates, numbers and consent; sending stays off until a number is connected. See [WHATSAPP.md](WHATSAPP.md).

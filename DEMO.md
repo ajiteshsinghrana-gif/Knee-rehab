@@ -47,3 +47,8 @@ Physio dashboard, **+ Add a condition**: the physio writes a protocol for any co
 
 ## Optional: live sync (only if Supabase is set up)
 Add a patient, open the invite link on a phone, do a check-in. The physio screen shows it within about 10 seconds ("Live sync on" chip). Change the plan on the physio screen: the patient sees the notice, but not your reason.
+
+
+## Optional: WhatsApp (45 s)
+
+Yellow demo bar, **💬 WhatsApp**. Say: "This is how the patient answers on WhatsApp. Same questions, same rules." Tap through, answer Yes to chest pain, and show the red message. Leave the "also save" box unticked unless you want the dashboard to react (Reset undoes it). It is a simulation: no number is connected yet.
