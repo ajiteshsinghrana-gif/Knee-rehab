@@ -573,3 +573,23 @@ label.check input { margin-top: 3px; flex: none; }
 .gs-hold { border-width: 1px; border-radius: var(--radius); font-size: 2rem; }
 .gs-count { font-size: 2.5rem; font-weight: 600; }
 .gs-msg { font-size: var(--fs-b); font-weight: 600; color: var(--teal); }
+
+/* ---------- polish round 2 ---------- */
+.preason { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: clip; }
+.r-meta { flex-wrap: wrap; justify-content: flex-end; max-width: 45%; }
+.r-code { padding: 0 var(--s1); border: 1px solid var(--line); border-radius: var(--s1); line-height: 16px; }
+.r-text .r-label { font-weight: 600; }
+.spark { align-items: center; gap: var(--s3); }
+.spark-text { display: flex; flex-direction: column; gap: 2px; }
+.spark-change { font-size: 12px; color: var(--ink); font-weight: 600; white-space: nowrap; }
+.ovgrid .evstrip { grid-template-columns: 1.4fr 1fr 1fr; }
+.mainaction { display: flex; flex-direction: column; gap: var(--s2); }
+.mainaction .tiny { margin: 0; text-align: center; }
+.mainaction .btn { min-height: 48px; font-size: var(--fs-s); }
+.exbtns { grid-template-columns: 1fr; }
+.expic { display: block; border-radius: var(--radius); object-fit: cover; flex: none; }
+.expic.placeholder { display: inline-flex; align-items: center; justify-content: center; background: var(--hover); color: var(--muted); }
+.exthumb { background: none; }
+.dialog-q { margin: 0 0 var(--s4); font-size: var(--fs-b); font-weight: 600; }
+.dialog-btns { display: flex; justify-content: flex-end; gap: var(--s2); }
+.dialog-btns .btn { min-height: 48px; min-width: 96px; }

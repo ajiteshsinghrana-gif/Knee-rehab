@@ -1,6 +1,7 @@
 // Patient side of a form-check request: consent, record or choose a short video, add a note, send. Then "My videos" with the physio's replies.
 // The video is sent only after the patient ticks the consent. It never carries a warning sign and never changes the plan or tier.
 import { useEffect, useState } from 'react';
+import { ExPicture } from './ExPicture';
 import type { Lang, Patient, ProtocolPack } from '../types';
 import { t } from '../i18n';
 import { clockMs, getState, updatePatient } from '../store';
@@ -117,7 +118,7 @@ export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: {
           <select value={ex} onChange={(e) => setEx(e.target.value)}>{currentExercises(patient, pack).map((id) => <option key={id} value={id}>{exerciseName(id, lang)}</option>)}</select>
         </label>
       )}
-      {exerciseId && <div className="card exhead">{getExercise(ex) && <img src={getExercise(ex)!.picture} alt="" width={56} height={56} />}<b>{exerciseName(ex, lang)}</b></div>}
+      {exerciseId && <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>}
       <label className="field"><b>{F('fNoteLabel')}</b>
         <textarea className="vtext" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
       </label>

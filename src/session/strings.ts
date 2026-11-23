@@ -148,5 +148,7 @@ export const SESSION_STRINGS: Record<Lang, Dict> = { en, hi, bn };
 export function ss(lang: Lang, key: string, params?: Record<string, string | number>): string {
   let s = SESSION_STRINGS[lang][key] ?? en[key] ?? key;
   for (const [k, v] of Object.entries(params ?? {})) s = s.split(`{${k}}`).join(String(v));
+  // English plural: "1 set", not "1 sets" (Hindi and Bengali use the same word for one and many).
+  if (lang === 'en') s = s.replace(/(^|[^\d.])1 sets\b/g, '$11 set');
   return s;
 }

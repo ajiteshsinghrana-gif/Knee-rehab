@@ -7,6 +7,10 @@ export const uiEn: Record<string, string> = {
   checkIns: 'Check-ins',
   change_followUp_daily: 'your follow-up: check in every day, next review on {date}',
   change_followUp_daily_nodate: 'your follow-up: check in every day',
+  sessionThenCheckin: 'Do your exercises, then answer a few questions about today.',
+  onlyQuestions: "Only answer today's questions",
+  stay: 'Stay',
+  leave: 'Leave',
 };
 export const uiHi: Record<string, string> = {
   showAll: 'सभी देखें ({n})',
@@ -16,6 +20,10 @@ export const uiHi: Record<string, string> = {
   checkIns: 'चेक-इन',
   change_followUp_daily: 'आपकी फॉलो-अप: हर दिन चेक-इन करें, अगली समीक्षा {date} को',
   change_followUp_daily_nodate: 'आपकी फॉलो-अप: हर दिन चेक-इन करें',
+  sessionThenCheckin: 'अपने व्यायाम करें, फिर आज के बारे में कुछ सवालों के जवाब दें।',
+  onlyQuestions: 'सिर्फ़ आज के सवालों के जवाब दें',
+  stay: 'रुकें',
+  leave: 'छोड़ें',
 };
 export const uiBn: Record<string, string> = {
   showAll: 'সব দেখুন ({n})',
@@ -25,4 +33,8 @@ export const uiBn: Record<string, string> = {
   checkIns: 'চেক-ইন',
   change_followUp_daily: 'আপনার ফলো-আপ: প্রতিদিন চেক-ইন করুন, পরের পর্যালোচনা {date} তারিখে',
   change_followUp_daily_nodate: 'আপনার ফলো-আপ: প্রতিদিন চেক-ইন করুন',
+  sessionThenCheckin: 'আপনার ব্যায়াম করুন, তারপর আজকের বিষয়ে কয়েকটি প্রশ্নের উত্তর দিন।',
+  onlyQuestions: 'শুধু আজকের প্রশ্নের উত্তর দিন',
+  stay: 'থাকুন',
+  leave: 'ছেড়ে যান',
 };

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ExPicture } from './ExPicture';
 import type { ExerciseDemo } from '../types';
 import { getPack } from '../engine/packs';
 import { exerciseName, LIBRARY } from '../exercises/library';
@@ -77,7 +78,7 @@ function Row({ id, demo, cloud, onChanged }: { id: string; demo: ExerciseDemo | 
 
   return (
     <li className="demorow" data-ex={id}>
-      {ex ? <img src={ex.picture} alt="" width={44} height={44} /> : <span />}
+      <ExPicture src={ex?.picture} size={44} />
       <div>
         <b>{name}</b>
         <span className={`demostatus ${demo ? 'has' : ''}`}>{describe(demo)}</span>

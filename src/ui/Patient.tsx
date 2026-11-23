@@ -1,5 +1,6 @@
 import { safetyLevel, hasEmergencySign } from '../safety';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ExPicture } from './ExPicture';
 import { LANGS, LANG_NAME } from '../types';
 import type { Lang, Patient, ProtocolPack, Value } from '../types';
 import { L, t } from '../i18n';
@@ -111,7 +112,16 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
       </div>
       <Notices patient={patient} pack={pack} lang={lang} />
       {doneToday && <p className="okline">{T('doneToday')}</p>}
-      <button className="big primary" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('startCheckIn')}</button>
+      {exs.length > 0 ? (
+        // One main action: the guided session, which ends by leading into today's questions.
+        <div className="mainaction">
+          <button className="big primary" data-testid="start-session" onClick={() => go('session')}>{ss(lang, 'sStart')}</button>
+          <p className="tiny" id={`flow-${patient.id}`}>{T('sessionThenCheckin')}</p>
+          <button className="btn" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('onlyQuestions')}</button>
+        </div>
+      ) : (
+        <button className="big primary" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('startCheckIn')}</button>
+      )}
       <section className="last7">
         <h3>{T('last7')}</h3>
         <div className="dots">
@@ -136,7 +146,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
             const ex = getExercise(id);
             return (
               <li key={id} className="exitem">
-                <span className="exthumb">{ex && <img src={ex.picture} alt="" width={40} height={40} loading="lazy" />}</span>
+                <span className="exthumb"><ExPicture src={ex?.picture} size={40} /></span>
                 <span className="extext"><b>{exerciseName(id, lang)}</b>{ex && <small>{L(ex.dose.text, lang)}</small>}</span>
                 <DemoButton patient={patient} exerciseId={id} lang={lang} compact />
               </li>
@@ -144,7 +154,6 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
           })}</ul>
           {exs.length > 5 && <button type="button" className="linkbtn" aria-expanded={allEx} onClick={() => setAllEx(!allEx)}>{allEx ? T('showFewer') : T('showAll', { n: exs.length })}</button>}
           <div className="exbtns">
-            <button className="btn" data-testid="start-session" onClick={() => go('session')}>{ss(lang, 'sStart')}</button>
             <button className="btn" data-testid="open-forms" onClick={() => go('forms')}>{(patient.formRequests ?? []).length ? fs(lang, 'fMine') : fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</button>
           </div>
         </section>
@@ -357,7 +366,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
               return (
                 <div className="excard" key={id} data-ex={id}>
                   <div className="exhead">
-                    {ex && <img src={ex.picture} alt="" width={64} height={64} />}
+                    <ExPicture src={ex?.picture} size={48} />
                     <div><b>{exerciseName(id, lang)}</b>{ex && <small>{T('exDose')}: {L(ex.dose.text, lang)}</small>}</div>
                   </div>
                   <DemoButton patient={patient} exerciseId={id} lang={lang} />

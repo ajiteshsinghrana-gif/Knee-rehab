@@ -7,7 +7,7 @@ import { physioErasePatient, physioNewClaimPin } from '../sync/engine';
 import { getSyncStatus, physioResetPatientLink, subscribeSync } from '../sync/engine';
 import { inviteUrl } from '../onboarding';
 import { qrSvg } from '../qr';
-import type { Patient, ProtocolPack, Tier, TriageResult } from '../types';
+import type { Patient, ProtocolPack, Tier, Trigger, TriageResult } from '../types';
 import { L } from '../i18n';
 import { getPack } from '../engine/packs';
 import { addDays, diffDays } from '../engine/dates';
@@ -36,11 +36,52 @@ const srcClass = (s: string) => s.split(/[;( ]/)[0].replace(/[^A-Z_]/g, '');
 /** Placeholder values are shown in plain words, never as the raw NEEDS_PHYSIO_SIGNOFF code. */
 const DEFAULT_NOTE = 'Default value, not yet reviewed by your clinic';
 const srcText = (s: string) => s.replace(/NEEDS_PHYSIO_SIGNOFF:?\s*/g, `${DEFAULT_NOTE}. `).replace(/\.\s*$/, '');
-const Src = ({ s }: { s: string }) => {
-  const t = srcText(s);
-  const short = s.startsWith('NEEDS_PHYSIO_SIGNOFF') ? 'Default, not reviewed' : t.length > 34 ? t.slice(0, 32) + '…' : t;
-  return <span className={`src ${srcClass(s)}`} title={t}>{short}</span>;
+/** Readable names for the source tags in the protocol files, with the explanation shown on hover. */
+const SOURCE_NAMES: Record<string, [string, string]> = {
+  MELBOURNE: ['Melbourne ACL Guide', 'From the Melbourne ACL Rehabilitation Guide 2.0 (Cooper & Hughes), a published physiotherapy guide for rehabilitation after ACL reconstruction.'],
+  DEFAULT: ['App default', "A starting value chosen by the app's developers, not taken from a published guide. Check it against your own protocol."],
+  SAFETY: ['Safety rule', 'A safety rule built into the app: these warning signs always need prompt attention.'],
+  NEEDS_PHYSIO_SIGNOFF: ['Not yet reviewed', `${DEFAULT_NOTE}.`],
+  PLACEHOLDER: ['Placeholder', 'A placeholder value that holds the place until your clinic sets its own.'],
+  TSK: ['TSK-11', 'Tampa Scale for Kinesiophobia, 11 items (Woby et al., 2005).'],
+  PHYSIO_OVERRIDE: ['Your threshold', 'You changed this value for this patient.'],
+  PHYSIO_CLINIC: ['Clinic default', 'Your clinic set this value for every patient with this condition.'],
+  PHYSIO_AUTHORED: ['Written by you', 'You wrote this value in the condition you created.'],
+  PHYSIO_IMPORTED: ['Imported by you', 'You imported and approved this value from a protocol document.'],
+  PHYSIO_CONFIRMED: ['Confirmed by you', 'You confirmed this value.'],
 };
+const srcName = (s: string): { label: string; tip: string } => {
+  const k = srcClass(s);
+  const known = SOURCE_NAMES[k];
+  const partly = k !== 'NEEDS_PHYSIO_SIGNOFF' && s.includes('NEEDS_PHYSIO_SIGNOFF');
+  const label = known ? known[0] : (srcText(s).length > 34 ? srcText(s).slice(0, 32) + '…' : srcText(s));
+  const tip = [known?.[1], partly ? `Part of this is a ${DEFAULT_NOTE.toLowerCase()}.` : '', `Tag: ${srcText(s)}`].filter(Boolean).join(' ');
+  return { label: partly ? `${label}, partly not reviewed` : label, tip };
+};
+const Src = ({ s }: { s: string }) => {
+  const n = srcName(s);
+  return <span className={`src ${srcClass(s)}`} title={n.tip}>{n.label}</span>;
+};
+
+/** One plain phrase per signal, e.g. "pain rising (3 → 5)", "2 missed days", "squats hard 3 times". */
+const NUM_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+function plainSignal(t: Trigger, pack: ProtocolPack): string {
+  const rule = pack.rules.find((x) => x.id === t.ruleId);
+  const label = t.label.en.charAt(0).toLowerCase() + t.label.en.slice(1);
+  if (rule?.type === 'trend') { const m = /(\d+(?:\.\d+)?(?: -> \d+(?:\.\d+)?)+)/.exec(t.evidence); if (m) { const v = m[1].split(' -> '); return `${label} (${v[0]} → ${v[v.length - 1]})`; } }
+  if (rule?.type === 'streak' && rule.metric === 'missedSessions') { const m = /(\d+) missed days? in a row/.exec(t.evidence); if (m) return `${m[1]} missed day${m[1] === '1' ? '' : 's'}`; }
+  if (rule?.type === 'streak' && rule.metric === 'repeatedHardMovement') { const m = /'([^']+)' reported hard on (\d+) of last (\d+) days/.exec(t.evidence); if (m) return `${exerciseName(m[1], 'en').toLowerCase()} hard ${m[2]} time${m[2] === '1' ? '' : 's'}`; }
+  return label;
+}
+/** A combination rule as one sentence: "Three warning signs in the last 3 days: pain rising (3 → 5), 2 missed days, squats hard 3 times." */
+function combinedSentence(t: Trigger, all: Trigger[], pack: ProtocolPack): string {
+  const rule = pack.rules.find((x) => x.id === t.ruleId);
+  const ids = t.combinedFrom ?? [];
+  const parts = ids.map((id) => { const c = all.find((x) => x.ruleId === id); const rr = pack.rules.find((x) => x.id === id); return c ? plainSignal(c, pack) : rr ? rr.label.en.toLowerCase() : id; });
+  const days = rule && rule.type === 'combination' ? ` in the last ${rule.windowDays} days` : '';
+  return `${NUM_WORDS[ids.length] ?? ids.length} warning signs${days}: ${parts.join(', ')}.`;
+}
+const prettyEvidence = (e: string) => e.replace(/ -> /g, ' → ');
 const hrs = (ms: number) => `${Math.round(Math.abs(ms) / 3_600_000)} h`;
 
 export function Tier({ tier, xl }: { tier: Tier; xl?: boolean }) {
@@ -97,7 +138,7 @@ export function Clinician({ state }: { state: AppState }) {
         <aside className="worklist" aria-label="Worklist">
           <div className="wl-head">
             <h2>Patients</h2>
-            <button className="btn primary" onClick={() => setMode('add')}>+ Add patient</button>
+            <button className="btn" onClick={() => setMode('add')}>+ Add patient</button>
             <Menu label="More patient and protocol tools" buttonLabel="More" className="wl-more" testid="more-menu">
               {(close) => (<>
                 <button className="menuitem" onClick={() => { close(); setMode('import'); }}>Import protocol</button>
@@ -277,7 +318,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             <small>{dueText(r, now)}{r.responseHours ? ` (${r.responseHours} h target)` : ''}</small>
           </div>
           {flagged
-            ? <button className="btn primary" onClick={markReviewed}>Mark as reviewed</button>
+            ? <button className="btn" onClick={markReviewed}>Mark as reviewed</button>
             : <button className="btn primary" onClick={openAdjust}>Adjust treatment</button>}
         </div>
       </div>
@@ -293,29 +334,49 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
           <div className="ovgrid">
           <div className="ov-col">
           <div className="card">
-            <h3>Why this patient is flagged</h3>
-            {r.triggers.length === 0 ? <p className="tiny">Nothing is flagged. The patient is on plan; weekly summary only.</p> : (
-              <ul className="reasons">
-                {r.triggers.map((t) => (
-                  <li key={t.ruleId}>
-                    <span className={`dot ${t.tier}`} aria-hidden />
-                    <span className="r-text">
-                      <span className="r-label">{t.label.en}</span>
-                      <span className="r-ev">{t.evidence}</span>
-                      {t.combinedFrom && <span className="r-ev">Combined from {t.combinedFrom.join(', ')}</span>}
-                      {t.source.includes('PHYSIO_OVERRIDE') && <span className="src" data-testid="override-tag">Your threshold: {t.source.split('PHYSIO_OVERRIDE:')[1]?.trim()}</span>}
-                    </span>
-                    <span className="r-meta"><Tier tier={t.tier} /><span className="r-code" title={`Rule ${t.ruleId}. Source: ${srcText(t.source)}`}>{t.ruleId}</span></span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <h3>{r.triggers.length ? 'Why this patient is flagged' : 'Status'}</h3>
+            {r.triggers.length === 0 ? <p className="tiny">Nothing is flagged. The patient is on plan; weekly summary only.</p> : (() => {
+              // A signal that is part of a combination is told inside that combination's sentence, not again on its own line.
+              const inCombo = new Set(r.triggers.filter((t) => t.combinedFrom).flatMap((t) => t.combinedFrom ?? []));
+              const lines = r.triggers.filter((t) => t.combinedFrom || !inCombo.has(t.ruleId));
+              return (
+                <ul className="reasons">
+                  {lines.map((t) => (
+                    <li key={t.ruleId}>
+                      <span className={`dot ${t.tier}`} aria-hidden />
+                      <span className="r-text" title={`${t.label.en}: ${prettyEvidence(t.evidence)}`}>
+                        {t.combinedFrom
+                          ? <span className="r-label">{combinedSentence(t, r.triggers, pack)}</span>
+                          : <><span className="r-label">{t.label.en}</span> <span className="r-ev">{prettyEvidence(t.evidence)}</span></>}
+                        {t.source.includes('PHYSIO_OVERRIDE') && <span className="src" data-testid="override-tag">Your threshold: {t.source.split('PHYSIO_OVERRIDE:')[1]?.trim()}</span>}
+                      </span>
+                      <span className="r-meta">
+                        <Tier tier={t.tier} />
+                        {[t.ruleId, ...(t.combinedFrom ?? [])].map((id) => {
+                          const tr = r.triggers.find((x) => x.ruleId === id);
+                          const n = srcName(tr?.source ?? t.source);
+                          return <span key={id} className="r-code" title={`Rule ${id}${tr ? `: ${tr.label.en}` : ''}. Source: ${n.label}. ${n.tip}`}>{id}</span>;
+                        })}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              );
+            })()}
           </div>
 
           <div className="card evstrip" aria-label="Evidence">
             <div className="ev">
               <span className="ev-k">Pain, last 14 days</span>
-              <Sparkline points={p.daily.filter((d) => d.date > addDays(r.asOf, -14) && d.values.pain !== undefined).map((d) => ({ x: diffDays(d.date, r.asOf), y: Number(d.values.pain) }))} xMin={-13} xMax={0} yMin={0} yMax={10} threshold={painRef?.value} label="Pain, 0 to 10, over the last 14 days" />
+              {(() => {
+                const pts = p.daily.filter((d) => d.date > addDays(r.asOf, -14) && d.date <= r.asOf && d.values.pain !== undefined).map((d) => ({ x: diffDays(d.date, r.asOf), y: Number(d.values.pain) }));
+                const vals = pts.map((q) => q.y);
+                const ys = vals.concat(painRef && vals.length && painRef.value <= Math.max(...vals) + 1 ? [painRef.value] : []); // the urgent line joins the scale only when it is close
+                // Scale to the data (and the urgent line) so a 3-point rise is clearly visible, not squashed into 0 to 10.
+                const lo = ys.length ? Math.max(0, Math.min(...ys) - 1) : 0;
+                const hi = ys.length ? Math.min(10, Math.max(Math.max(...ys) + 1, lo + 5)) : 10;
+                return <Sparkline points={pts} xMin={-13} xMax={0} yMin={lo} yMax={hi} threshold={painRef?.value} label="Pain, 0 to 10, over the last 14 days" change={painChange(pts)} />;
+              })()}
             </div>
             <div className="ev">
               <span className="ev-k">Exercises, last 7 days</span>
@@ -332,6 +393,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
           {(caregiverN > 0 || p.caregiverMode) && <p className="tiny" data-testid="caregiver-note">{caregiverN} of the last 7 check-ins were answered by a caregiver, not the patient. Answers a carer gives for the patient are a second-hand report.</p>}
           </div>
           <div className="ov-col">
+          <ProposalCard patient={p} pack={pack} r={r} now={now} />
 
           <div className="card">
             <h3>Suggested actions <small>Nothing changes until you approve</small></h3>
@@ -367,7 +429,6 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             ))}
           </div>
 
-          <ProposalCard patient={p} pack={pack} r={r} now={now} />
           </div>
           </div>
           {gate?.allMet && <GateReady gate={gate} pack={pack} onApply={apply} />}
@@ -475,6 +536,17 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
       )}
     </section>
   );
+}
+
+/** Pain change in words over about the last 3 days, e.g. "2 → 5 in 3 days". */
+function painChange(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return '';
+  const last = pts[pts.length - 1];
+  const recent = pts.filter((q) => q.x >= last.x - 3);
+  const first = recent.length > 1 ? recent[0] : pts[pts.length - 2];
+  const days = last.x - first.x;
+  if (first.y === last.y) return `Steady at ${last.y} for ${days} day${days === 1 ? '' : 's'}`;
+  return `${first.y} → ${last.y} in ${days} day${days === 1 ? '' : 's'}`;
 }
 
 /** The exercise the patient most often reported as hard in the last 14 days. */
@@ -758,7 +830,7 @@ function OverridesCard({ patient: p, pack, onApply, err }: { patient: Patient; p
       <summary><b>Thresholds for this patient</b>&nbsp;<small>({p.plan.overrides.length} overridden)</small></summary>
       {p.plan.overrides.length > 0 && (
         <ul className="audit">{p.plan.overrides.map((o) => (
-          <li key={o.id}>{o.label}: <s>{o.original}</s> <b>{o.value}</b> <span className="src">PHYSIO_OVERRIDE</span> · {o.by}, {o.at.slice(0, 10)} · “{o.reason}” <button className="btn" onClick={() => onApply({ type: 'remove-override', id: o.id })}>Remove</button></li>))}</ul>
+          <li key={o.id}>{o.label}: <s>{o.original}</s> <b>{o.value}</b> <Src s="PHYSIO_OVERRIDE" /> · {o.by}, {o.at.slice(0, 10)} · “{o.reason}” <button className="btn" onClick={() => onApply({ type: 'remove-override', id: o.id })}>Remove</button></li>))}</ul>
       )}
       <div className="fu">
         <select aria-label="Threshold" value={target} onChange={(e) => { setTarget(e.target.value); setValue(''); }}>

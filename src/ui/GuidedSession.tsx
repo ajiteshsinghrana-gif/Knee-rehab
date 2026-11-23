@@ -1,6 +1,7 @@
 // Guided exercise session: shows one exercise at a time, counts reps and sets, times rests and holds, and speaks if the patient wants.
 // It only records what the patient taps. It never tells them a movement is correct and never changes the plan.
 import { useEffect, useRef, useState } from 'react';
+import { ExPicture } from './ExPicture';
 import type { Lang, Patient, ProtocolPack } from '../types';
 import { t } from '../i18n';
 import { clockMs, getState, updatePatient } from '../store';
@@ -30,6 +31,7 @@ export function GuidedSession({ patient, pack, lang, onExit, onNeedHelp }: {
   const [restLeft, setRestLeft] = useState(SESSION_CONFIG.restSec);
   const [stopping, setStopping] = useState(false);
   const [saved, setSaved] = useState(false);
+  const leaveDlg = useRef<HTMLDialogElement>(null);
   const sRef = useRef(s);
   sRef.current = s;
   const savedRef = useRef(false);
@@ -90,7 +92,15 @@ export function GuidedSession({ patient, pack, lang, onExit, onNeedHelp }: {
 
   const header = (
     <div className="gs-top">
-      <button type="button" className="back" onClick={() => { if (s.phase === 'done' || window.confirm(S('sConfirmLeave'))) leave(); }}>← {S('sClose')}</button>
+      <button type="button" className="back" onClick={() => { if (s.phase === 'done') leave(); else leaveDlg.current?.showModal(); }}>← {S('sClose')}</button>
+      {/* In-app question instead of the browser's confirm pop-up: same wording, same result. */}
+      <dialog ref={leaveDlg} className="dialog" aria-labelledby="gs-leave-q" onClick={(e) => { if (e.target === leaveDlg.current) leaveDlg.current.close(); }}>
+        <p id="gs-leave-q" className="dialog-q">{S('sConfirmLeave')}</p>
+        <div className="dialog-btns">
+          <button type="button" className="btn" autoFocus onClick={() => leaveDlg.current?.close()}>{T('stay')}</button>
+          <button type="button" className="btn primary" onClick={() => { leaveDlg.current?.close(); leave(); }}>{T('leave')}</button>
+        </div>
+      </dialog>
       {speakSupported(lang) && <button type="button" className="readaloud" aria-pressed={voice} onClick={() => setVoice(!voice)}>{voice ? S('sVoiceOn') : S('sVoiceOff')}</button>}
     </div>
   );
@@ -126,7 +136,7 @@ export function GuidedSession({ patient, pack, lang, onExit, onNeedHelp }: {
       <p className="sub">{S('sOf', { i: s.i + 1, n: s.steps.length })}</p>
       <div className="card gs-card">
         <div className="exhead">
-          {ex && <img src={ex.picture} alt="" width={72} height={72} />}
+          <ExPicture src={ex?.picture} size={64} />
           <div><h2>{exerciseName(step.exerciseId, lang)}</h2><small>{doseText(step, lang)}</small></div>
         </div>
         <DemoButton patient={patient} exerciseId={step.exerciseId} lang={lang} />
