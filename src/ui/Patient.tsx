@@ -172,6 +172,12 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
           })}
         </div>
       </section>
+      {patient.plan.advice && (
+        <section className="advicecard" data-testid="advice">
+          <div className="sechead2"><h3>{T('adviceTitle')}</h3><ReadAloud key={lang + patient.plan.advice.text} text={`${T('adviceTitle')}. ${patient.plan.advice.text}`} lang={lang} compact /></div>
+          <p>{patient.plan.advice.text}</p>
+        </section>
+      )}
       {(patient.plan.instructions ?? []).length > 0 && (
         <section className="physioins" data-testid="instructions">
           <h3>{T('yourPhysioSays')}</h3>

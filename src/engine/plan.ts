@@ -63,6 +63,7 @@ export function pendingProposal(p: Patient, pack: ProtocolPack, tri: { tier: str
 export type PlanAction =
   | { type: 'regress-exercise'; exerciseId: string; note?: string; patientNote?: string }
   | { type: 'set-weekly-item'; measure: string; on: boolean; note?: string }
+  | { type: 'set-advice'; text: string; note?: string }
   | { type: 'set-dose'; exerciseId: string; sets: number | null; reps: number | null; holdSec?: number | null; perDay: number | null; patientNote?: string; note?: string }
   | { type: 'restore-exercise'; exerciseId: string; note?: string }
   | { type: 'set-exercises'; add?: string[]; remove?: string[]; note?: string; notify?: boolean }
@@ -241,6 +242,14 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       }
       changes.push({ kind: 'dose', exercise: a.exerciseId });
       audit = entry(a.type, `Dose for ${a.exerciseId} set: ${a.sets ?? '-'} sets x ${a.reps ?? '-'} reps${a.holdSec ? `, hold ${a.holdSec} s` : ''}${a.perDay ? `, ${a.perDay}x a day` : ''}`, prev ?? null, dose, a.note);
+      break;
+    }
+    case 'set-advice': {
+      const t = (a.text ?? '').trim().slice(0, 2000);
+      const prev = plan.advice ?? null;
+      if (t) plan.advice = { text: t, at, by: who }; else delete plan.advice;
+      changes.push({ kind: 'advice' });
+      audit = entry(a.type, t ? 'Advice for the patient updated' : 'Advice for the patient removed', prev ? { text: prev.text } : null, t ? { text: t } : null, a.note);
       break;
     }
     case 'set-weekly-item': {

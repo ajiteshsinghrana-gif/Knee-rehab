@@ -28,7 +28,7 @@ export const BN_CONTENT: Record<string, string> = {
  "High pain": "তীব্র ব্যথা",
  "Several amber signals together": "একসঙ্গে কয়েকটি সতর্ক সংকেত",
  "Pain rising": "ব্যথা বাড়ছে",
- "General (no surgery)": "সাধারণ (অস্ত্রোপচার ছাড়া)",
+ "General (no fixed protocol)": "সাধারণ (কোনো নির্দিষ্ট প্রোটোকল নেই)",
  "since starting treatment": "চিকিৎসা শুরুর পর থেকে",
  "How much pain do you have today?": "আজ আপনার কতটা ব্যথা হচ্ছে?",
  "Ongoing care": "চলমান চিকিৎসা",

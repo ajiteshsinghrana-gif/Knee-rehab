@@ -1,5 +1,5 @@
 import { auditCsv } from '../audit';
-import { useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Menu } from './TopBar';
 import { LoginCard } from './Login';
 import { DEFAULT_RETENTION_YEARS, completeTreatment, eraseLocal, isActive, reopenTreatment, retentionDue, retentionEnd } from '../lifecycle';
@@ -35,6 +35,9 @@ import { doseLine } from '../exercises/dose';
 import { scheduleSuggestion } from '../engine/schedule';
 import { missedCheckIns } from '../reminders';
 import { hasPhone, telHref, waHref } from '../contact';
+import { templateFromPatient } from '../templates';
+import { DetailsFields } from './DetailsFields';
+import { deleteLocalVideo, loadLocalVideo, newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { validHours } from '../engine/hours';
 import { ruleHitRates } from '../engine/feedback';
 
@@ -173,8 +176,8 @@ export function Clinician({ state }: { state: AppState }) {
                 <button className={`prow ${p.id === cur?.p.id && mode === 'dash' ? 'active' : ''}`} aria-current={p.id === cur?.p.id && mode === 'dash' ? 'true' : undefined} onClick={() => open(p.id)}>
                   <span className={`dot ${r.tier}`} aria-hidden />
                   <span className="pmain">
-                    <span className="pname"><b>{p.name}</b>, {p.age}</span>
-                    <small>{pack.condition.en}</small>
+                    <span className="pname"><b>{p.name}</b>{p.age ? `, ${p.age}` : ''}</span>
+                    <small>{conditionLabel(p, pack)}</small>
                     {r.triggers.length > 0 && <span className="preason" title={plainReason(r)}>{plainReason(r)}</span>}
                     {pendingForms(p).length > 0 && <span className="chips"><i data-testid="form-chip">{pendingForms(p).length} video{pendingForms(p).length === 1 ? '' : 's'} to review</i></span>}
                   </span>
@@ -320,8 +323,8 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
     <section className="detail" aria-label={`${p.name}'s record`}>
       <div className={`card head ${r.tier}`}>
         <div className="dh-main">
-          <h2>{p.name}, {p.age}</h2>
-          <p className="sub">{pack.condition.en} · Week {wk.toFixed(1)} {pack.anchorLabel.en} · {phase.name.en} <small>({weeksInPhase(p, r.asOf).toFixed(1)} wk in phase, as of {r.asOf})</small></p>
+          <h2>{p.name}{p.age ? `, ${p.age}` : ''}</h2>
+          <p className="sub">{conditionLabel(p, pack)} · Week {wk.toFixed(1)} {pack.anchorLabel.en} · {phase.name.en} <small>({weeksInPhase(p, r.asOf).toFixed(1)} wk in phase, as of {r.asOf})</small></p>
         </div>
         <div className="dh-side">
           {hasPhone(p.details?.phone) && (
@@ -478,6 +481,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
 
       {tab === 'plan' && (
         <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-plan`} aria-labelledby={`${idBase}-tab-plan`}>
+          <AdviceCard patient={p} pack={pack} now={now} />
           <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} onAdjust={p.status !== 'completed' && !adjustOpen ? () => setAdjustOpen(true) : undefined} />
           {p.status !== 'completed' && adjustOpen && <AdjustCard patient={p} pack={pack} now={now} onClose={() => setAdjustOpen(false)} />}
         </div>
@@ -554,6 +558,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             <h3>Treatment status</h3>
             <p>{p.status === 'completed' ? <>Treatment complete since <b>{p.completedAt?.slice(0, 10)}</b>.</> : 'Active.'} <span className="tiny">Mark complete or erase in Settings.</span></p>
           </div>
+          <ClinicalNotesCard patient={p} now={now} />
           <AuditCard patient={p} />
           {!pendingVideos && <FormReview patient={p} pack={pack} now={now} />}
           <SessionsCard patient={p} pack={pack} />
@@ -562,6 +567,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
 
       {tab === 'settings' && (
         <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-settings`} aria-labelledby={`${idBase}-tab-settings`}>
+          <PatientDetailsCard patient={p} pack={pack} now={now} />
           <AccessCard patient={p} />
           {signoffs.length > 0 && (
             <details className="card placeholders">
@@ -592,6 +598,120 @@ function painChange(pts: { x: number; y: number }[]): string {
   const days = last.x - first.x;
   if (first.y === last.y) return `Steady at ${last.y} for ${days} day${days === 1 ? '' : 's'}`;
   return `${first.y} → ${last.y} in ${days} day${days === 1 ? '' : 's'}`;
+}
+
+const PHYSIO_NAME = 'Demo physio';
+/** What the patient is treated for: the typed diagnosis for the General protocol, otherwise the protocol's condition. */
+const conditionLabel = (p: Patient, pack: ProtocolPack): string => (pack.id === 'general' && p.details?.diagnosis ? p.details.diagnosis : pack.condition.en);
+
+/** "Save as my template": keeps this plan under a name for starting new patients. */
+function SaveTemplate({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [done, setDone] = useState('');
+  const save = () => {
+    const st = getState();
+    const t = templateFromPatient(p, pack, name, st.today, now);
+    setState({ ...st, templates: [...(st.templates ?? []).filter((x) => x.name.toLowerCase() !== t.name.toLowerCase()), t] });
+    setOpen(false); setName(''); setDone(`Saved as "${t.name}". Use it from + Add patient.`);
+  };
+  if (!open) return <>{done && <small className="okline" role="status">{done}</small>}<button className="btn" onClick={() => { setOpen(true); setDone(''); }}>Save as my template</button></>;
+  return (
+    <span className="tplsave">
+      <input aria-label="Template name" placeholder="Template name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      <button className="btn" disabled={!name.trim()} onClick={save}>Save</button>
+      <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
+    </span>
+  );
+}
+
+/** "Advice from your physio" (diet, icing, precautions...): shown on the patient's home screen with read-aloud. Every change is logged. */
+function AdviceCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
+  const [text, setText] = useState(p.plan.advice?.text ?? '');
+  const [msg, setMsg] = useState('');
+  const changed = text.trim() !== (p.plan.advice?.text ?? '');
+  const save = () => { updatePatient(p.id, (q) => applyAction(q, pack, { type: 'set-advice', text }, { nowMs: now, today: getState().today })); setMsg('Saved. The patient sees it on their home screen.'); };
+  return (
+    <div className="card" data-testid="advice-card">
+      <div className="cardhead"><h3>Advice from your physio <small>The patient sees this on their home screen</small></h3></div>
+      <textarea rows={3} maxLength={2000} value={text} onChange={(e) => { setText(e.target.value); setMsg(''); }} aria-label="Advice for the patient" placeholder="e.g. Ice the knee for 15 minutes after exercises. Drink plenty of water. Avoid squatting on the floor." />
+      <div className="btnrow">
+        <button className="btn" disabled={!changed} onClick={save}>Save advice</button>
+        {p.plan.advice && <small className="tiny">Set by {p.plan.advice.by} on {p.plan.advice.at.slice(0, 10)}</small>}
+        {msg && <small className="okline" role="status">{msg}</small>}
+      </div>
+    </div>
+  );
+}
+
+/** Optional patient details. Saving writes one line to the audit log (which fields changed, not their values). */
+function PatientDetailsCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
+  const [v, setV] = useState<NonNullable<Patient['details']>>(p.details ?? {});
+  const [msg, setMsg] = useState('');
+  const save = () => {
+    const clean = Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined && x !== '' && x !== false).map(([k, x]) => [k, typeof x === 'string' ? x.trim().slice(0, 200) : x]));
+    const fields = [...new Set([...Object.keys(clean), ...Object.keys(p.details ?? {})])].filter((k) => (clean as Record<string, unknown>)[k] !== (p.details as Record<string, unknown> | undefined)?.[k]);
+    if (!fields.length) { setMsg('Nothing changed.'); return; }
+    updatePatient(p.id, (q) => withAuditNote({ ...q, details: clean }, 'details', `Patient details updated: ${fields.join(', ')}`, null, null, 'Edited by the physio', { nowMs: now, today: getState().today }));
+    setMsg('Saved.');
+  };
+  return (
+    <details className="card" data-testid="patient-details">
+      <summary><b>Patient details</b>&nbsp;<small>{[p.details?.phone, p.details?.city, p.details?.goal && `Goal: ${p.details.goal}`].filter(Boolean).join(' · ') || 'Phone, diagnosis, carer, goal…'}</small></summary>
+      <DetailsFields v={v} set={(patch) => { setV({ ...v, ...patch }); setMsg(''); }} showSurgery={!/surgery/i.test(pack.anchorLabel.en)} />
+      <div className="btnrow"><button className="btn" onClick={save}>Save details</button>{msg && <small className="okline" role="status">{msg}</small>}</div>
+    </details>
+  );
+}
+
+/**
+ * The physio's clinical notes, with photos of a prescription or discharge slip. Notes and photos stay on the physio's
+ * device: they are not in the sync slices (sync/slices.ts), so they never reach the patient's phone or the cloud.
+ */
+function ClinicalNotesCard({ patient: p, now }: { patient: Patient; now: number }) {
+  const [text, setText] = useState(p.clinicalNotes?.text ?? '');
+  const [msg, setMsg] = useState('');
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const atts = p.attachments ?? [];
+  useEffect(() => {
+    let live = true; const made: string[] = [];
+    void (async () => { const out: Record<string, string> = {}; for (const a of atts) { const b = await loadLocalVideo(a.id); if (b) { const u = URL.createObjectURL(b); made.push(u); out[a.id] = u; } } if (live) setUrls(out); })();
+    return () => { live = false; made.forEach((u) => URL.revokeObjectURL(u)); };
+  }, [atts.map((a) => a.id).join()]);
+  const at = new Date(now).toISOString();
+  const save = () => { updatePatient(p.id, (q) => withAuditNote({ ...q, clinicalNotes: { text: text.trim().slice(0, 5000), at, by: PHYSIO_NAME } }, 'clinical-notes', 'Clinical notes updated', null, null, 'Edited by the physio', { nowMs: now, today: getState().today })); setMsg('Saved.'); };
+  const attach = async (f: File | undefined) => {
+    if (!f) return;
+    if (!/^image\//.test(f.type)) { setMsg('Choose a photo (an image file).'); return; }
+    if (f.size > 15 * 1048576) { setMsg('That photo is over 15 MB.'); return; }
+    const id = newLocalId();
+    try { await saveLocalVideo(id, f); } catch (e) { setMsg((e as Error).message.replace('video', 'photo')); return; }
+    updatePatient(p.id, (q) => withAuditNote({ ...q, attachments: [...(q.attachments ?? []), { id, name: f.name.slice(0, 120), mime: f.type, size: f.size, at }] }, 'attach-photo', `Photo attached: ${f.name.slice(0, 60)}`, null, null, 'Kept on this device only', { nowMs: now, today: getState().today }));
+    setMsg('Photo attached. It is kept on this device only.');
+  };
+  const remove = async (id: string) => { await deleteLocalVideo(id); updatePatient(p.id, (q) => ({ ...q, attachments: (q.attachments ?? []).filter((a) => a.id !== id) })); };
+  return (
+    <div className="card" data-testid="clinical-notes">
+      <div className="cardhead"><h3>Clinical notes <small>For you only; the patient never sees them</small></h3></div>
+      <textarea rows={4} maxLength={5000} value={text} onChange={(e) => { setText(e.target.value); setMsg(''); }} aria-label="Clinical notes" placeholder="History, examination, anything you want to remember." />
+      <div className="btnrow">
+        <button className="btn" disabled={text.trim() === (p.clinicalNotes?.text ?? '')} onClick={save}>Save notes</button>
+        <label className="btn filebtn2">Attach a photo<input type="file" accept="image/*" capture="environment" onChange={(e) => { void attach(e.target.files?.[0]); e.currentTarget.value = ''; }} aria-label="Attach a photo of a prescription or discharge slip" /></label>
+        {p.clinicalNotes && <small className="tiny">Last saved {p.clinicalNotes.at.slice(0, 10)}</small>}
+      </div>
+      {msg && <p className="tiny" role="status">{msg}</p>}
+      {atts.length > 0 && (
+        <ul className="thumbs">{atts.map((a) => (
+          <li key={a.id}>
+            {urls[a.id] ? <a href={urls[a.id]} target="_blank" rel="noopener noreferrer"><img src={urls[a.id]} alt={a.name} /></a> : <span className="nothumb" title="This photo is on another device">Not on this device</span>}
+            <small>{a.name}</small>
+            <button className="linkbtn" onClick={() => void remove(a.id)}>Remove</button>
+          </li>))}
+        </ul>
+      )}
+      <p className="tiny">Notes and photos are kept in this browser on this device only. They are not uploaded or synced, and the patient never sees them.</p>
+    </div>
+  );
 }
 
 /** Overdue SAFETY or URGENT flag: hand it to the clinic's named backup contact. Simulated: nothing is sent; the hand-over is logged. */
@@ -914,7 +1034,7 @@ function PastPatients({ rows, years, today, onOpen }: { rows: Patient[]; years: 
           const due = retentionDue(p, years, today);
           return (
             <li key={p.id}>
-              <b>{p.name}</b>, {p.age} · {getPack(p.packId).condition.en} · completed {p.completedAt?.slice(0, 10)}
+              <b>{p.name}</b>{p.age ? `, ${p.age}` : ''} · {conditionLabel(p, getPack(p.packId))} · completed {p.completedAt?.slice(0, 10)}
               {end && <> · keep until {end}</>}
               {due && <span className="overdue"> Review for erasure</span>}
               {p.erasureRequestedAt && <span className="overdue"> Patient asked for erasure on {p.erasureRequestedAt.slice(0, 10)}</span>}
@@ -944,6 +1064,7 @@ function LifecycleCard({ patient: p, now }: { patient: Patient; now: number }) {
   const erase = async (cloud: boolean, reason: string) => {
     try {
       if (cloud && p.syncKey && p.syncRole === 'physio' && getSyncStatus().enabled) await physioErasePatient(p.syncKey);
+      for (const a of p.attachments ?? []) await deleteLocalVideo(a.id); // photos kept on this device go too
       setState(eraseLocal(getState(), p.id, reason, Date.now()));
     } catch (e) { setErr((e as Error).message); }
   };
@@ -1005,7 +1126,7 @@ function PlanCard({ patient: p, pack, now, onApply, err, onAdjust }: { patient: 
   const [editing, setEditing] = useState<string | null>(null);
   return (
     <div className="card plan" data-testid="plan">
-      <div className="cardhead"><h3>Current plan</h3>{onAdjust && <button className="btn" onClick={onAdjust}>Adjust the treatment</button>}</div>
+      <div className="cardhead"><h3>Current plan</h3><span className="cardbtns"><SaveTemplate patient={p} pack={pack} now={now} />{onAdjust && <button className="btn" onClick={onAdjust}>Adjust the treatment</button>}</span></div>
       <dl className="facts">
         <div><dt>Check-ins</dt><dd>{everyDays(fu.checkInEveryDays)}{p.plan.followUp?.until && <small> until {p.plan.followUp.until}</small>}</dd></div>
         <div><dt>Next review</dt><dd>{fu.nextReviewDate ?? 'Not set'}</dd></div>

@@ -24,6 +24,7 @@ export function changeText(c: NoticeChange, lang: Lang, pack: ProtocolPack): str
       ];
       return t(lang, 'change_exercises', { parts: parts.join('; ') });
     }
+    case 'advice': return t(lang, 'change_advice');
     case 'dose': return t(lang, 'change_dose', { exercise: exerciseName(c.exercise, lang) });
     case 'instruction': return t(lang, 'change_instruction', { text: c.text });
     case 'instructionRemoved': return t(lang, 'change_instructionRemoved', { text: c.text });

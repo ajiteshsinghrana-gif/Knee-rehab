@@ -754,3 +754,28 @@ main.home { gap: var(--s3); padding-top: var(--s3); }
   .ovgrid .evstrip { grid-template-columns: minmax(0, 1fr); }
   .ovgrid .evstrip .ev + .ev { border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* ---------- physio feedback phase 2 ---------- */
+.detailsgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2) var(--s3); padding-top: var(--s2); }
+.dfield { display: flex; flex-direction: column; gap: var(--s1); font-size: 12px; font-weight: 600; color: var(--muted); }
+.dfield.wide, .detailsgrid .dchecks { grid-column: 1 / -1; }
+.dchecks { display: flex; gap: var(--s4); border: 0; padding: 0; margin: 0; }
+.dchecks legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0; margin-bottom: var(--s1); }
+.moredetails { border-top: 1px solid var(--line); padding-top: var(--s2); }
+.moredetails summary { font-weight: 600; }
+.tplrow { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.cardbtns { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.tplsave { display: inline-flex; gap: var(--s1); align-items: center; flex-wrap: wrap; }
+.tplsave input { width: 180px; }
+.filebtn2 { position: relative; overflow: hidden; cursor: pointer; }
+.filebtn2 input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.thumbs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s2); }
+.thumbs li { display: flex; flex-direction: column; gap: var(--s1); width: 120px; }
+.thumbs img { width: 120px; height: 90px; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--line); }
+.thumbs small { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nothumb { display: flex; align-items: center; justify-content: center; width: 120px; height: 90px; background: var(--hover); border-radius: var(--radius); font-size: 11px; color: var(--muted); text-align: center; }
+.advicecard { padding: var(--s3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.advicecard p { margin: 0; font-size: var(--fs-b); line-height: 1.5; white-space: pre-line; }
+.sechead2 { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-bottom: var(--s1); }
+.sechead2 h3 { font-size: var(--fs-s); color: var(--muted); font-weight: 600; margin: 0; }
+@media (max-width: 720px) { .detailsgrid { grid-template-columns: minmax(0, 1fr); } .tplsave input { width: 100%; } }

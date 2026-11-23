@@ -62,9 +62,30 @@ describe('invite link and QR (Phase 3.1)', () => {
 describe('General (no surgery) patient (fix phase 5)', () => {
   it('can be added with exercises the physio types freely', async () => {
     const { buildPatient } = await import('../src/onboarding');
-    const p = buildPatient({ name: 'Test', age: 50, language: 'en', packId: 'general', anchorDate: '2026-11-01', phaseId: 'p1', exercises: ['walking'], checkInEveryDays: 1, reviewEveryDays: 7, overrides: [], ownExercises: 'Wall push-ups: 2 x 10\n\nWalk 15 minutes after lunch' }, { nowMs: Date.parse('2026-11-15T09:00:00Z'), today: '2026-11-15' });
+    const p = buildPatient({ name: 'Test', age: 50, language: 'en', packId: 'general', anchorDate: '2026-11-01', phaseId: 'p1', exercises: ['walking'], checkInEveryDays: 1, reviewEveryDays: 7, overrides: [], ownExercises: 'Wall push-ups: 2 x 10\n\nWalk 15 minutes after lunch', details: { diagnosis: 'Frozen shoulder' } }, { nowMs: Date.parse('2026-11-15T09:00:00Z'), today: '2026-11-15' });
     expect(p.packId).toBe('general');
     expect((p.plan.instructions ?? []).map((x) => x.text)).toEqual(['Wall push-ups: 2 x 10', 'Walk 15 minutes after lunch']);
+    expect(p.notices).toEqual([]);
+  });
+});
+
+describe('add any patient quickly (physio feedback phase 2)', () => {
+  const base = { name: 'Asha', age: 0, language: 'en' as const, packId: 'general', anchorDate: '2026-11-01', phaseId: 'p1', exercises: ['walking'], checkInEveryDays: 1, reviewEveryDays: 7, overrides: [] };
+  const ctx = { nowMs: Date.parse('2026-11-15T09:00:00Z'), today: '2026-11-15' };
+  it('General needs a typed diagnosis; age is optional', async () => {
+    const { buildPatient, validateOnboard } = await import('../src/onboarding');
+    expect(validateOnboard(base, ctx.today)).toContain('Type the diagnosis');
+    const p = buildPatient({ ...base, details: { diagnosis: 'Low back pain', phone: '+91 00000 00009', diabetes: true, goal: 'Walk to the temple' } }, ctx);
+    expect(p.age).toBe(0);
+    expect(p.details).toMatchObject({ diagnosis: 'Low back pain', diabetes: true, goal: 'Walk to the temple' });
+  });
+  it('starting from a template copies its doses and notes and says so in the audit log', async () => {
+    const { buildPatient } = await import('../src/onboarding');
+    const p = buildPatient({ ...base, details: { diagnosis: 'Knee OA' }, advice: 'Ice 15 minutes after exercise.', template: { name: 'Knee OA starter', doses: { walking: { sets: 1, reps: null, holdSec: null, perDay: 2 } }, exerciseNotes: { walking: 'Flat ground only.' } } }, ctx);
+    expect(p.plan.doses?.walking).toMatchObject({ perDay: 2 });
+    expect(p.plan.exerciseNotes?.walking?.text).toBe('Flat ground only.');
+    expect(p.plan.advice?.text).toBe('Ice 15 minutes after exercise.');
+    expect(p.audit[0].note).toContain('Knee OA starter');
     expect(p.notices).toEqual([]);
   });
 });

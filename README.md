@@ -296,7 +296,7 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | precaution sling-off restricted phases | p1 | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 
-#### general (11 values)
+#### general (12 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -309,6 +309,7 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | warning sign chestPainBreathless -> tier | SAFETY (R1) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
 | warning sign numbness -> tier | REVIEW (A8) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
 | warning sign weaknessBladderBowel -> tier | SAFETY (R1) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
+| rule R3 pain stage weeks 0-end | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
 | rule S1 silence | 72 h | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 

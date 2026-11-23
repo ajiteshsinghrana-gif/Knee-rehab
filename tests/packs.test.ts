@@ -113,7 +113,7 @@ describe('README lists every NEEDS_PHYSIO_SIGNOFF value (rule 3)', () => {
 describe('General (no surgery) protocol (fix phase 5)', () => {
   const g = () => PACK_LIST.find((p) => p.id === 'general')!;
   it('uses only the generic rules and red flags', () => {
-    expect(g().rules.map((r) => r.id).sort()).toEqual(['A1', 'A3', 'A4', 'S1']);
+    expect(g().rules.map((r) => r.id).sort()).toEqual(['A1', 'A3', 'A4', 'R3', 'S1']);
     expect(g().warningSigns.filter((w) => w.tier === 'SAFETY').map((w) => w.id)).toEqual(expect.arrayContaining(['chestPainBreathless', 'calfPainOrRedness', 'fever', 'weaknessBladderBowel']));
     expect(g().warningSigns.map((w) => w.id)).not.toContain('woundDischarge'); // no surgery, no wound
   });

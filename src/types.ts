@@ -433,6 +433,9 @@ export interface Patient {
   escalated?: Record<string, { at: string; to: string }>;
   /** Optional details the physio can fill in (physio feedback round). Only name and condition are required. */
   details?: PatientDetails;
+  /** The physio's own clinical notes (free text), and photos attached to them (stored on the physio's device only). */
+  clinicalNotes?: { text: string; at: string; by: string };
+  attachments?: { id: string; name: string; mime: string; size: number; at: string }[];
 }
 
 export interface FollowUp {
@@ -480,6 +483,8 @@ export interface Plan {
   exerciseNotes?: Record<string, { text: string; at: string; by: string }>;
   /** The physio's own dose for an exercise for this patient (fix phase 3); wins over the library dose. */
   doses?: Record<string, ExerciseDose>;
+  /** "Advice from your physio": free text the patient sees on their home screen (diet, icing, precautions...). */
+  advice?: { text: string; at: string; by: string };
 }
 export interface PatientDetails {
   phone?: string; gender?: string; city?: string; occupation?: string; diagnosis?: string;
@@ -510,7 +515,8 @@ export type NoticeChange =
   | { kind: 'exercises'; added: string[]; removed: string[] }
   | { kind: 'instruction'; text: string }
   | { kind: 'instructionRemoved'; text: string }
-  | { kind: 'dose'; exercise: string };
+  | { kind: 'dose'; exercise: string }
+  | { kind: 'advice' };
 export interface Notice {
   id: string;
   at: string;

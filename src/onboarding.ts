@@ -1,6 +1,6 @@
 /** Phase 3.1: create a patient from a pack, with the physio's adjustments applied through the same audited actions. */
 import { isLang } from './types';
-import type { Lang, Patient, Plan } from './types';
+import type { ExerciseDose, Lang, Patient, PatientDetails, Plan } from './types';
 import { getPack, PACKS } from './engine/packs';
 import { buildImportedPack } from './import/apply';
 import { buildConditionPack, fatDraft, slimDraft, type ConditionDraft } from './author/condition';
@@ -28,6 +28,12 @@ export interface OnboardDraft {
   caregiver?: boolean;
   /** The physio's own exercises or instructions, one per line, in their own words (shown to the patient). */
   ownExercises?: string;
+  /** Optional details (phone, gender, diagnosis...). For the General protocol the diagnosis is required. */
+  details?: PatientDetails;
+  /** Advice the patient sees on their home screen. */
+  advice?: string;
+  /** Started from one of the physio's templates: its doses and notes are copied in. */
+  template?: { name: string; doses: Record<string, Omit<ExerciseDose, 'at' | 'by'>>; exerciseNotes: Record<string, string> };
 }
 
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
@@ -35,7 +41,8 @@ const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{
 export function validateOnboard(d: OnboardDraft, today: string): string[] {
   const e: string[] = [];
   if (!d.name.trim()) e.push('Enter the patient name');
-  if (!(d.age >= 1 && d.age <= 110)) e.push('Enter an age between 1 and 110');
+  if (d.age && !(d.age >= 1 && d.age <= 110)) e.push('Age must be between 1 and 110 (or leave it empty)');
+  if (d.packId === 'general' && !d.details?.diagnosis?.trim()) e.push('Type the diagnosis');
   if (!PACKS[d.packId]) e.push('Choose a condition');
   if (!isDate(d.anchorDate)) e.push('Enter the surgery or treatment start date');
   else if (d.anchorDate > today) e.push('The start date cannot be in the future');
@@ -56,7 +63,7 @@ export function buildPatient(d: OnboardDraft, ctx: { nowMs: number; today: strin
   const pack = getPack(d.packId);
   const first = pack.phases[0].id === d.phaseId;
   let p: Patient = normalizePatient({
-    id: ctx.id ?? newPatientId(ctx.nowMs), name: d.name.trim(), age: Math.round(d.age), packId: pack.id, language: d.language, ...(d.caregiver ? { caregiverMode: true } : {}),
+    id: ctx.id ?? newPatientId(ctx.nowMs), name: d.name.trim(), age: d.age ? Math.round(d.age) : 0, packId: pack.id, language: d.language, ...(d.caregiver ? { caregiverMode: true } : {}),
     anchorDate: d.anchorDate, enrolledOn: ctx.today, currentPhase: d.phaseId, phaseStartDate: first ? d.anchorDate : ctx.today,
     sessionsPrescribedPerDay: pack.phases.find((x) => x.id === d.phaseId)?.sessionsPerDay ?? 2,
     daily: [], periodic: [], reviewed: {}, decisions: [], ...planDefaults(),
@@ -71,13 +78,24 @@ export function buildPatient(d: OnboardDraft, ctx: { nowMs: number; today: strin
     p = applyAction(p, pack, { type: 'change-follow-up', checkInEveryDays: d.checkInEveryDays, reviewEveryDays: d.reviewEveryDays, nextReviewDate: addDays(ctx.today, d.reviewEveryDays), note: 'Set at onboarding' }, c);
   }
   for (const o of d.overrides) p = applyAction(p, pack, { type: 'set-override', target: o.target, value: o.value, reason: o.reason.trim() || 'Set at onboarding' }, c);
+  const det = Object.fromEntries(Object.entries(d.details ?? {}).filter(([, v]) => v !== undefined && v !== '' && v !== false).map(([k, v]) => [k, typeof v === 'string' ? v.trim().slice(0, 200) : v]));
+  if (Object.keys(det).length) p = { ...p, details: det };
+  if (d.template) {
+    // A template's doses and notes, for exercises the new patient actually has.
+    const at = new Date(ctx.nowMs).toISOString();
+    const has = (id: string) => d.exercises.includes(id);
+    const doses = Object.fromEntries(Object.entries(d.template.doses).filter(([id]) => has(id)).map(([id, x]) => [id, { ...x, at, by: PHYSIO }]));
+    const notes = Object.fromEntries(Object.entries(d.template.exerciseNotes).filter(([id, t]) => has(id) && t).map(([id, t]) => [id, { text: t, at, by: PHYSIO }]));
+    p = { ...p, plan: { ...p.plan, ...(Object.keys(doses).length ? { doses } : {}), ...(Object.keys(notes).length ? { exerciseNotes: notes } : {}) } };
+  }
+  if (d.advice?.trim()) p = applyAction(p, pack, { type: 'set-advice', text: d.advice, note: 'Set at onboarding' }, c);
   for (const line of (d.ownExercises ?? '').split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 20)) {
     p = applyAction(p, pack, { type: 'add-instruction', text: line.slice(0, 400), note: 'Set at onboarding' }, c);
   }
   // the patient is not told about their own starting plan
   p = { ...p, notices: [] };
   // approval itself is the first audit line
-  p = { ...p, audit: [{ id: `${ctx.nowMs}-onb`, at: new Date(ctx.nowMs).toISOString(), who: PHYSIO, action: 'onboard', summary: `Patient onboarded on ${pack.condition.en}, ${phase.name.en}`, before: null, after: { exercises: d.exercises }, note: 'Plan approved' }, ...p.audit] };
+  p = { ...p, audit: [{ id: `${ctx.nowMs}-onb`, at: new Date(ctx.nowMs).toISOString(), who: PHYSIO, action: 'onboard', summary: `Patient onboarded on ${pack.condition.en}, ${phase.name.en}`, before: null, after: { exercises: d.exercises }, note: d.template ? `Plan approved (started from the template "${d.template.name}")` : 'Plan approved' }, ...p.audit] };
   return p;
 }
 

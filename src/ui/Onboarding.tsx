@@ -8,6 +8,7 @@ import { getMode } from '../mode';
 import { newClaimPin, newSyncKey } from '../sync/client';
 import { buildPatient, inviteUrl, validateOnboard, type OnboardDraft } from '../onboarding';
 import { qrSvg } from '../qr';
+import { DetailsFields } from './DetailsFields';
 import { clockMs, getState, setState } from '../store';
 
 const today = () => getState().today;
@@ -20,7 +21,7 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [d, setD] = useState<OnboardDraft>(() => {
     const pack = packs[0];
-    return { name: '', age: 40, language: 'en' as Lang, packId: pack.id, anchorDate: s.today, phaseId: pack.phases[0].id, exercises: [...pack.phases[0].exercises], checkInEveryDays: 1, reviewEveryDays: pack.phases[0].followUpEveryDays, overrides: [] };
+    return { name: '', age: 0, language: 'en' as Lang, packId: pack.id, anchorDate: s.today, phaseId: pack.phases[0].id, exercises: [...pack.phases[0].exercises], checkInEveryDays: 1, reviewEveryDays: pack.phases[0].followUpEveryDays, overrides: [] };
   });
   const [err, setErr] = useState('');
   const [made, setMade] = useState<{ id: string; url: string } | null>(null);
@@ -34,11 +35,23 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
 
   const choosePack = (id: string) => { const p = PACKS[id]; set({ packId: id, phaseId: p.phases[0].id, exercises: [...p.phases[0].exercises], reviewEveryDays: p.phases[0].followUpEveryDays, overrides: [] }); };
   const choosePhase = (id: string) => { const ph = pack.phases.find((x) => x.id === id)!; set({ phaseId: id, exercises: [...ph.exercises], reviewEveryDays: ph.followUpEveryDays }); };
+  const templates = s.templates ?? [];
+  const setDetails = (patch: Partial<NonNullable<OnboardDraft['details']>>) => setD((x) => ({ ...x, details: { ...(x.details ?? {}), ...patch } }));
+  /** Start from one of the physio's templates: protocol, phase, exercises, doses, notes, own instructions, advice and schedule. */
+  const applyTemplate = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t || !PACKS[t.packId]) { set({ template: undefined }); return; }
+    setD((x) => ({ ...x, packId: t.packId, phaseId: t.phaseId, exercises: [...t.exercises], checkInEveryDays: t.checkInEveryDays, reviewEveryDays: t.reviewEveryDays, overrides: [],
+      ownExercises: t.instructions.join('\n'), advice: t.advice, details: { ...(x.details ?? {}), ...(t.diagnosis ? { diagnosis: t.diagnosis } : {}) },
+      template: { name: t.name, doses: t.doses, exerciseNotes: t.exerciseNotes } }));
+  };
+  const deleteTemplate = (id: string) => { const st = getState(); setState({ ...st, templates: (st.templates ?? []).filter((x) => x.id !== id) }); set({ template: undefined }); };
+  const [tplId, setTplId] = useState('');
   const toggleEx = (id: string) => set({ exercises: d.exercises.includes(id) ? d.exercises.filter((x) => x !== id) : [...d.exercises, id] });
 
   const next = () => {
     const errs = validateOnboard(d, today());
-    if (step === 1 && errs.some((e) => /name|age|condition|surgery|phase/i.test(e))) { setErr(errs.find((e) => /name|age|condition|surgery|phase/i.test(e))!); return; }
+    if (step === 1 && errs.some((e) => /name|age|condition|surgery|phase|diagnosis/i.test(e))) { setErr(errs.find((e) => /name|age|condition|surgery|phase|diagnosis/i.test(e))!); return; }
     setErr('');
     setStep((step + 1) as 2 | 3 | 4);
   };
@@ -69,14 +82,28 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
 
       {step === 1 && (
         <div className="formgrid">
+          {templates.length > 0 && (
+            <label>Start from <span className="tplrow">
+              <select value={tplId} onChange={(e) => { setTplId(e.target.value); applyTemplate(e.target.value); }} aria-label="Start from a template">
+                <option value="">A blank plan</option>
+                {templates.map((t) => <option key={t.id} value={t.id}>My template: {t.name}</option>)}
+              </select>
+              {tplId && <button type="button" className="linkbtn" onClick={() => { deleteTemplate(tplId); setTplId(''); }}>Delete template</button>}
+            </span></label>
+          )}
           <label>Name <input value={d.name} onChange={(e) => set({ name: e.target.value })} aria-label="Patient name" /></label>
-          <label>Age <input type="number" min={1} max={110} value={d.age} onChange={(e) => set({ age: Number(e.target.value) })} aria-label="Age" /></label>
+          <label>Age <small>(optional)</small> <input type="number" min={1} max={110} value={d.age || ''} onChange={(e) => set({ age: Number(e.target.value) || 0 })} aria-label="Age" /></label>
           <label>Language <select value={d.language} onChange={(e) => set({ language: e.target.value as Lang })} aria-label="Language"><option value="en">English</option><option value="hi">हिन्दी</option><option value="bn">বাংলা</option></select></label>
           <label className="check"><input type="checkbox" checked={!!d.caregiver} onChange={(e) => set({ caregiver: e.target.checked })} aria-label="A caregiver will answer" /> A family member or carer will usually answer for the patient</label>
           <label>Condition <select value={d.packId} onChange={(e) => choosePack(e.target.value)} aria-label="Condition">{packs.map((p) => <option key={p.id} value={p.id}>{p.condition.en}</option>)}</select></label>
+          {d.packId === 'general' && <label>Diagnosis <small>(what you are treating, in your words)</small> <input value={d.details?.diagnosis ?? ''} maxLength={200} onChange={(e) => setDetails({ diagnosis: e.target.value })} aria-label="Diagnosis" placeholder="e.g. Frozen shoulder, low back pain" /></label>}
           {onNewCondition && <p className="tiny" data-testid="new-condition-hint">Condition not listed? <button type="button" className="btn" onClick={onNewCondition}>+ Write a new condition</button> You write its phases, exercises and warning signs once, then pick it here.</p>}
           <label>{/surgery/i.test(pack.anchorLabel.en) ? 'Surgery date' : 'Treatment start date'} <input type="date" max={s.today} value={d.anchorDate} onChange={(e) => set({ anchorDate: e.target.value })} aria-label="Surgery date" /></label>
           <label>Starting phase <select value={d.phaseId} onChange={(e) => choosePhase(e.target.value)} aria-label="Phase">{pack.phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name.en}</option>)}</select></label>
+          <details className="moredetails">
+            <summary>More details <small>(optional)</small></summary>
+            <DetailsFields v={d.details ?? {}} set={setDetails} showDiagnosis={d.packId !== 'general'} showSurgery={d.packId === 'general'} />
+          </details>
           <div className="btnrow"><button className="btn primary" onClick={next}>Next: adjust the plan</button></div>
         </div>
       )}
@@ -88,6 +115,9 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
             <li key={e.id}><label><input type="checkbox" checked={d.exercises.includes(e.id)} onChange={() => toggleEx(e.id)} /> {exerciseName(e.id, 'en')}{phase.exercises.includes(e.id) ? '' : <small> (not in the pack for this phase)</small>}</label></li>))}</ul>
           <label className="menufield" style={{ padding: 0 }}>Your own exercises or instructions (optional, one per line, in your words; the patient sees each line)
             <textarea rows={3} maxLength={4000} value={d.ownExercises ?? ''} onChange={(e) => set({ ownExercises: e.target.value })} placeholder={'e.g. Wall push-ups: 2 sets of 10, morning and evening\nWalk 15 minutes after lunch'} aria-label="Your own exercises" />
+          </label>
+          <label className="menufield" style={{ padding: 0 }}>Advice from your physio (optional; diet, icing, precautions... the patient sees it on their home screen)
+            <textarea rows={2} maxLength={2000} value={d.advice ?? ''} onChange={(e) => set({ advice: e.target.value })} aria-label="Advice for the patient" />
           </label>
           <h3>Follow-up</h3>
           <div className="fu">

@@ -212,3 +212,13 @@ describe('per-exercise dose (fix phase 3)', () => {
     expect(() => applyManual(p2(), pack, { type: 'set-dose', exerciseId: 'squats', sets: 0, reps: 12, perDay: 2 }, 'x', ctx)).toThrow(/whole numbers/);
   });
 });
+
+describe('advice from your physio (physio feedback phase 2)', () => {
+  it('is logged, shown to the patient, and can be removed', () => {
+    const a = applyAction(p2(), pack, { type: 'set-advice', text: 'Ice 15 minutes after exercise.' }, ctx);
+    expect(a.plan.advice?.text).toBe('Ice 15 minutes after exercise.');
+    expect(a.audit.at(-1)?.action).toBe('set-advice');
+    expect(a.notices.at(-1)?.changes[0]).toEqual({ kind: 'advice' });
+    expect(applyAction(a, pack, { type: 'set-advice', text: '' }, ctx).plan.advice).toBeUndefined();
+  });
+});

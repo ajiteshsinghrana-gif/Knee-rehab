@@ -1,10 +1,10 @@
 {
  "id": "general",
  "condition": {
-  "en": "General (no surgery)",
-  "hi": "सामान्य (बिना सर्जरी)"
+  "en": "General (no fixed protocol)",
+  "hi": "सामान्य (कोई तय प्रोटोकॉल नहीं)"
  },
- "population": "Any adult in physiotherapy without surgery. Generic rules only (pain rising, missed sessions, same hard movement, no check-in, red flags). The physio chooses the exercises. The red-flag list is not yet reviewed by a clinician.",
+ "population": "Any adult in physiotherapy, with or without surgery. The physio types the diagnosis and chooses the exercises. Generic rules only (pain rising, high pain, missed sessions, same hard movement, no check-in, red flags). The red-flag list is not yet reviewed by a clinician.",
  "version": "0.1.0-placeholder",
  "sources": [
   "Generic rules from the app's defaults; no condition-specific protocol. Red-flag list: NEEDS_PHYSIO_SIGNOFF."
@@ -164,6 +164,26 @@
  ],
  "rules": [
   {
+   "id": "R3",
+   "label": {
+    "en": "High pain",
+    "hi": "तेज़ दर्द"
+   },
+   "tier": "URGENT",
+   "source": "DEFAULT",
+   "type": "threshold",
+   "measure": "pain",
+   "operator": ">=",
+   "stages": [
+    {
+     "minWeek": 0,
+     "maxWeek": null,
+     "value": 7,
+     "source": "DEFAULT; NEEDS_PHYSIO_SIGNOFF"
+    }
+   ]
+  },
+  {
    "id": "A1",
    "label": {
     "en": "Pain rising",
@@ -237,6 +257,10 @@
   ],
   "S1": [
    "call-patient"
+  ],
+  "R3": [
+   "call-patient",
+   "reassess-bring-visit-forward"
   ]
  },
  "responseHours": {
