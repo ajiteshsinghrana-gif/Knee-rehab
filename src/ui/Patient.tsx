@@ -72,7 +72,7 @@ function SafetyBanner({ lang, emergency }: { lang: Lang; emergency: boolean }) {
 /** Shown on every answering screen while a carer is answering (Phase 5.3). */
 function CaregiverBanner({ patient, lang }: { patient: Patient; lang: Lang }) {
   if (!patient.caregiverMode) return null;
-  return <p className="caregiver" role="note" data-testid="caregiver-banner">🤝 {t(lang, 'caregiverBanner', { name: patient.name })}</p>;
+  return <p className="caregiver" role="note" data-testid="caregiver-banner">{t(lang, 'caregiverBanner', { name: patient.name })}</p>;
 }
 const answerer = (p: Patient) => (p.caregiverMode ? ('caregiver' as const) : ('patient' as const));
 
@@ -102,8 +102,8 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
         <span><b>{T('caregiverToggle', { name: patient.name })}</b><small>{T('caregiverHint')}</small></span>
       </label>
       {doneToday && <p className="okline">{T('doneToday')}</p>}
-      {exs.length > 0 && <button className="big secondary" data-testid="start-session" onClick={() => go('session')}>🏃 {ss(lang, 'sStart')}</button>}
-      {exs.length > 0 && <button className="big secondary" data-testid="open-forms" onClick={() => go('forms')}>📹 {(patient.formRequests ?? []).length ? fs(lang, 'fMine') : fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</button>}
+      {exs.length > 0 && <button className="big secondary" data-testid="start-session" onClick={() => go('session')}>{ss(lang, 'sStart')}</button>}
+      {exs.length > 0 && <button className="big secondary" data-testid="open-forms" onClick={() => go('forms')}>{(patient.formRequests ?? []).length ? fs(lang, 'fMine') : fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</button>}
       <button className="big primary" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('startCheckIn')}</button>
       <div>
         <h3>{T('last7')}</h3>
@@ -131,12 +131,12 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
       <div className="homecards">
         {due.weeklyDue || due.weeklyNextIn >= 0 ? (
           <button className={`homecard ${due.weeklyDue ? 'due' : ''}`} onClick={() => go('weekly')} disabled={weeklyMeasures(pack, patient).length === 0}>
-            <span className="emoji">📏</span><b>{T('weeklyTitle')}</b>
+            <b>{T('weeklyTitle')}</b>
             <small>{weeklyMeasures(pack, patient).length === 0 ? T('weeklyNone') : due.weeklyDue ? T('dueNow') : T('nextIn', { n: due.weeklyNextIn })}</small>
           </button>
         ) : null}
         <button className={`homecard ${due.questionnaireDue ? 'due' : ''}`} onClick={() => go('monthly')} disabled={pack.questionnaires.length === 0}>
-          <span className="emoji">📝</span><b>{T('monthlyTitle')}</b>
+          <b>{T('monthlyTitle')}</b>
           <small>{pack.questionnaires.length === 0 ? T('noQuestionnaire') : due.questionnaireDue ? T('dueNow') : T('nextIn', { n: due.questionnaireNextIn })}</small>
         </button>
       </div>
@@ -166,7 +166,7 @@ function Notices({ patient, pack, lang }: { patient: Patient; pack: ProtocolPack
   const mark = () => updatePatient(patient.id, (p) => ({ ...p, notices: p.notices.map((n) => ({ ...n, seen: true })) }));
   return (
     <div className="notice-card" role="status" data-testid="physio-notice">
-      <strong>🩺 {t(lang, 'noticeTitle')}</strong>
+      <strong>{t(lang, 'noticeTitle')}</strong>
       {unseen.map((n) => { const text = noticeText(n, lang, pack); return <p key={n.id} className="noticeline">{text} <ReadAloud text={text} lang={lang} /></p>; })}
       <button className="btn" onClick={mark}>{t(lang, 'gotIt')}</button>
     </div>

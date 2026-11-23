@@ -21,6 +21,12 @@ export function PwaBanner() {
     window.addEventListener('online', on); window.addEventListener('offline', off);
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
+  // "Saved for offline" is good news, not a task: it shows as a toast and goes away by itself.
+  useEffect(() => {
+    if (!s.offlineReady) return;
+    const id = setTimeout(dismissOfflineReady, 5000);
+    return () => clearTimeout(id);
+  }, [s.offlineReady]);
   const lang = bannerLang();
   if (!s.updateReady && !s.offlineReady && online) return null;
   return (
@@ -33,9 +39,9 @@ export function PwaBanner() {
       )}
       {!online && <div className="pwarow" role="status" data-testid="pwa-offline"><span>{t(lang, 'pwaOffline')}</span></div>}
       {s.offlineReady && online && !s.updateReady && (
-        <div className="pwarow" role="status">
-          <span>{t(lang, 'pwaReady')}</span>
-          <button type="button" className="btn" onClick={dismissOfflineReady}>{t(lang, 'pwaOk')}</button>
+        <div className="pwarow toast" role="status">
+          <span>✓ {t(lang, 'pwaReady')}</span>
+          <button type="button" className="iconbtn" aria-label={t(lang, 'pwaOk')} onClick={dismissOfflineReady}>✕</button>
         </div>
       )}
     </div>

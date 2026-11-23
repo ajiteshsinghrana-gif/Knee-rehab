@@ -68,7 +68,7 @@ export function Clinician({ state }: { state: AppState }) {
         <aside className="worklist">
           <h2>Worklist</h2>
           <div className="btnrow"><button className="btn primary" onClick={() => setMode('add')}>+ Add patient</button><button className="btn" onClick={() => setMode('import')}>Import protocol</button><button className="btn" onClick={() => setMode('condition')}>+ Add a condition</button></div>
-          <div className="btnrow"><button className={`btn ${mode === 'videos' ? 'primary' : ''}`} data-testid="videos-btn" onClick={() => setMode(mode === 'videos' ? 'dash' : 'videos')}>🎬 Exercise videos</button></div>
+          <div className="btnrow"><button className={`btn ${mode === 'videos' ? 'primary' : ''}`} data-testid="videos-btn" onClick={() => setMode(mode === 'videos' ? 'dash' : 'videos')}>Exercise videos</button></div>
           <div className="btnrow"><button className={`btn ${mode === 'past' ? 'primary' : ''}`} data-testid="past-btn" onClick={() => setMode(mode === 'past' ? 'dash' : 'past')}>Past patients ({pastRows.length}){asks ? ` · ${asks} erasure request${asks === 1 ? '' : 's'}` : ''}</button></div>
           <p className="counts">{counts.map(([t, n]) => <span key={t}><Tier tier={t} /> {n}</span>)}</p>
           <ul>
@@ -80,7 +80,7 @@ export function Clinician({ state }: { state: AppState }) {
                   <span className="pmain">
                     <b>{p.name}, {p.age}{r.overdue && <span className="overdue">Overdue</span>}</b>
                     <small>{pack.condition.en}</small>
-                    {pendingForms(p).length > 0 && <span className="chips"><i data-testid="form-chip">📹 {pendingForms(p).length} video{pendingForms(p).length === 1 ? '' : 's'} to review</i></span>}
+                    {pendingForms(p).length > 0 && <span className="chips"><i data-testid="form-chip">{pendingForms(p).length} video{pendingForms(p).length === 1 ? '' : 's'} to review</i></span>}
                     <span className="chips">{r.triggers.slice(0, 5).map((t) => <i key={t.ruleId}>{t.ruleId}</i>)}</span>
                   </span>
                   <span className="pdl"><strong className={r.tier}>{TIER_LABEL[r.tier]}</strong><small className={r.reviewedAt ? 'rev' : ''}>{dueText(r, now)}</small></span>
@@ -513,7 +513,7 @@ function PlanCard({ patient: p, pack, now, onApply, err }: { patient: Patient; p
       <ul className="planlist">
         {exs.map((id) => {
           const orig = swapped.find(([, v]) => v === id)?.[0];
-          return <li key={id}>{exerciseName(id, 'en')}{getDemo(id) ? <span className="demobadge" title="Patients can watch a demonstration of this exercise">🎬 video</span> : <span className="demobadge none" title="No demonstration attached yet. Add one under Exercise videos.">no video</span>}{orig && <> <small>(easier version of {exerciseName(orig, 'en')})</small> <button className="btn" onClick={() => onApply({ type: 'restore-exercise', exerciseId: id })}>Restore</button></>}</li>;
+          return <li key={id}>{exerciseName(id, 'en')}<span className="sr-only">, </span>{getDemo(id) ? <span className="demobadge" title="Patients can watch a demonstration of this exercise">Video</span> : <span className="demobadge none" title="No demonstration attached yet. Add one under Exercise videos.">No video</span>}{orig && <> <small>(easier version of {exerciseName(orig, 'en')})</small> <button className="btn" onClick={() => onApply({ type: 'restore-exercise', exerciseId: id })}>Restore</button></>}</li>;
         })}
       </ul>
       <p>Check-ins: every <b>{fu.checkInEveryDays}</b> day(s) · Next review: <b>{fu.nextReviewDate ?? 'not set'}</b>{p.plan.followUp?.until && <> <small>(until {p.plan.followUp.until})</small></>}</p>
@@ -526,7 +526,7 @@ function PlanCard({ patient: p, pack, now, onApply, err }: { patient: Patient; p
         </>
       )}
       <details className="auditbox" data-testid="audit">
-        <summary className="btn" role="button">📋 Audit log ({p.audit.length}) · see every plan change</summary>
+        <summary className="btn" role="button">Audit log ({p.audit.length}) · see every plan change</summary>
         <p className="tiny">Every change to this patient's plan: who made it, when, what changed, and your written reason. It is saved on this device and cannot be edited.</p>
         <button className="btn" disabled={p.audit.length === 0} onClick={() => downloadAudit(p)}>Download as CSV</button>
         {p.audit.length === 0 ? <p className="tiny">No plan changes yet.</p> : (

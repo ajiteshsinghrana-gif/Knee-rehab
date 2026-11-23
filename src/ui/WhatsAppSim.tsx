@@ -146,7 +146,7 @@ export function WhatsAppSim({ patient, canSave, onClose }: { patient: Patient; c
         {unsupported.length > 0 && <p className="hint">This condition asks a question the chat cannot show yet ({unsupported.join(', ')}). The app handles it.</p>}
         {result && <p className="wa-result" role="status" data-testid="wa-result">Result of these answers: <b>{result}</b>{canSave && save ? ' (saved to the record)' : ''}</p>}
         <div className="btnrow">
-          <button type="button" className="btn" onClick={() => setRun(run + 1)}>↺ Start again</button>
+          <button type="button" className="btn" onClick={() => setRun(run + 1)}>Start again</button>
           <button type="button" className="btn primary" ref={closeRef} onClick={onClose}>Close</button>
         </div>
       </div>

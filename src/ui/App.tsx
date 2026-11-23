@@ -16,17 +16,9 @@ import { ResetPassword } from './ResetPassword';
 import { recoveryTokenFromHash } from '../sync/auth';
 import { WhatsAppSim } from './WhatsAppSim';
 import { WhatsAppSetup } from './WhatsAppSetup';
+import { Menu, StepLine, SyncDot, TopBar, ViewSwitch } from './TopBar';
 
 const route = (): 'patient' | 'clinician' => (window.location.hash === '#clinician' ? 'clinician' : 'patient');
-
-function SyncChip() {
-  const s = useSyncExternalStore(subscribeSync, getSyncStatus);
-  if (!s.enabled) return null;
-  const t = s.lastOkAt ? new Date(s.lastOkAt).toLocaleTimeString() : '';
-  if (s.state === 'login') return <span className="syncchip bad" role="status" data-testid="sync-chip">● Sign in as a physio (Physio dashboard tab) to sync your patients. Their data stays on this device until then.</span>;
-  if (s.state === 'error') return <span className="syncchip bad" role="status" data-testid="sync-chip">⚠ Sync problem. Your data is safe on this device and will send when it works. ({s.error})</span>;
-  return <span className="syncchip" role="status" data-testid="sync-chip">● Live sync on{s.patients ? ` · ${s.patients} patient${s.patients === 1 ? '' : 's'}` : ''}{t ? ` · last ${t}` : ''}{getMode() === 'demo' ? ' · demo: only patients you add sync; the six built-in ones stay on this device' : ''}</span>;
-}
 
 export function App() {
   const [recovery, setRecovery] = useState<string | null>(() => recoveryTokenFromHash(window.location.hash));
@@ -65,11 +57,23 @@ function LiveApp() {
   const shown = people.find((p) => p.id === previewId) ?? people[0];
   return (
     <>
-      <div className="livebar" data-testid="live-bar">
-        <span className="tag live">LIVE CLINIC</span>
-        <span className="demotext">Real patients, real dates, saved to your account. Patients open only their own link on their own phone.</span>
-        <button className="btn" data-testid="to-demo" onClick={() => { setMode('demo'); window.location.reload(); }}>Switch to demo →</button>
-      </div>
+      <TopBar
+        tag={<span className="tb-tag live">LIVE</span>}
+        center={gated ? null : <ViewSwitch label="Choose a view" value={view} onChange={setView} options={[
+          { id: 'physio', label: 'Physio dashboard', short: 'Physio' },
+          { id: 'preview', label: 'View as patient', short: 'Patient', testid: 'preview-tab' },
+          { id: 'whatsapp', label: 'WhatsApp', short: 'WhatsApp', testid: 'whatsapp-tab' },
+        ]} />}
+        right={<>
+          {!gated && <SyncDot />}
+          <Menu label="Live clinic options" buttonLabel="Clinic" testid="live-bar">
+            {() => (<>
+              <p className="menunote">Live clinic: real patients, real dates, saved to your account. Patients open only their own link on their own phone.</p>
+              <button className="menuitem" data-testid="to-demo" onClick={() => { setMode('demo'); window.location.reload(); }}>Switch to demo →</button>
+            </>)}
+          </Menu>
+        </>}
+      />
       {gated ? (
         <main className="patientshell" data-testid="physio-gate">
           <h2>Physio sign-in</h2>
@@ -78,12 +82,6 @@ function LiveApp() {
         </main>
       ) : (
         <>
-          <SyncChip />
-          <nav className="tabs">
-            <button className={view === 'physio' ? 'on' : ''} onClick={() => setView('physio')}>Physio dashboard</button>
-            <button className={view === 'preview' ? 'on' : ''} data-testid="preview-tab" onClick={() => setView('preview')}>View as patient</button>
-            <button className={view === 'whatsapp' ? 'on' : ''} data-testid="whatsapp-tab" onClick={() => setView('whatsapp')}>WhatsApp</button>
-          </nav>
           {view === 'physio' ? <Clinician state={state} /> : view === 'whatsapp' ? <WhatsAppSetup patients={state.patients} /> : (
             <section data-testid="preview">
               {!shown ? <p className="card">No active patients yet. Add one on the Physio dashboard.</p> : (
@@ -136,7 +134,6 @@ function DemoApp() {
   const patient = state.patients.find((p) => p.id === state.activeId) ?? state.patients[0];
   const step = state.demoStep;
   const s = DEMO_STEPS[step];
-  const isRavi = patient.id === 'ravi';
   const [wa, setWa] = useState(false);
 
   const fastForward = () => {
@@ -149,30 +146,32 @@ function DemoApp() {
 
   return (
     <>
-      <div className="demobar">
-        <span className="tag">DEMO</span>
-        <span className="demotext">{s ? `${s.title}: ${s.narration}` : 'Demo complete: Ravi is now URGENT via R5. Open the physio view.'}</span>
-        <span className="selectrow">
-          <label htmlFor="demo-patient">Patient</label>
-          <select id="demo-patient" value={patient.id} onChange={(e) => setState({ ...getState(), activeId: e.target.value })}>
-            {state.patients.map((p) => <option key={p.id} value={p.id}>{p.name} · {getPack(p.packId).condition.en}</option>)}
-          </select>
-        </span>
-        <span className="demobtns">
-          <button className="btn primary" disabled={!s} onClick={fastForward}>⏩ Fast-forward ({Math.min(step + 1, DEMO_STEPS.length)}/{DEMO_STEPS.length})</button>
-          <button className="btn" data-testid="whatsapp-btn" onClick={() => setWa(true)}>💬 WhatsApp</button>
-          <button className="btn" onClick={resetDemo}>↺ Reset</button>
-          <button className="btn" data-testid="to-live" onClick={() => { setMode('live'); window.location.reload(); }}>Go to live clinic →</button>
-        </span>
-      </div>
-      <SyncChip />
-      <nav className="tabs">
-        <button className={view === 'patient' ? 'on' : ''} onClick={() => go('patient')}>Patient phone</button>
-        <button className={view === 'clinician' ? 'on' : ''} onClick={() => go('clinician')}>Physio dashboard</button>
-      </nav>
+      <TopBar
+        center={<ViewSwitch label="Choose a view" value={view} onChange={go} options={[
+          { id: 'patient', label: 'Patient phone', short: 'Patient' },
+          { id: 'clinician', label: 'Physio dashboard', short: 'Physio' },
+        ]} />}
+        right={<>
+          <SyncDot />
+          <Menu label="Demo controls" testid="demo-menu" className="demomenu" buttonLabel={<>Demo<span className="tb-count">{Math.min(step, DEMO_STEPS.length)}/{DEMO_STEPS.length}</span></>}>
+            {(close) => (<>
+              <label className="menufield" htmlFor="demo-patient">Patient
+                <select id="demo-patient" value={patient.id} onChange={(e) => setState({ ...getState(), activeId: e.target.value })}>
+                  {state.patients.map((p) => <option key={p.id} value={p.id}>{p.name} · {getPack(p.packId).condition.en}</option>)}
+                </select>
+              </label>
+              <button className="menuitem strong" disabled={!s} onClick={fastForward}>Fast-forward one day ({Math.min(step + 1, DEMO_STEPS.length)}/{DEMO_STEPS.length})</button>
+              <button className="menuitem" data-testid="whatsapp-btn" onClick={() => { close(); setWa(true); }}>WhatsApp simulation</button>
+              <button className="menuitem" onClick={resetDemo}>Reset demo</button>
+              <hr />
+              <button className="menuitem" data-testid="to-live" onClick={() => { setMode('live'); window.location.reload(); }}>Go to live clinic →</button>
+            </>)}
+          </Menu>
+        </>}
+      />
+      <StepLine stepKey={String(step)} text={s ? `${s.title}: ${s.narration}` : 'Demo complete: Ravi is now URGENT via R5. Open the physio view.'} />
       {view === 'patient' ? <PatientView key={patient.id} patient={patient} /> : <Clinician state={state} />}
-      {!isRavi && view === 'patient' && null}
-      {wa && <WhatsAppSim key={patient.id} patient={patient} canSave onClose={() => setWa(false)} />}
+          {wa && <WhatsAppSim key={patient.id} patient={patient} canSave onClose={() => setWa(false)} />}
     </>
   );
 }
