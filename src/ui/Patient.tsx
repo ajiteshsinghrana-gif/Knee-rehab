@@ -44,7 +44,12 @@ export function PatientView({ patient }: { patient: Patient }) {
     <div className="app" lang={lang}>
       <header className="top">
         <h1>{T('appName')}</h1>
-        <button className="lang" onClick={() => setLang(LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length])} aria-label="Language">{LANG_NAME[LANGS[(LANGS.indexOf(lang) + 1) % LANGS.length]]}</button>
+        <label className="langpick">
+          <span className="sr-only">{T('language')}</span>
+          <select className="lang" value={lang} onChange={(e) => setLang(e.target.value as Lang)} aria-label={T('language')}>
+            {LANGS.map((l) => <option key={l} value={l}>{LANG_NAME[l]}</option>)}
+          </select>
+        </label>
       </header>
       {screen === 'home' && <Home patient={patient} pack={pack} lang={lang} go={(sc) => { if (sc === 'forms') setFormEx(null); setScreen(sc); }} />}
       {screen === 'session' && <GuidedSession key={patient.id} patient={patient} pack={pack} lang={lang} onExit={(toCheckIn) => setScreen(toCheckIn ? 'checkin' : 'home')} onNeedHelp={(id) => { setFormEx(id); setScreen('forms'); }} />}
@@ -53,7 +58,7 @@ export function PatientView({ patient }: { patient: Patient }) {
       {screen === 'weekly' && <Weekly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
       {screen === 'monthly' && <Monthly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
       {screen === 'done' && <Done patient={patient} pack={pack} lang={lang} onHome={() => setScreen('home')} />}
-      <p className="notice">{T('notice')}</p>
+      {screen !== 'home' && <p className="notice">{T('notice')}</p>}
     </div>
   );
 }
@@ -89,23 +94,25 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
   const due = dueState(pack, patient, today, diffDays);
   const last7 = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6));
   const sym = { all: ['ok', '✓'], some: ['part', '½'], none: ['miss', '✕'] } as const;
+  const [allEx, setAllEx] = useState(false);
+  const shownEx = allEx ? exs : exs.slice(0, 5);
+  const hintId = `cg-hint-${patient.id}`;
   return (
-    <main>
+    <main className="home">
       {tri.tier === 'SAFETY' && <SafetyBanner lang={lang} emergency={safetyLevel(patient) === 'emergency'} />}
-      <div>
-        <div className="hello">{T('hello')}, {patient.name}</div>
-        <p className="sub">{T('dayAfter', { n: day })} · {L(phase.name, lang)}</p>
+      <div className="greet">
+        <h2 className="hello">{T('hello')}, {patient.name}</h2>
+        <p className="sub">{T('dayAfter', { n: day })}</p>
+        <label className="cgtoggle">
+          <input type="checkbox" role="switch" checked={!!patient.caregiverMode} aria-label={T('caregiverToggle', { name: patient.name })} aria-describedby={hintId} onChange={(e) => updatePatient(patient.id, (x) => ({ ...x, caregiverMode: e.target.checked }))} />
+          <span>{T('caregiverToggle', { name: patient.name })}</span>
+          <span className="sr-only" id={hintId}>{T('caregiverHint')}</span>
+        </label>
       </div>
       <Notices patient={patient} pack={pack} lang={lang} />
-      <label className="caregivertoggle">
-        <input type="checkbox" checked={!!patient.caregiverMode} aria-label={T('caregiverToggle', { name: patient.name })} onChange={(e) => updatePatient(patient.id, (x) => ({ ...x, caregiverMode: e.target.checked }))} />
-        <span><b>{T('caregiverToggle', { name: patient.name })}</b><small>{T('caregiverHint')}</small></span>
-      </label>
       {doneToday && <p className="okline">{T('doneToday')}</p>}
-      {exs.length > 0 && <button className="big secondary" data-testid="start-session" onClick={() => go('session')}>{ss(lang, 'sStart')}</button>}
-      {exs.length > 0 && <button className="big secondary" data-testid="open-forms" onClick={() => go('forms')}>{(patient.formRequests ?? []).length ? fs(lang, 'fMine') : fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</button>}
       <button className="big primary" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('startCheckIn')}</button>
-      <div>
+      <section className="last7">
         <h3>{T('last7')}</h3>
         <div className="dots">
           {last7.map((d) => {
@@ -115,31 +122,48 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
             return <span key={d} className={`dot ${cls}`} role="img" aria-label={e ? T(e.exercises === 'all' ? 'dayOk' : e.exercises === 'some' ? 'dayPart' : 'dayMiss') : d === today ? T('dayToday') : before ? T('dayBefore') : T('dayMiss')}>{ch}</span>;
           })}
         </div>
-      </div>
+      </section>
       {(patient.plan.instructions ?? []).length > 0 && (
-        <div className="physioins" data-testid="instructions">
+        <section className="physioins" data-testid="instructions">
           <h3>{T('yourPhysioSays')}</h3>
           <ul className="exlist">{(patient.plan.instructions ?? []).map((x) => <li key={x.id}>{x.text}</li>)}</ul>
-        </div>
+        </section>
       )}
       {exs.length > 0 && (
-        <div>
-          <h3>{T('yourExercises')}</h3>
-          <ul className="exlist">{exs.map((id) => <li key={id} className="exitem"><span>{exerciseName(id, lang)}</span><DemoButton patient={patient} exerciseId={id} lang={lang} compact /></li>)}</ul>
-        </div>
+        <section className="exsec">
+          <div className="sechead"><h3>{T('yourExercises')}</h3><small>{L(phase.name, lang)}</small></div>
+          <ul className="exrows">{shownEx.map((id) => {
+            const ex = getExercise(id);
+            return (
+              <li key={id} className="exitem">
+                <span className="exthumb">{ex && <img src={ex.picture} alt="" width={40} height={40} loading="lazy" />}</span>
+                <span className="extext"><b>{exerciseName(id, lang)}</b>{ex && <small>{L(ex.dose.text, lang)}</small>}</span>
+                <DemoButton patient={patient} exerciseId={id} lang={lang} compact />
+              </li>
+            );
+          })}</ul>
+          {exs.length > 5 && <button type="button" className="linkbtn" aria-expanded={allEx} onClick={() => setAllEx(!allEx)}>{allEx ? T('showFewer') : T('showAll', { n: exs.length })}</button>}
+          <div className="exbtns">
+            <button className="btn" data-testid="start-session" onClick={() => go('session')}>{ss(lang, 'sStart')}</button>
+            <button className="btn" data-testid="open-forms" onClick={() => go('forms')}>{(patient.formRequests ?? []).length ? fs(lang, 'fMine') : fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</button>
+          </div>
+        </section>
       )}
-      <div className="homecards">
+      <section className="checkrows">
+        <h3>{T('checkIns')}</h3>
         {due.weeklyDue || due.weeklyNextIn >= 0 ? (
           <button className={`homecard ${due.weeklyDue ? 'due' : ''}`} onClick={() => go('weekly')} disabled={weeklyMeasures(pack, patient).length === 0}>
             <b>{T('weeklyTitle')}</b>
             <small>{weeklyMeasures(pack, patient).length === 0 ? T('weeklyNone') : due.weeklyDue ? T('dueNow') : T('nextIn', { n: due.weeklyNextIn })}</small>
+            <span className="chev" aria-hidden>›</span>
           </button>
         ) : null}
         <button className={`homecard ${due.questionnaireDue ? 'due' : ''}`} onClick={() => go('monthly')} disabled={pack.questionnaires.length === 0}>
           <b>{T('monthlyTitle')}</b>
           <small>{pack.questionnaires.length === 0 ? T('noQuestionnaire') : due.questionnaireDue ? T('dueNow') : T('nextIn', { n: due.questionnaireNextIn })}</small>
+          <span className="chev" aria-hidden>›</span>
         </button>
-      </div>
+      </section>
       <p className="disclaimer">{T('noticeLong')}</p>
     </main>
   );
@@ -178,6 +202,15 @@ type Step = string; // "m:<measureId>" | exercises | why | hard | precautions | 
 
 function Progress({ i, n }: { i: number; n: number }) {
   return <div className="progress" aria-hidden>{Array.from({ length: n }, (_, k) => <span key={k} className={k <= i ? 'on' : ''} />)}</div>;
+}
+/** Back on the left, "Step 2 of 5" on the right: the same place on every check-in screen. */
+function StepHead({ i, n, lang, onBack }: { i: number; n: number; lang: Lang; onBack: () => void }) {
+  return (
+    <div className="stephead">
+      <button className="back" onClick={onBack}>← {t(lang, 'back')}</button>
+      <span className="stepcount">{t(lang, 'stepOf', { i: i + 1, n })}</span>
+    </div>
+  );
 }
 
 function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pack: ProtocolPack; lang: Lang; onDone: () => void; onBack: () => void }) {
@@ -269,11 +302,11 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
 
   return (
     <>
+      <StepHead i={idx} n={order.length} lang={lang} onBack={() => { stop.current?.(); (fromReview && step !== 'review') ? setStep('review') : idx === 0 || step === 'review' ? onBack() : setStep(order[idx - 1]); }} />
       <Progress i={idx} n={order.length} />
       <CaregiverBanner patient={patient} lang={lang} />
       {listening && <div className="voice" role="status">🎙️ {T('listening')}<br /><small>{L(pack.checkIn.voiceExample, lang)}</small></div>}
-      <main>
-        <button className="back" onClick={() => { stop.current?.(); (fromReview && step !== 'review') ? setStep('review') : idx === 0 || step === 'review' ? onBack() : setStep(order[idx - 1]); }}>← {T('back')}</button>
+      <main className="checkin">
 
         {step.startsWith('m:') && (() => {
           const m = measure(step.slice(2));
@@ -342,7 +375,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
                 </div>
               );
             })}</div>
-            <button className="big primary" disabled={exIds.some((id) => draft.results[id].done === null || (draft.results[id].done === false && draft.results[id].reason === null))} onClick={() => next('exercises')}>{T('next')}</button>
+            <button className="big primary stickynext" disabled={exIds.some((id) => draft.results[id].done === null || (draft.results[id].done === false && draft.results[id].reason === null))} onClick={() => next('exercises')}>{T('next')}</button>
           </>
         )}
 
@@ -383,7 +416,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
             <div className="safety">{precs.map((x) => (
               <div className="srow" key={x.id}><span>{L(x.question, lang)}</span>
                 {yn(draft.precautionBreaches[x.id], undefined, (v) => setDraft({ ...draft, precautionBreaches: { ...draft.precautionBreaches, [x.id]: v } }), L(x.label, lang))}</div>))}</div>
-            <button className="big primary" disabled={Object.values(draft.precautionBreaches).some((v) => v === null)} onClick={() => next('precautions')}>{T('next')}</button>
+            <button className="big primary stickynext" disabled={Object.values(draft.precautionBreaches).some((v) => v === null)} onClick={() => next('precautions')}>{T('next')}</button>
           </>
         )}
 
@@ -398,7 +431,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
                 <span>{L(w.label, lang)}{draft.warnings[w.id] === null && draft.suggested[w.id] !== undefined && <><br /><span className="sugnote">{T('suggestedByVoice')}</span></>}</span>
                 {yn(draft.warnings[w.id], draft.suggested[w.id], (v) => setDraft({ ...draft, warnings: { ...draft.warnings, [w.id]: v } }), L(w.label, lang))}
               </div>))}</div>
-            <button className="big primary" disabled={unanswered.length > 0} onClick={() => { setFromReview(false); setStep('review'); }}>{unanswered.length ? T('answerEverySign') : T('next')}</button>
+            <button className="big primary stickynext" disabled={unanswered.length > 0} onClick={() => { setFromReview(false); setStep('review'); }}>{unanswered.length ? T('answerEverySign') : T('next')}</button>
           </>
         )}
 
@@ -410,7 +443,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
             <ul className="review">{reviewRows.map((r) => (
               <li key={r.step}><div><small>{r.label}</small><strong>{r.value}</strong></div><button onClick={() => edit(r.step)}>{T('change')}</button></li>))}</ul>
             {draft.warnings && pack.warningSigns.some((w) => draft.warnings[w.id] && w.tier === 'SAFETY') && <SafetyBanner lang={lang} emergency={hasEmergencySign(draft.warnings)} />}
-            <button className="big primary" disabled={!isComplete(draft)} onClick={save}>{isComplete(draft) ? T('save') : T('answerEverySign')}</button>
+            <button className="big primary stickynext" disabled={!isComplete(draft)} onClick={save}>{isComplete(draft) ? T('save') : T('answerEverySign')}</button>
           </>
         )}
       </main>

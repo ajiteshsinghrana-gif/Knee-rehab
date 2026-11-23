@@ -11,9 +11,12 @@ export function changeText(c: NoticeChange, lang: Lang, pack: ProtocolPack): str
     case 'restore': return t(lang, 'change_restore', { exercise: exerciseName(c.exercise, lang) });
     case 'hold': return t(lang, 'change_hold');
     case 'release': return t(lang, 'change_release');
-    case 'followUp': return c.nextReviewDate
-      ? t(lang, 'change_followUp', { n: c.checkInEveryDays, date: fmtDate(c.nextReviewDate) })
-      : t(lang, 'change_followUp_nodate', { n: c.checkInEveryDays });
+    case 'followUp': {
+      const k = c.checkInEveryDays === 1 ? 'change_followUp_daily' : 'change_followUp'; // "every day", not "every 1 day(s)"
+      return c.nextReviewDate
+        ? t(lang, k, { n: c.checkInEveryDays, date: fmtDate(c.nextReviewDate) })
+        : t(lang, `${k}_nodate`, { n: c.checkInEveryDays });
+    }
     case 'exercises': {
       const parts = [
         ...(c.added.length ? [t(lang, 'change_exAdded', { list: c.added.map((id) => exerciseName(id, lang)).join(', ') })] : []),

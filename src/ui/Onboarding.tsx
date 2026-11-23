@@ -88,8 +88,8 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
             <li key={e.id}><label><input type="checkbox" checked={d.exercises.includes(e.id)} onChange={() => toggleEx(e.id)} /> {exerciseName(e.id, 'en')}{phase.exercises.includes(e.id) ? '' : <small> (not in the pack for this phase)</small>}</label></li>))}</ul>
           <h3>Follow-up</h3>
           <div className="fu">
-            <label>Patient checks in every <input type="number" min={1} max={14} value={d.checkInEveryDays} onChange={(e) => set({ checkInEveryDays: Number(e.target.value) })} aria-label="Check-in every" /> day(s)</label>
-            <label>You review every <input type="number" min={1} max={60} value={d.reviewEveryDays} onChange={(e) => set({ reviewEveryDays: Number(e.target.value) })} aria-label="Review every" /> day(s)</label>
+            <label>Patient checks in every <input type="number" min={1} max={14} value={d.checkInEveryDays} onChange={(e) => set({ checkInEveryDays: Number(e.target.value) })} aria-label="Check-in every" /> {d.checkInEveryDays === 1 ? 'day' : 'days'}</label>
+            <label>You review every <input type="number" min={1} max={60} value={d.reviewEveryDays} onChange={(e) => set({ reviewEveryDays: Number(e.target.value) })} aria-label="Review every" /> {d.reviewEveryDays === 1 ? 'day' : 'days'}</label>
           </div>
           <h3>Thresholds <small>(optional; the pack's values apply unless you change them)</small></h3>
           {d.overrides.length > 0 && <ul className="audit">{d.overrides.map((o) => <li key={o.target}>{ovList.find((x) => x.target === o.target)?.label}: <b>{o.value}</b> <small>({o.reason})</small> <button className="btn" onClick={() => set({ overrides: d.overrides.filter((x) => x.target !== o.target) })}>Remove</button></li>)}</ul>}
@@ -110,7 +110,7 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
             <li><b>{d.name || '(no name)'}</b>, {d.age}, {({ en: 'English', hi: 'Hindi', bn: 'Bengali' } as Record<string, string>)[d.language]}{d.caregiver ? ', answered by a caregiver' : ''}</li>
             <li>{pack.condition.en}, {pack.anchorLabel.en} {d.anchorDate}, {phase.name.en}</li>
             <li>Exercises: {d.exercises.map((id) => exerciseName(id, 'en')).join(', ')}</li>
-            <li>Check-ins every {d.checkInEveryDays} day(s); your reviews every {d.reviewEveryDays} day(s)</li>
+            <li>Check-ins {d.checkInEveryDays === 1 ? 'every day' : `every ${d.checkInEveryDays} days`}; your reviews {d.reviewEveryDays === 1 ? 'every day' : `every ${d.reviewEveryDays} days`}</li>
             <li>Threshold changes: {d.overrides.length ? d.overrides.map((o) => `${ovList.find((x) => x.target === o.target)?.label} → ${o.value}`).join('; ') : 'none (pack defaults)'}</li>
           </ul>
           <div className="btnrow"><button className="btn" onClick={() => setStep(2)}>Back</button><button className="btn primary" onClick={approve}>Approve plan and create patient</button></div>
