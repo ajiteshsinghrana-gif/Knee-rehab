@@ -5,7 +5,7 @@ import { addDays } from '../engine/dates';
 import { getPack } from '../engine/packs';
 import { decodeInvite } from '../onboarding';
 import { PatientView } from './Patient';
-import { Clinician } from './Clinician';
+import { Clinician, PhysioHeaderControls } from './Clinician';
 import { getSyncStatus, physioErasePatient, subscribeSync } from '../sync/engine';
 import { isPatientDevice } from '../device';
 import { getMode, setMode } from '../mode';
@@ -66,6 +66,7 @@ function LiveApp() {
         ]} />}
         right={<>
           {!gated && <SyncDot />}
+          {!gated && view === 'physio' && <PhysioHeaderControls state={state} />}
           <Menu label="Live clinic options" buttonLabel="Clinic" testid="live-bar">
             {() => (<>
               <p className="menunote">Live clinic: real patients, real dates, saved to your account. Patients open only their own link on their own phone.</p>
@@ -153,6 +154,7 @@ function DemoApp() {
         ]} />}
         right={<>
           <SyncDot />
+          {view === 'clinician' && <PhysioHeaderControls state={state} />}
           <Menu label="Demo controls" testid="demo-menu" className="demomenu" buttonLabel={<>Demo<span className="tb-count">{Math.min(step, DEMO_STEPS.length)}/{DEMO_STEPS.length}</span></>}>
             {(close) => (<>
               <label className="menufield" htmlFor="demo-patient">Patient

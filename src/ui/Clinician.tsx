@@ -1,5 +1,6 @@
 import { auditCsv } from '../audit';
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Menu } from './TopBar';
 import { LoginCard } from './Login';
 import { DEFAULT_RETENTION_YEARS, completeTreatment, eraseLocal, isActive, reopenTreatment, retentionDue, retentionEnd } from '../lifecycle';
 import { physioErasePatient, physioNewClaimPin } from '../sync/engine';
@@ -45,6 +46,24 @@ function dueText(r: TriageResult, now: number): string {
   return r.dueByMs >= now ? `respond within ${hrs(r.dueByMs - now)}` : `${hrs(now - r.dueByMs)} past deadline`;
 }
 
+/** One short plain-language reason for the worklist row. Rule codes stay in the detail view. */
+function plainReason(r: TriageResult): string {
+  if (!r.triggers.length) return '';
+  // a "several signals together" rule is explained by the signals themselves, so list those instead
+  const own = r.triggers.filter((t) => !t.combinedFrom?.some((id) => r.triggers.some((x) => x.ruleId === id)));
+  const labels = (own.length ? own : r.triggers).map((t, i) => (i === 0 ? t.label.en : t.label.en.charAt(0).toLowerCase() + t.label.en.slice(1)));
+  return labels.length > 2 ? `${labels.slice(0, 2).join(', ')} +${labels.length - 2} more` : labels.join(', ');
+}
+
+/** Compact time-left text for the worklist row; the detail header keeps the full sentence. */
+function dueShort(r: TriageResult, now: number): string {
+  if (r.tier === 'ON_PLAN' || r.dueByMs === null) return 'Weekly summary';
+  if (r.reviewedAt) return 'Reviewed';
+  return r.dueByMs >= now ? `${hrs(r.dueByMs - now)} left` : `${hrs(now - r.dueByMs)} late`;
+}
+
+type DashMode = 'dash' | 'add' | 'import' | 'condition' | 'past' | 'videos';
+
 export function Clinician({ state }: { state: AppState }) {
   const now = clockMs(state);
   const rows = useMemo(
@@ -52,51 +71,103 @@ export function Clinician({ state }: { state: AppState }) {
     [state.patients, now],
   );
   const [sel, setSel] = useState(state.activeId);
-  const [mode, setMode] = useState<'dash' | 'add' | 'import' | 'condition' | 'past' | 'videos'>('dash');
+  const [mode, setModeRaw] = useState<DashMode>('dash');
+  const [filter, setFilter] = useState<Tier | null>(null);
+  // Narrow screens show one pane at a time: the worklist, or what was opened from it.
+  const [opened, setOpened] = useState(false);
+  const setMode = (m: DashMode) => { setModeRaw(m); setOpened(m !== 'dash' || opened); };
   const [aiDraft, setAiDraft] = useState<{ d: ConditionDraft; notes: string[] } | null>(null);
   const activeRows = rows.filter((x) => isActive(x.p));
   const pastRows = rows.filter((x) => !isActive(x.p));
   const cur = rows.find((x) => x.p.id === sel) ?? activeRows[0] ?? rows[0];
   const counts = (['SAFETY', 'URGENT', 'REVIEW', 'ON_PLAN'] as Tier[]).map((t) => [t, activeRows.filter((x) => x.r.tier === t).length] as const);
+  const shown = filter ? activeRows.filter((x) => x.r.tier === filter) : activeRows;
   const asks = state.patients.filter((p) => p.erasureRequestedAt).length;
+  const open = (id: string) => { setSel(id); setModeRaw('dash'); setOpened(true); };
   return (
     <>
-      <LoginCard />
-      <ClinicSettings state={state} />
-      <p className="dashnotice">Supports clinical judgement; not a diagnosis. Tiers come only from deterministic rules in each patient's protocol pack. Nothing changes a plan until you approve it.</p>
-      <div className="dash">
-        <aside className="worklist">
-          <h2>Worklist</h2>
-          <div className="btnrow"><button className="btn primary" onClick={() => setMode('add')}>+ Add patient</button><button className="btn" onClick={() => setMode('import')}>Import protocol</button><button className="btn" onClick={() => setMode('condition')}>+ Add a condition</button></div>
-          <div className="btnrow"><button className={`btn ${mode === 'videos' ? 'primary' : ''}`} data-testid="videos-btn" onClick={() => setMode(mode === 'videos' ? 'dash' : 'videos')}>Exercise videos</button></div>
-          <div className="btnrow"><button className={`btn ${mode === 'past' ? 'primary' : ''}`} data-testid="past-btn" onClick={() => setMode(mode === 'past' ? 'dash' : 'past')}>Past patients ({pastRows.length}){asks ? ` · ${asks} erasure request${asks === 1 ? '' : 's'}` : ''}</button></div>
-          <p className="counts">{counts.map(([t, n]) => <span key={t}><Tier tier={t} /> {n}</span>)}</p>
+      <div className={`dash ${opened ? 'show-detail' : 'show-list'}`}>
+        <aside className="worklist" aria-label="Worklist">
+          <div className="wl-head">
+            <h2>Patients</h2>
+            <button className="btn primary" onClick={() => setMode('add')}>+ Add patient</button>
+            <Menu label="More patient and protocol tools" buttonLabel="More" className="wl-more" testid="more-menu">
+              {(close) => (<>
+                <button className="menuitem" onClick={() => { close(); setMode('import'); }}>Import protocol</button>
+                <button className="menuitem" onClick={() => { close(); setMode('condition'); }}>Add a condition</button>
+                <button className="menuitem" data-testid="videos-btn" onClick={() => { close(); setMode('videos'); }}>Exercise videos</button>
+                <hr />
+                <button className="menuitem" data-testid="past-btn" onClick={() => { close(); setMode('past'); }}>Past patients ({pastRows.length}){asks ? <span className="overdue">{asks} erasure request{asks === 1 ? '' : 's'}</span> : null}</button>
+              </>)}
+            </Menu>
+          </div>
+          <div className="tierfilter" role="group" aria-label="Show only one tier">
+            {counts.map(([t, n]) => (
+              <button key={t} type="button" className={`tchip ${t} ${filter === t ? 'on' : ''}`} aria-pressed={filter === t} onClick={() => setFilter(filter === t ? null : t)}>
+                <span className={`dot ${t}`} aria-hidden />{TIER_LABEL[t]}<b>{n}</b>
+              </button>
+            ))}
+          </div>
           <ul>
-            {activeRows.length === 0 && <li className="tiny">No active patients. Add one, or open Past patients.</li>}
-            {activeRows.map(({ p, pack, r }) => (
+            {activeRows.length === 0 && <li className="tiny wl-empty">No active patients. Add one, or open Past patients from More.</li>}
+            {activeRows.length > 0 && shown.length === 0 && <li className="tiny wl-empty">No patients in this tier. <button className="linkbtn" onClick={() => setFilter(null)}>Show all</button></li>}
+            {shown.map(({ p, pack, r }) => (
               <li key={p.id}>
-                <button className={`prow ${p.id === cur?.p.id ? 'active' : ''}`} onClick={() => { setSel(p.id); setMode('dash'); }}>
-                  <span className={`dot ${r.tier}`} />
+                <button className={`prow ${p.id === cur?.p.id && mode === 'dash' ? 'active' : ''}`} aria-current={p.id === cur?.p.id && mode === 'dash' ? 'true' : undefined} onClick={() => open(p.id)}>
+                  <span className={`dot ${r.tier}`} aria-hidden />
                   <span className="pmain">
-                    <b>{p.name}, {p.age}{r.overdue && <span className="overdue">Overdue</span>}</b>
+                    <span className="pname"><b>{p.name}</b>, {p.age}</span>
                     <small>{pack.condition.en}</small>
+                    {r.triggers.length > 0 && <span className="preason" title={plainReason(r)}>{plainReason(r)}</span>}
                     {pendingForms(p).length > 0 && <span className="chips"><i data-testid="form-chip">{pendingForms(p).length} video{pendingForms(p).length === 1 ? '' : 's'} to review</i></span>}
-                    <span className="chips">{r.triggers.slice(0, 5).map((t) => <i key={t.ruleId}>{t.ruleId}</i>)}</span>
                   </span>
-                  <span className="pdl"><strong className={r.tier}>{TIER_LABEL[r.tier]}</strong><small className={r.reviewedAt ? 'rev' : ''}>{dueText(r, now)}</small></span>
+                  <span className="pdl">
+                    <strong className={r.tier}>{TIER_LABEL[r.tier]}</strong>
+                    <small className={r.reviewedAt ? 'rev' : ''}>{dueShort(r, now)}</small>
+                    {r.overdue && <span className="overdue">Overdue</span>}
+                  </span>
                 </button>
               </li>
             ))}
           </ul>
         </aside>
-        {mode === 'add' && <Onboarding onClose={() => { setMode('dash'); setSel(getState().activeId); }} onNewCondition={() => setMode('condition')} />}
-        {mode === 'import' && <ImportProtocol onClose={() => setMode('dash')} onDraft={(d, notes) => { setAiDraft({ d, notes }); setMode('condition'); }} />}
-        {mode === 'condition' && <NewCondition key={aiDraft?.d.id ?? 'blank'} initial={aiDraft?.d} initialNotes={aiDraft?.notes} onClose={() => { setAiDraft(null); setMode('dash'); }} onAddPatient={() => { setAiDraft(null); setMode('add'); }} />}
-        {mode === 'videos' && <ExerciseVideos onClose={() => setMode('dash')} />}
-        {mode === 'past' && <PastPatients rows={pastRows.map((x) => x.p)} years={state.retentionYears ?? DEFAULT_RETENTION_YEARS} today={state.today} onOpen={(id) => { setSel(id); setMode('dash'); }} />}
-        {mode === 'dash' && !cur && <section className="card"><p>No patients yet. Use + Add patient.</p></section>}
-        {mode === 'dash' && cur && <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />}
+        <div className="dashmain">
+          <button type="button" className="backtolist linkbtn" onClick={() => { setOpened(false); setModeRaw('dash'); }}>← All patients</button>
+          {mode === 'add' && <Onboarding onClose={() => { setMode('dash'); setSel(getState().activeId); }} onNewCondition={() => setMode('condition')} />}
+          {mode === 'import' && <ImportProtocol onClose={() => setMode('dash')} onDraft={(d, notes) => { setAiDraft({ d, notes }); setMode('condition'); }} />}
+          {mode === 'condition' && <NewCondition key={aiDraft?.d.id ?? 'blank'} initial={aiDraft?.d} initialNotes={aiDraft?.notes} onClose={() => { setAiDraft(null); setMode('dash'); }} onAddPatient={() => { setAiDraft(null); setMode('add'); }} />}
+          {mode === 'videos' && <ExerciseVideos onClose={() => setMode('dash')} />}
+          {mode === 'past' && <PastPatients rows={pastRows.map((x) => x.p)} years={state.retentionYears ?? DEFAULT_RETENTION_YEARS} today={state.today} onOpen={(id) => open(id)} />}
+          {mode === 'dash' && !cur && <section className="card"><p>No patients yet. Use + Add patient.</p></section>}
+          {mode === 'dash' && cur && <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />}
+        </div>
       </div>
+      <footer className="dashfoot">Supports clinical judgement; not a diagnosis. Tiers come only from deterministic rules in each patient's protocol pack. Nothing changes a plan until you approve it.</footer>
+    </>
+  );
+}
+
+/** Header controls on the physio dashboard: sign-in (a small dialog) and clinic settings (gear). */
+export function PhysioHeaderControls({ state }: { state: AppState }) {
+  const s = useSyncExternalStore(subscribeSync, getSyncStatus);
+  const dlg = useRef<HTMLDialogElement>(null);
+  const showAuth = s.enabled && s.auth;
+  return (
+    <>
+      {showAuth && (
+        <>
+          <button type="button" className="menubtn" data-testid="signin-btn" onClick={() => dlg.current?.showModal()}>
+            {s.user ? <><span className="avatar" aria-hidden>{s.user.charAt(0).toUpperCase()}</span><span className="tb-hide-narrow">Account</span></> : 'Sign in'}
+          </button>
+          <dialog ref={dlg} className="dialog" aria-label="Physio account" onClick={(e) => { if (e.target === dlg.current) dlg.current.close(); }}>
+            <div className="dialog-head"><h2>{s.user ? 'Physio account' : 'Physio sign-in'}</h2><button type="button" className="iconbtn" aria-label="Close" onClick={() => dlg.current?.close()}>✕</button></div>
+            <LoginCard />
+          </dialog>
+        </>
+      )}
+      <Menu label="Clinic settings" testid="clinic-settings" className="settingsmenu" buttonLabel={<span aria-hidden className="gear">⚙</span>}>
+        {() => <ClinicSettings state={state} />}
+      </Menu>
     </>
   );
 }
@@ -395,15 +466,18 @@ function ClinicSettings({ state }: { state: AppState }) {
   const setYears = (n: number) => { if (n >= 0 && n <= 30) setState({ ...getState(), retentionYears: n }); };
   const setContact = (v: string) => { const st = getState(); const c = v.slice(0, 120); setState({ ...st, clinicContact: c, patients: st.patients.map((p) => ({ ...p, clinicContact: c || undefined })) }); };
   return (
-    <details className="card clinicsettings" data-testid="clinic-settings">
-      <summary><b>Clinic settings: patient data and dates</b></summary>
-      <div className="fu">
-        <label>Keep a finished patient's record for <input type="number" min={0} max={30} value={years} onChange={(e) => setYears(Number(e.target.value))} aria-label="Retention years" /> year(s)</label>
-        <label>Contact shown to patients (phone or email) <input maxLength={120} value={state.clinicContact ?? ''} onChange={(e) => setContact(e.target.value)} aria-label="Clinic contact" /></label>
-      </div>
+    <div className="clinicsettings">
+      <h3>Clinic settings</h3>
+      <p className="tiny">Patient data and dates</p>
+      <label className="menufield">Keep a finished patient's record for (years)
+        <input type="number" min={0} max={30} value={years} onChange={(e) => setYears(Number(e.target.value))} aria-label="Retention years" />
+      </label>
+      <label className="menufield">Contact shown to patients (phone or email)
+        <input maxLength={120} value={state.clinicContact ?? ''} onChange={(e) => setContact(e.target.value)} aria-label="Clinic contact" />
+      </label>
       <p className="tiny">After this period a finished patient is flagged "review for erasure" under Past patients. Nothing is deleted by itself. Ask your lawyer what period applies to you: medical-record rules often say about 3 years, and some guidance says longer.</p>
       <p className="tiny">This is the live clinic. The demo has its own data and the six made-up patients; use Switch to demo at the top.</p>
-    </details>
+    </div>
   );
 }
 

@@ -264,3 +264,92 @@ main { gap: var(--s3); }
   .tb-count { display: none; }
   .tb-tag.live { display: none; }
 }
+
+/* ================= physio dashboard: worklist + header controls ================= */
+.dash { grid-template-columns: 320px minmax(0, 1fr); align-items: start; }
+.worklist {
+  position: sticky; top: calc(56px + var(--s3)); padding: 0; overflow: hidden;
+  max-height: calc(100vh - 56px - var(--s5)); display: flex; flex-direction: column;
+}
+.wl-head { display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s3) var(--s2); }
+.wl-head h2 { flex: 1; margin: 0; font-size: var(--fs-b); }
+.wl-head .btn { min-height: 32px; padding: 0 var(--s2); }
+.wl-more .menubtn { height: 32px; padding: 0 var(--s2); }
+.tierfilter { display: flex; gap: var(--s1); padding: 0 var(--s3) var(--s2); flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.tchip {
+  display: inline-flex; align-items: center; gap: var(--s1); height: 28px; padding: 0 var(--s2);
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--muted);
+  font-size: 11px; font-weight: 600; letter-spacing: .02em;
+}
+.tchip .dot { width: 6px; height: 6px; min-height: 0; border: 0; border-radius: 50%; padding: 0; flex: none; }
+.tchip b { color: var(--ink); font-weight: 600; margin-left: 2px; }
+.tchip:hover { background: var(--hover); }
+.tchip.on { border-color: var(--ink); color: var(--ink); background: var(--hover); }
+.worklist ul { flex: 1; overflow-y: auto; margin: 0; padding: var(--s2); }
+.wl-empty { padding: var(--s2); }
+.prow { align-items: flex-start; }
+.pmain { min-width: 0; gap: 0; }
+.pname { font-size: 14px; color: var(--ink); }
+.pname b { font-weight: 600; }
+.pmain small { font-size: 12px; }
+.preason { font-size: 12px; color: var(--ink); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pmain .chips { margin-top: var(--s1); }
+.pdl { max-width: none; gap: 2px; flex: none; }
+.pdl strong { font-size: 11px; letter-spacing: .02em; }
+.pdl small { font-size: 12px; white-space: nowrap; }
+.pdl .overdue { margin: 0; }
+.dashmain { min-width: 0; display: flex; flex-direction: column; gap: var(--s3); }
+.backtolist { display: none; align-self: flex-start; }
+.dashfoot { max-width: 1440px; margin: 0 auto; padding: 0 var(--s4) var(--s5); font-size: 12px; color: var(--muted); text-align: center; }
+
+/* header: account button, gear, dialog */
+.avatar { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--teal-soft); color: var(--teal); font-size: 12px; font-weight: 700; }
+.menubtn:has(.avatar) { padding-left: var(--s2); }
+.gear { font-size: 16px; line-height: 1; color: var(--muted); }
+.settingsmenu .menubtn { padding: 0 var(--s2); }
+.settingsmenu .menubtn .caret { display: none; }
+.settingsmenu .menupanel { width: 340px; padding: var(--s3); }
+.clinicsettings { display: flex; flex-direction: column; gap: var(--s2); }
+.clinicsettings .tiny { margin: 0; }
+.clinicsettings .menufield { padding: 0; color: var(--ink); }
+.dialog {
+  width: min(440px, calc(100vw - var(--s5))); padding: var(--s4); border: 0; border-radius: var(--radius);
+  box-shadow: 0 16px 48px rgba(16, 24, 32, .24); color: var(--ink);
+}
+.dialog::backdrop { background: rgba(16, 24, 32, .4); }
+.dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s3); }
+.dialog .logincard { margin: 0; padding: 0; background: none; font-size: var(--fs-s); }
+.dialog .logincard > b:first-child { display: none; }
+.dialog .logincard .loginrow { flex-direction: column; align-items: stretch; gap: var(--s3); margin-top: var(--s3); }
+.dialog .logincard label { gap: var(--s1); font-size: var(--fs-s); font-weight: 600; }
+.dialog .logincard .btn { width: 100%; min-height: var(--ctl-h); }
+.dialog .logincard.signedin { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); }
+.dialog .linkbtn { margin-top: var(--s2); padding: 0; }
+
+/* narrow screens: one pane at a time */
+@media (max-width: 1000px) {
+  .dash { grid-template-columns: minmax(0, 1fr); padding: var(--s3); gap: var(--s3); }
+  .worklist { position: static; max-height: none; }
+  .dash.show-list .dashmain { display: none; }
+  .dash.show-detail .worklist { display: none; }
+  .backtolist { display: inline-flex; }
+}
+@media (max-width: 720px) {
+  .tb-hide-narrow { display: none; }
+  .dash { padding: var(--s2); }
+}
+.tierfilter { flex-wrap: nowrap; }
+.tchip { padding: 0 6px; gap: 4px; flex: 1 1 auto; justify-content: center; }
+.worklist { overflow: visible; }
+.worklist ul { border-radius: 0 0 var(--radius) var(--radius); }
+.tchip { white-space: nowrap; }
+@media (max-width: 480px) {
+  .topbar { grid-template-columns: auto 1fr; }
+  .tb-left { display: none; }
+  .tb-center { justify-content: flex-start; }
+  .tb-right { gap: var(--s1); }
+  .tb-right .menubtn { padding: 0 var(--s2); }
+  .syncdot { padding: 0 var(--s1); }
+  .tierfilter { flex-wrap: wrap; }
+  .tchip { flex: 0 1 auto; }
+}
