@@ -75,6 +75,7 @@ function plainSignal(t: Trigger, pack: ProtocolPack): string {
   const rule = pack.rules.find((x) => x.id === t.ruleId);
   const label = t.label.en.charAt(0).toLowerCase() + t.label.en.slice(1);
   if (rule?.type === 'trend') { const m = /(\d+(?:\.\d+)?(?: -> \d+(?:\.\d+)?)+)/.exec(t.evidence); if (m) { const v = m[1].split(' -> '); return `${label} (${v[0]} → ${v[v.length - 1]})`; } }
+  if (rule?.type === 'aboveUsual') { const m = /usual (\d+(?:\.\d+)?)/.exec(t.evidence); if (m) return `${label} (usual ${m[1]})`; }
   if (rule?.type === 'streak' && rule.metric === 'missedSessions') { const m = /(\d+) missed days? in a row/.exec(t.evidence); if (m) return `${m[1]} missed day${m[1] === '1' ? '' : 's'}`; }
   if (rule?.type === 'streak' && rule.metric === 'repeatedHardMovement') { const m = /'([^']+)' reported hard on (\d+) of last (\d+) days/.exec(t.evidence); if (m) return `${exerciseName(m[1], 'en').toLowerCase()} hard ${m[2]} time${m[2] === '1' ? '' : 's'}`; }
   return label;
