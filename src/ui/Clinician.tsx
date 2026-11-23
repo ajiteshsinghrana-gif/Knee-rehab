@@ -23,7 +23,7 @@ import { NewCondition } from './Condition';
 import { ExerciseVideos } from './Demos';
 import { getDemo } from '../exercises/demos';
 import type { ConditionDraft } from '../author/condition';
-import { applyAction, applyManual, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
+import { applyAction, applyManual, withAuditNote, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
 import { effectivePack, listOverridable } from '../engine/overrides';
 import { curveOrigin } from '../engine/curves';
 import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
@@ -33,6 +33,8 @@ import { pendingForms } from '../forms/model';
 import { optInWeeklyMeasures } from '../checkin';
 import { doseLine } from '../exercises/dose';
 import { scheduleSuggestion } from '../engine/schedule';
+import { validHours } from '../engine/hours';
+import { ruleHitRates } from '../engine/feedback';
 
 const TIER_LABEL: Record<Tier, string> = { SAFETY: 'SAFETY', URGENT: 'URGENT', REVIEW: 'REVIEW', ON_PLAN: 'ON PLAN' };
 const srcClass = (s: string) => s.split(/[;( ]/)[0].replace(/[^A-Z_]/g, '');
@@ -113,13 +115,13 @@ function dueShort(r: TriageResult, now: number): string {
   return r.dueByMs >= now ? `${hrs(r.dueByMs - now)} left` : `${hrs(now - r.dueByMs)} late`;
 }
 
-type DashMode = 'dash' | 'add' | 'import' | 'condition' | 'past' | 'videos';
+type DashMode = 'dash' | 'add' | 'import' | 'condition' | 'past' | 'videos' | 'summary';
 
 export function Clinician({ state }: { state: AppState }) {
   const now = clockMs(state);
   const rows = useMemo(
-    () => state.patients.map((p) => ({ p, pack: getPack(p.packId), r: triage(p, getPack(p.packId), { nowMs: now }) })).sort((a, b) => compareWorklist(a.r, b.r)),
-    [state.patients, now],
+    () => state.patients.map((p) => ({ p, pack: getPack(p.packId), r: triage(p, getPack(p.packId), { nowMs: now, workingHours: validHours(state.clinic?.hours) ? state.clinic!.hours : undefined }) })).sort((a, b) => compareWorklist(a.r, b.r)),
+    [state.patients, now, state.clinic?.hours],
   );
   const [sel, setSel] = useState(state.activeId);
   const [mode, setModeRaw] = useState<DashMode>('dash');
@@ -148,6 +150,7 @@ export function Clinician({ state }: { state: AppState }) {
                 <button className="menuitem" onClick={() => { close(); setMode('condition'); }}>Add a condition</button>
                 <button className="menuitem" data-testid="videos-btn" onClick={() => { close(); setMode('videos'); }}>Exercise videos</button>
                 <hr />
+                <button className="menuitem" data-testid="summary-btn" onClick={() => { close(); setMode('summary'); }}>Clinic summary</button>
                 <button className="menuitem" data-testid="past-btn" onClick={() => { close(); setMode('past'); }}>Past patients ({pastRows.length}){asks ? <span className="overdue">{asks} erasure request{asks === 1 ? '' : 's'}</span> : null}</button>
               </>)}
             </Menu>
@@ -188,6 +191,7 @@ export function Clinician({ state }: { state: AppState }) {
           {mode === 'import' && <ImportProtocol onClose={() => setMode('dash')} onDraft={(d, notes) => { setAiDraft({ d, notes }); setMode('condition'); }} />}
           {mode === 'condition' && <NewCondition key={aiDraft?.d.id ?? 'blank'} initial={aiDraft?.d} initialNotes={aiDraft?.notes} onClose={() => { setAiDraft(null); setMode('dash'); }} onAddPatient={() => { setAiDraft(null); setMode('add'); }} />}
           {mode === 'videos' && <ExerciseVideos onClose={() => setMode('dash')} />}
+          {mode === 'summary' && <ClinicSummary state={state} rows={rows} now={now} onClose={() => setMode('dash')} />}
           {mode === 'past' && <PastPatients rows={pastRows.map((x) => x.p)} years={state.retentionYears ?? DEFAULT_RETENTION_YEARS} today={state.today} onOpen={(id) => open(id)} />}
           {mode === 'dash' && !cur && <section className="card"><p>No patients yet. Use + Add patient.</p></section>}
           {mode === 'dash' && cur && <Detail key={cur.p.id + cur.r.asOf} patient={cur.p} pack={cur.pack} r={cur.r} now={now} />}
@@ -327,6 +331,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
         </div>
       </div>
 
+      <EscalationCard patient={p} r={r} now={now} />
       {p.erasureRequestedAt && (
         <p className="warnline" role="alert">The patient asked for their data to be erased on {p.erasureRequestedAt.slice(0, 10)}. <button className="linkbtn" onClick={() => setTab('settings')}>Answer in Settings</button></p>
       )}
@@ -410,6 +415,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             <h3>Suggested actions <small>Nothing changes until you approve</small></h3>
             {actions.length > 0 && <p className="tiny">Approved changes go in the audit log, and the patient is told in their own language.</p>}
             {r.reviewedAt && <p className="reviewed">Reviewed {r.reviewedAt.slice(0, 16).replace('T', ' ')}</p>}
+            {r.reviewedAt && r.flagKey && <FlagFeedback patient={p} r={r} now={now} />}
             {actions.length === 0 && <p className="tiny">No action suggested. Weekly summary only.</p>}
             {err && <p className="err" role="alert">{err}</p>}
             {actions.map((a) => (
@@ -544,6 +550,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
           <WeeklyItemsCard patient={p} pack={pack} onApply={apply} />
           <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
           <CurvesCard patient={p} pack={pack} now={now} />
+          <ProtocolSignoff pack={pack} now={now} />
           <div className="dangerzone">
             <h3>Treatment and data</h3>
             <LifecycleCard patient={p} now={now} />
@@ -563,6 +570,119 @@ function painChange(pts: { x: number; y: number }[]): string {
   const days = last.x - first.x;
   if (first.y === last.y) return `Steady at ${last.y} for ${days} day${days === 1 ? '' : 's'}`;
   return `${first.y} → ${last.y} in ${days} day${days === 1 ? '' : 's'}`;
+}
+
+/** Overdue SAFETY or URGENT flag: hand it to the clinic's named backup contact. Simulated: nothing is sent; the hand-over is logged. */
+function EscalationCard({ patient: p, r, now }: { patient: Patient; r: TriageResult; now: number }) {
+  const st = getState();
+  if (!r.overdue || !r.flagKey || (r.tier !== 'SAFETY' && r.tier !== 'URGENT')) return null;
+  const done = p.escalated?.[r.flagKey];
+  const name = st.clinic?.backupName?.trim();
+  const phone = st.clinic?.backupPhone?.trim();
+  const late = Math.round((now - (r.dueByMs ?? now)) / 3_600_000);
+  const escalate = () => {
+    const to = `${name}${phone ? ` (${phone})` : ''}`;
+    const at = new Date(now).toISOString();
+    updatePatient(p.id, (q) => withAuditNote({ ...q, escalated: { ...(q.escalated ?? {}), [r.flagKey!]: { at, to } } }, 'escalate', `Overdue ${r.tier} flag handed to backup contact ${to} (simulated: no message was sent)`, null, { to }, `${late} h past the response deadline`, { nowMs: now, today: st.today }));
+  };
+  return (
+    <div className="escalation" role="alert" data-testid="escalation">
+      <b>Response deadline passed {late} h ago.</b>
+      {done ? <span> Backup contact {done.to} notified on {done.at.slice(0, 16).replace('T', ' ')} (simulated: nothing was sent).</span>
+        : name ? <><span> Escalate: hand this {r.tier} flag to your backup contact.</span> <button className="btn" onClick={escalate}>Notify {name}{phone ? ` (${phone})` : ''}</button></>
+        : <span> Escalate it: add a backup contact under ⚙ Clinic settings, then notify them from here.</span>}
+    </div>
+  );
+}
+
+/** "Was this flag useful?" after a review. Used only for the per-rule hit rate in the clinic summary; it never changes a tier. */
+function FlagFeedback({ patient: p, r, now }: { patient: Patient; r: TriageResult; now: number }) {
+  const f = p.flagFeedback?.[r.flagKey!];
+  const set = (useful: boolean) => updatePatient(p.id, (q) => ({ ...q, flagFeedback: { ...(q.flagFeedback ?? {}), [r.flagKey!]: { useful, at: new Date(now).toISOString(), rules: r.triggers.map((t) => t.ruleId) } } }));
+  return (
+    <div className="feedback" data-testid="flag-feedback">
+      <span>{f ? `You said this flag was ${f.useful ? 'useful' : 'not useful'}.` : 'Was this flag useful?'}</span>
+      <button className={`btn ${f?.useful === true ? 'on' : ''}`} aria-pressed={f?.useful === true} onClick={() => set(true)}>Yes</button>
+      <button className={`btn ${f?.useful === false ? 'on' : ''}`} aria-pressed={f?.useful === false} onClick={() => set(false)}>No</button>
+    </div>
+  );
+}
+
+/** A signed-in physio reviews this protocol for their clinic and records their own name and the date. Nothing is pre-filled. */
+function ProtocolSignoff({ pack, now }: { pack: ProtocolPack; now: number }) {
+  const sync = useSyncExternalStore(subscribeSync, getSyncStatus);
+  const st = getState();
+  const so = st.packSignoffs?.[pack.id];
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [ok, setOk] = useState(false);
+  const sign = () => {
+    const s2 = getState();
+    setState({ ...s2, packSignoffs: { ...(s2.packSignoffs ?? {}), [pack.id]: { name: name.trim(), email: sync.user ?? '', at: new Date(now).toISOString() } } });
+    setOpen(false); setName(''); setOk(false);
+  };
+  const withdraw = () => { const s2 = getState(); const { [pack.id]: _gone, ...rest } = s2.packSignoffs ?? {}; setState({ ...s2, packSignoffs: rest }); };
+  return (
+    <div className="card" data-testid="protocol-signoff">
+      <div className="cardhead"><h3>Protocol: {pack.condition.en}</h3>
+        {so ? <button className="linkbtn" onClick={withdraw}>Withdraw sign-off</button>
+          : sync.user ? !open && <button className="btn" onClick={() => setOpen(true)}>Sign off this protocol…</button> : null}
+      </div>
+      {so ? <p className="reviewed" data-testid="signoff-line">Reviewed by {so.name} on {so.at.slice(0, 10)}{so.email ? ` (${so.email})` : ''}</p>
+        : <p className="tiny">Not yet reviewed by your clinic.{sync.user ? '' : ' Sign in as a physio to sign it off.'}</p>}
+      {open && (
+        <div className="doseeditor">
+          <label className="menufield" style={{ padding: 0 }}>Your full name (recorded with the date and your account {sync.user})
+            <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+          </label>
+          <label className="check"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /> <span>I have reviewed this protocol's rules, thresholds and exercises for use in my clinic.</span></label>
+          <div className="btnrow"><button className="btn primary" disabled={!name.trim() || !ok} onClick={sign}>Sign off</button><button className="btn" onClick={() => setOpen(false)}>Cancel</button></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Clinic summary: adherence, time from flag to review, patients per physio, and each rule's hit rate. */
+function ClinicSummary({ state, rows, now, onClose }: { state: AppState; rows: { p: Patient; pack: ProtocolPack; r: TriageResult }[]; now: number; onClose: () => void }) {
+  const active = rows.filter((x) => isActive(x.p));
+  const from = addDays(state.today, -7);
+  const entries = active.flatMap((x) => x.p.daily.filter((e) => e.date >= from && e.date < state.today));
+  const pres = entries.reduce((n, e) => n + e.sessionsPrescribed, 0);
+  const done = entries.reduce((n, e) => n + e.sessionsDone, 0);
+  const waits: number[] = [];
+  for (const x of state.patients) for (const [key, at] of Object.entries(x.reviewed ?? {})) {
+    const day = key.split('@')[1];
+    if (!day) continue;
+    const raised = x.daily.find((e) => e.date === day)?.recordedAt ?? Date.parse(`${day}T12:00:00Z`);
+    const h = (Date.parse(at) - raised) / 3_600_000;
+    if (h >= 0) waits.push(h);
+  }
+  const physios = new Set<string>([...state.patients.flatMap((x) => x.audit.map((a) => a.who)), getSyncStatus().user ?? ''].filter(Boolean));
+  const nPhysios = Math.max(1, physios.size);
+  const hits = ruleHitRates(state.patients);
+  const flagged = active.filter((x) => x.r.tier !== 'ON_PLAN').length;
+  return (
+    <section className="card summary" data-testid="clinic-summary">
+      <div className="cardhead"><h2>Clinic summary</h2><button className="btn" onClick={onClose}>Close</button></div>
+      <div className="kpis">
+        <div><span className="ev-k">Patients monitored</span><b>{active.length}</b><small>{flagged} flagged now</small></div>
+        <div><span className="ev-k">Patients per physio</span><b>{(active.length / nPhysios).toFixed(1)}</b><small>{nPhysios} physio{nPhysios === 1 ? '' : 's'}</small></div>
+        <div><span className="ev-k">Exercise adherence, last 7 days</span><b>{pres ? `${Math.round((done / pres) * 100)}%` : '—'}</b><small>{done} of {pres} sessions</small></div>
+        <div><span className="ev-k">Average time from flag to review</span><b>{waits.length ? `${(waits.reduce((a, b) => a + b, 0) / waits.length).toFixed(1)} h` : '—'}</b><small>{waits.length ? `${waits.length} reviewed flag${waits.length === 1 ? '' : 's'}` : 'No flags reviewed yet'}</small></div>
+      </div>
+      <h3>Rule hit rate <small>From your "Was this flag useful?" answers. It never changes a tier.</small></h3>
+      {hits.length === 0 ? <p className="tiny">No flags rated yet. After you review a flag, answer "Was this flag useful?" in the patient's Overview.</p> : (
+        <table className="extable"><thead><tr><th>Rule</th><th>Flags rated</th><th>Useful</th><th>Hit rate</th></tr></thead><tbody>
+          {hits.map((h) => {
+            const label = rows.map((x) => x.pack.rules.find((rr) => rr.id === h.ruleId)?.label.en ?? x.pack.warningSigns.find((w) => w.ruleId === h.ruleId)?.label.en).find(Boolean);
+            return <tr key={h.ruleId}><td><b>{h.ruleId}</b> {label ?? ''}</td><td>{h.rated}</td><td>{h.useful}</td><td>{Math.round((h.useful / h.rated) * 100)}%</td></tr>;
+          })}
+        </tbody></table>
+      )}
+      <p className="tiny">Counts come from this device's records. Time from flag to review is measured from when the flag was raised to when you marked it reviewed or approved an action. Escalations to the backup contact: {state.patients.reduce((n, x) => n + Object.keys(x.escalated ?? {}).length, 0)}.</p>
+    </section>
+  );
 }
 
 /** An app suggestion to change how often the patient checks in. Nothing changes until the physio approves; both answers are logged. */
@@ -727,6 +847,7 @@ function AccessCard({ patient: p }: { patient: Patient }) {
 function ClinicSettings({ state }: { state: AppState }) {
   const years = state.retentionYears ?? DEFAULT_RETENTION_YEARS;
   const setYears = (n: number) => { if (n >= 0 && n <= 30) setState({ ...getState(), retentionYears: n }); };
+  const setClinic = (patch: Partial<NonNullable<AppState['clinic']>>) => { const st = getState(); setState({ ...st, clinic: { ...(st.clinic ?? {}), ...patch } }); };
   const setContact = (v: string) => { const st = getState(); const c = v.slice(0, 120); setState({ ...st, clinicContact: c, patients: st.patients.map((p) => ({ ...p, clinicContact: c || undefined })) }); };
   return (
     <div className="clinicsettings">
@@ -738,6 +859,26 @@ function ClinicSettings({ state }: { state: AppState }) {
       <label className="menufield">Contact shown to patients (phone or email)
         <input maxLength={120} value={state.clinicContact ?? ''} onChange={(e) => setContact(e.target.value)} aria-label="Clinic contact" />
       </label>
+      <h3 className="cs-sub">Overdue urgent flags</h3>
+      <label className="menufield">Backup contact name (who covers an overdue SAFETY or URGENT flag)
+        <input maxLength={80} value={state.clinic?.backupName ?? ''} onChange={(e) => setClinic({ backupName: e.target.value })} aria-label="Backup contact name" />
+      </label>
+      <label className="menufield">Backup contact phone
+        <input maxLength={40} inputMode="tel" value={state.clinic?.backupPhone ?? ''} onChange={(e) => setClinic({ backupPhone: e.target.value })} aria-label="Backup contact phone" />
+      </label>
+      <h3 className="cs-sub">Working hours</h3>
+      <label className="check"><input type="checkbox" checked={!!state.clinic?.hours} onChange={(e) => setClinic({ hours: e.target.checked ? { start: '09:00', end: '18:00', days: [1, 2, 3, 4, 5, 6] } : undefined })} /> <span>Count REVIEW and URGENT deadlines only in working hours <small>(SAFETY deadlines always run on the clock)</small></span></label>
+      {state.clinic?.hours && (
+        <div className="hoursrow">
+          <label>From<input type="time" value={state.clinic.hours.start} onChange={(e) => setClinic({ hours: { ...state.clinic!.hours!, start: e.target.value } })} /></label>
+          <label>To<input type="time" value={state.clinic.hours.end} onChange={(e) => setClinic({ hours: { ...state.clinic!.hours!, end: e.target.value } })} /></label>
+          <div className="days" role="group" aria-label="Open days">{['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => {
+            const on = state.clinic!.hours!.days.includes(i);
+            return <button key={i} type="button" className={`daybtn ${on ? 'on' : ''}`} aria-pressed={on} aria-label={['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][i]} onClick={() => setClinic({ hours: { ...state.clinic!.hours!, days: on ? state.clinic!.hours!.days.filter((x) => x !== i) : [...state.clinic!.hours!.days, i].sort() } })}>{d}</button>;
+          })}</div>
+          {!validHours(state.clinic.hours) && <p className="err">Closing time must be after opening time, and at least one day must be open. Until then deadlines run on the clock.</p>}
+        </div>
+      )}
       <p className="tiny">After this period a finished patient is flagged "review for erasure" under Past patients. Nothing is deleted by itself. Ask your lawyer what period applies to you: medical-record rules often say about 3 years, and some guidance says longer.</p>
       <p className="tiny">This is the live clinic. The demo has its own data and the six made-up patients; use Switch to demo at the top.</p>
     </div>

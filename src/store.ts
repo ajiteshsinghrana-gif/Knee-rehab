@@ -1,3 +1,4 @@
+import type { WorkingHours } from './engine/hours';
 import { isLang } from './types';
 import type { CurveEdit, ExerciseDemo } from './types';
 import { cleanClinicDemos, cleanDemo, setDemoRegistry } from './exercises/demos';
@@ -42,6 +43,10 @@ export interface AppState {
   erasureLog?: { at: string; reason: string; hadAccount: boolean }[];
   /** Real clinic (not the demo): dates and times come from the device clock. */
   live?: boolean;
+  /** Backup contact for overdue urgent flags and the clinic's working hours (fix phase 4). Nothing is pre-filled. */
+  clinic?: { backupName?: string; backupPhone?: string; hours?: WorkingHours };
+  /** A signed-in physio's review of a protocol pack, by pack id: their own name, account and the date (fix phase 4). */
+  packSignoffs?: Record<string, { name: string; email: string; at: string }>;
 }
 
 export function seedState(): AppState {
@@ -110,7 +115,7 @@ function liveFromDemo(storage: Storage | null, patientDevice: boolean): AppState
     for (const cp of s.customPacks ?? []) { try { restoreAuthoredPack(cp); } catch { /* ignored */ } }
     const known = (id: string) => { try { getPack(id); return true; } catch { return false; } };
     const patients = s.patients.filter((x) => (patientDevice ? x.syncRole === 'patient' : !!x.syncRole && !x.demoPatient) && known(x.packId)).map(normalizePatient);
-    return { ...empty, patients, activeId: patients[0]?.id ?? '', customPacks: s.customPacks, clinicContact: s.clinicContact, retentionYears: s.retentionYears, questionnaires: s.questionnaires, exerciseDemos: s.exerciseDemos };
+    return { ...empty, patients, activeId: patients[0]?.id ?? '', customPacks: s.customPacks, clinicContact: s.clinicContact, retentionYears: s.retentionYears, clinic: s.clinic, packSignoffs: s.packSignoffs, questionnaires: s.questionnaires, exerciseDemos: s.exerciseDemos };
   } catch { return empty; }
 }
 

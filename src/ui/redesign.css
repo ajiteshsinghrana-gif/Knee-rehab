@@ -639,3 +639,21 @@ main.home { gap: var(--s3); padding-top: var(--s3); }
 .dosegrid input { width: 100%; }
 .proposal.schedule { border-left-color: var(--teal); }
 @media (max-width: 720px) { .dosegrid { grid-template-columns: 1fr 1fr; } }
+
+/* ---------- fix phase 4: safety and trust ---------- */
+.escalation { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-radius: var(--radius); background: #fdecea; border-left: 3px solid var(--urgent); font-size: var(--fs-s); color: var(--ink); }
+.escalation .btn { min-height: 32px; }
+.feedback { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-s); padding: var(--s2) 0; }
+.feedback .btn { min-height: 28px; padding: 0 var(--s3); }
+.feedback .btn.on { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
+.cs-sub { font-size: 13px; margin-top: var(--s2); }
+.hoursrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: flex-end; }
+.hoursrow label { display: flex; flex-direction: column; gap: var(--s1); font-size: 12px; font-weight: 600; color: var(--muted); }
+.days { display: flex; gap: var(--s1); }
+.daybtn { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: var(--s1); background: var(--surface); font-size: 12px; font-weight: 600; color: var(--muted); }
+.daybtn.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+.summary .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); }
+.summary .kpis > div { display: flex; flex-direction: column; gap: var(--s1); padding: var(--s3); background: var(--hover); border-radius: var(--radius); }
+.summary .kpis b { font-size: var(--fs-h); font-weight: 600; }
+.summary .kpis small { font-size: 12px; }
+@media (max-width: 900px) { .summary .kpis { grid-template-columns: 1fr 1fr; } }

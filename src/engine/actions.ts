@@ -8,7 +8,8 @@ export type ActionId =
   | 'reassess-bring-visit-forward'
   | 'send-tsk11'
   | 'offer-shorter-plan'
-  | 'switch-to-voice-checkins';
+  | 'switch-to-voice-checkins'
+  | 'refer-doctor';
 
 export const ACTION_LABELS: Record<string, { en: string; hi: string }> = {
   'call-patient': { en: 'Call the patient', hi: 'मरीज़ को फोन करें' },
@@ -18,6 +19,7 @@ export const ACTION_LABELS: Record<string, { en: string; hi: string }> = {
   'send-tsk11': { en: 'Send the TSK-11 questionnaire', hi: 'TSK-11 प्रश्नावली भेजें' },
   'offer-shorter-plan': { en: 'Offer a shorter plan', hi: 'छोटी योजना दें' },
   'switch-to-voice-checkins': { en: 'Switch to voice check-ins', hi: 'आवाज़ वाले चेक-इन पर जाएं' },
+  'refer-doctor': { en: 'Refer to the surgeon or doctor today', hi: 'आज ही सर्जन या डॉक्टर के पास भेजें' },
 };
 
 /**
@@ -25,6 +27,8 @@ export const ACTION_LABELS: Record<string, { en: string; hi: string }> = {
  * Rule -> action map comes from the pack; skip-reason routing is generic.
  */
 export function suggestedActions(triggers: Trigger[], pack: ProtocolPack, patient: Patient, asOf: string): string[] {
+  // A red flag (SAFETY) is a medical matter: only escalation is suggested, never exercise changes (fix phase 4).
+  if (triggers.some((t) => t.tier === 'SAFETY')) return ['call-patient', 'refer-doctor'];
   const out = new Set<string>();
   for (const t of triggers) pack.suggestedActions[t.ruleId]?.forEach((a) => out.add(a));
   for (let i = 0; i < 3; i++) {

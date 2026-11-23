@@ -7,6 +7,7 @@
  *  3. No condition-specific code: every number and measure id comes from the patient's pack.
  */
 import { effectivePack } from './overrides';
+import { addWorkingHours, type WorkingHours } from './hours';
 import type {
   CombinationRule, DailyCheckIn, Patient, ProtocolPack, Rule, StreakRule, Stage, ThresholdRule, Tier, TriageResult, Trigger,
 } from '../types';
@@ -20,6 +21,8 @@ export interface TriageOptions {
   asOf?: string;
   /** Current time in epoch ms. Needed for silence rules and the overdue state. */
   nowMs?: number;
+  /** Clinic working hours: REVIEW and URGENT deadlines count only open hours. SAFETY deadlines always run on the clock. */
+  workingHours?: WorkingHours;
 }
 
 type Tr = Exclude<Tier, 'ON_PLAN'>;
@@ -293,7 +296,8 @@ export function triage(patient: Patient, basePack: ProtocolPack, opts: TriageOpt
   const cfg = pack.responseHours[tier as Tr];
   const startEntry = entryOn(patient, start);
   const raisedAtMs = startEntry?.recordedAt ?? toMs(start) + 12 * 3_600_000;
-  const dueByMs = raisedAtMs + cfg.hours * 3_600_000;
+  // Red flags are never paused for closed hours; other deadlines can count only the clinic's working hours.
+  const dueByMs = tier !== 'SAFETY' && opts.workingHours ? addWorkingHours(raisedAtMs, cfg.hours, opts.workingHours) : raisedAtMs + cfg.hours * 3_600_000;
   const reviewedAt = patient.reviewed[flagKey] ?? null;
   const overdue = !reviewedAt && opts.nowMs !== undefined && opts.nowMs > dueByMs;
   return { tier, triggers, asOf, flagKey, raisedAtMs, dueByMs, responseHours: cfg.hours, reviewedAt, overdue };

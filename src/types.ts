@@ -427,6 +427,10 @@ export interface Patient {
   proposalStatus: Record<string, { status: 'approved' | 'modified' | 'rejected'; at: string; note?: string }>;
   /** Weekly self-test items that are off unless the physio switches them on for this patient (e.g. eyes-closed balance). */
   weeklyOptIn?: string[];
+  /** The physio's answer to "Was this flag useful?", by flag key (fix phase 4). */
+  flagFeedback?: Record<string, { useful: boolean; at: string; rules: string[] }>;
+  /** Overdue SAFETY or URGENT flags handed to the clinic's backup contact, by flag key (fix phase 4). */
+  escalated?: Record<string, { at: string; to: string }>;
 }
 
 export interface FollowUp {
