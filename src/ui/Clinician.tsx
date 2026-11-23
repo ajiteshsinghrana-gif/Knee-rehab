@@ -390,7 +390,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
                 return (
                   <>
                     <Sparkline points={pts} xMin={-13} xMax={0} yMin={lo} yMax={hi} threshold={painRef?.value} usual={u?.usual} label="Pain, 0 to 10, over the last 14 days" change={painChange(pts)} />
-                    <span className="ev-v" data-testid="usual-pain">{u ? <>Usual pain: <b>{u.usual}</b> · Today: <b>{u.latest}</b></> : 'Usual pain: needs 5 more check-ins'}</span>
+                    <span className="sr-only" data-testid="usual-pain">{u ? `Usual pain: ${u.usual} · Today: ${u.latest}` : 'Usual pain: needs 5 more check-ins'}</span>
                   </>
                 );
               })()}
@@ -412,14 +412,12 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             if (!m.missed) return null;
             const s1 = r.triggers.some((t) => t.ruleId === 'S1');
             return (
-              <p className="missednote" data-testid="missed-note">
-                <b>Missed check-ins: {m.missed}</b> (last check-in {m.lastDate}{m.every > 1 ? `, due every ${m.every} days` : ''}).{' '}
-                {m.steps.map((x) => `WhatsApp reminder to the ${x.kind} on ${x.date}`).join('; ')} (simulated, nothing was sent).{' '}
-                {s1 ? 'The physio is now flagged (S1).' : 'If the silence continues, rule S1 flags it for you.'}
+              <p className="missednote" data-testid="missed-note" title={`Last check-in ${m.lastDate}. ${m.steps.map((x) => `WhatsApp reminder to the ${x.kind} on ${x.date}`).join('; ')} (simulated, nothing was sent). ${s1 ? 'Flagged by S1.' : 'S1 flags it if the silence continues.'}`}>
+                <b>{m.missed} missed check-in{m.missed === 1 ? '' : 's'}</b> · reminded {m.steps.map((x) => x.kind).join(' and ')} (simulated){s1 ? ' · flagged' : ''}
               </p>
             );
           })()}
-          {(caregiverN > 0 || p.caregiverMode) && <p className="tiny" data-testid="caregiver-note">{caregiverN} of the last 7 check-ins were answered by a caregiver, not the patient. Answers a carer gives for the patient are a second-hand report.</p>}
+          {(caregiverN > 0 || p.caregiverMode) && <p className="tiny" data-testid="caregiver-note" title="Answers a carer gives for the patient are a second-hand report.">{caregiverN} of the last 7 check-ins answered by a caregiver</p>}
           </div>
           <div className="ov-col">
           <ScheduleCard patient={p} pack={pack} r={r} now={now} onApply={apply} />
@@ -601,10 +599,10 @@ function EscalationCard({ patient: p, r, now }: { patient: Patient; r: TriageRes
   };
   return (
     <div className="escalation" role="alert" data-testid="escalation">
-      <b>Response deadline passed {late} h ago.</b>
-      {done ? <span> Backup contact {done.to} notified on {done.at.slice(0, 16).replace('T', ' ')} (simulated: nothing was sent).</span>
-        : name ? <><span> Escalate: hand this {r.tier} flag to your backup contact.</span> <button className="btn" onClick={escalate}>Notify {name}{phone ? ` (${phone})` : ''}</button></>
-        : <span> Escalate it: add a backup contact under ⚙ Clinic settings, then notify them from here.</span>}
+      <b>{late} h past deadline.</b>
+      {done ? <span title="Simulated: nothing was sent. The hand-over is in the audit log."> Backup {done.to} notified {done.at.slice(0, 10)}.</span>
+        : name ? <button className="btn" onClick={escalate}>Notify backup: {name}</button>
+        : <span> Set a backup contact under ⚙ to escalate.</span>}
     </div>
   );
 }
@@ -637,13 +635,12 @@ function ProtocolSignoff({ pack, now }: { pack: ProtocolPack; now: number }) {
   };
   const withdraw = () => { const s2 = getState(); const { [pack.id]: _gone, ...rest } = s2.packSignoffs ?? {}; setState({ ...s2, packSignoffs: rest }); };
   return (
-    <div className="card" data-testid="protocol-signoff">
-      <div className="cardhead"><h3>Protocol: {pack.condition.en}</h3>
-        {so ? <button className="linkbtn" onClick={withdraw}>Withdraw sign-off</button>
-          : sync.user ? !open && <button className="btn" onClick={() => setOpen(true)}>Sign off this protocol…</button> : null}
+    <div className="card protorow" data-testid="protocol-signoff">
+      <div className="cardhead">
+        <span><b>Protocol</b>&nbsp;<small data-testid="signoff-line">{so ? `Reviewed by ${so.name} on ${so.at.slice(0, 10)}` : 'Not yet reviewed by your clinic'}</small></span>
+        {so ? <button className="linkbtn" onClick={withdraw}>Withdraw</button>
+          : sync.user ? !open && <button className="btn" onClick={() => setOpen(true)}>Sign off…</button> : <small className="tiny" title="Sign in as a physio to sign off this protocol.">Sign in to sign off</small>}
       </div>
-      {so ? <p className="reviewed" data-testid="signoff-line">Reviewed by {so.name} on {so.at.slice(0, 10)}{so.email ? ` (${so.email})` : ''}</p>
-        : <p className="tiny">Not yet reviewed by your clinic.{sync.user ? '' : ' Sign in as a physio to sign it off.'}</p>}
       {open && (
         <div className="doseeditor">
           <label className="menufield" style={{ padding: 0 }}>Your full name (recorded with the date and your account {sync.user})
@@ -703,17 +700,15 @@ function ClinicSummary({ state, rows, now, onClose }: { state: AppState; rows: {
 function ScheduleCard({ patient: p, pack, r, now, onApply }: { patient: Patient; pack: ProtocolPack; r: TriageResult; now: number; onApply: ApplyFn }) {
   const st = getState();
   const sug = scheduleSuggestion(p, pack, r, st.today, now);
-  const [note, setNote] = useState('');
   if (!sug) return null;
   const fu = currentFollowUp(p, pack, st.today);
-  const title = sug.kind === 'reduce' ? `Reduce check-ins to every ${sug.to} days` : 'Return to daily check-ins';
-  const why = `${sug.why}.${note.trim() ? ` ${note.trim()}` : ''}`;
+  const title = sug.kind === 'reduce' ? `Check in every ${sug.to} days?` : 'Back to daily check-ins?';
+  const why = `${sug.why}.`;
   return (
     <div className="card proposal schedule" data-testid="schedule-suggestion">
-      <h3>Suggestion: {title} <small>Nothing changes until you approve</small></h3>
-      <p className="tiny">{sug.why}. Now: {everyDays(sug.from)}. Proposed: {everyDays(sug.to)}. The patient is told if you approve.</p>
+      <div className="cardhead"><h3>{title}</h3></div>
+      <p className="tiny" title="Nothing changes until you approve. The patient is told if you approve.">{sug.why}.</p>
       <div className="btnrow proprow">
-        <input aria-label="Note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
         <button className="btn" onClick={() => onApply({ type: 'change-follow-up', checkInEveryDays: sug.to, nextReviewDate: fu.nextReviewDate, until: null, flagKey: sug.key, proposalStatus: 'approved', note: `App suggestion approved: ${why}` })}>Approve</button>
         <button className="btn" onClick={() => onApply({ type: 'reject-proposal', flagKey: sug.key, note: `App suggestion declined: ${why}` })}>Decline</button>
       </div>
@@ -726,18 +721,18 @@ function WeeklyItemsCard({ patient: p, pack, onApply }: { patient: Patient; pack
   const items = optInWeeklyMeasures(pack, p);
   if (!items.length) return null;
   return (
-    <div className="card" data-testid="weekly-items">
-      <h3>Weekly self-test <small>Optional items, off unless you switch them on for this patient</small></h3>
+    <details className="card" data-testid="weekly-items">
+      <summary><b>Weekly self-test</b>&nbsp;<small>{items.filter((m) => (p.weeklyOptIn ?? []).includes(m.id)).length} of {items.length} optional item{items.length === 1 ? '' : 's'} on</small></summary>
       {items.map((m) => {
         const on = (p.weeklyOptIn ?? []).includes(m.id);
         return (
           <label key={m.id} className="check">
             <input type="checkbox" checked={on} onChange={(e) => onApply({ type: 'set-weekly-item', measure: m.id, on: e.target.checked })} />
-            <span>{m.label.en} <small>({on ? 'on: the patient is asked this every week' : 'off: not asked'})</small></span>
+            <span>{m.label.en}</span>
           </label>
         );
       })}
-    </div>
+    </details>
   );
 }
 
@@ -866,22 +861,21 @@ function ClinicSettings({ state }: { state: AppState }) {
   return (
     <div className="clinicsettings">
       <h3>Clinic settings</h3>
-      <p className="tiny">Patient data and dates</p>
-      <label className="menufield">Keep a finished patient's record for (years)
+      <label className="menufield" title="After this period a finished patient is flagged 'review for erasure' under Past patients. Nothing is deleted by itself. Medical-record rules often say about 3 years; ask your lawyer.">Keep finished records (years)
         <input type="number" min={0} max={30} value={years} onChange={(e) => setYears(Number(e.target.value))} aria-label="Retention years" />
       </label>
-      <label className="menufield">Contact shown to patients (phone or email)
+      <label className="menufield">Contact shown to patients
         <input maxLength={120} value={state.clinicContact ?? ''} onChange={(e) => setContact(e.target.value)} aria-label="Clinic contact" />
       </label>
-      <h3 className="cs-sub">Overdue urgent flags</h3>
-      <label className="menufield">Backup contact name (who covers an overdue SAFETY or URGENT flag)
+      <h3 className="cs-sub">Backup for overdue urgent flags</h3>
+      <label className="menufield">Name
         <input maxLength={80} value={state.clinic?.backupName ?? ''} onChange={(e) => setClinic({ backupName: e.target.value })} aria-label="Backup contact name" />
       </label>
-      <label className="menufield">Backup contact phone
+      <label className="menufield">Phone
         <input maxLength={40} inputMode="tel" value={state.clinic?.backupPhone ?? ''} onChange={(e) => setClinic({ backupPhone: e.target.value })} aria-label="Backup contact phone" />
       </label>
       <h3 className="cs-sub">Working hours</h3>
-      <label className="check"><input type="checkbox" checked={!!state.clinic?.hours} onChange={(e) => setClinic({ hours: e.target.checked ? { start: '09:00', end: '18:00', days: [1, 2, 3, 4, 5, 6] } : undefined })} /> <span>Count REVIEW and URGENT deadlines only in working hours <small>(SAFETY deadlines always run on the clock)</small></span></label>
+      <label className="check"><input type="checkbox" checked={!!state.clinic?.hours} onChange={(e) => setClinic({ hours: e.target.checked ? { start: '09:00', end: '18:00', days: [1, 2, 3, 4, 5, 6] } : undefined })} /> <span title="SAFETY deadlines always run on the clock.">Deadlines count only working hours</span></label>
       {state.clinic?.hours && (
         <div className="hoursrow">
           <label>From<input type="time" value={state.clinic.hours.start} onChange={(e) => setClinic({ hours: { ...state.clinic!.hours!, start: e.target.value } })} /></label>
@@ -893,8 +887,7 @@ function ClinicSettings({ state }: { state: AppState }) {
           {!validHours(state.clinic.hours) && <p className="err">Closing time must be after opening time, and at least one day must be open. Until then deadlines run on the clock.</p>}
         </div>
       )}
-      <p className="tiny">After this period a finished patient is flagged "review for erasure" under Past patients. Nothing is deleted by itself. Ask your lawyer what period applies to you: medical-record rules often say about 3 years, and some guidance says longer.</p>
-      <p className="tiny">This is the live clinic. The demo has its own data and the six made-up patients; use Switch to demo at the top.</p>
+      {state.live && <p className="tiny">This is the live clinic. The demo has its own data; use Switch to demo at the top.</p>}
     </div>
   );
 }
@@ -1022,9 +1015,11 @@ function PlanCard({ patient: p, pack, now, onApply, err, onAdjust }: { patient: 
                   return (
                     <>
                       <span className={d ? 'dose own' : 'dose'}>{d ? doseLine(p, id, 'en') : <small>{ex ? L(ex.dose.text, 'en') : '—'}</small>}</span>
-                      {n && <small className="dosenote">Note for the patient: “{n.text}”</small>}
-                      {(d || n) && <small className="doseby">Set by {(d ?? n)!.by} on {(d ?? n)!.at.slice(0, 10)}</small>}
-                      {p.status !== 'completed' && editing !== id && <button className="linkbtn" onClick={() => setEditing(id)}>{d ? 'Edit dose' : 'Set dose'}</button>}
+                      <small className="doseby">
+                        {(d || n) && <>Set by {(d ?? n)!.by} on {(d ?? n)!.at.slice(0, 10)}</>}
+                        {n && <span className="notechip" title={`Note for the patient: ${n.text}`}>Note</span>}
+                        {p.status !== 'completed' && editing !== id && <button className="linkbtn" onClick={() => setEditing(id)}>{d ? 'Edit' : 'Set dose'}</button>}
+                      </small>
                     </>
                   );
                 })()}

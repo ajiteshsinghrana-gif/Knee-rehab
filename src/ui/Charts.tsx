@@ -67,9 +67,8 @@ export function Sparkline(p: { points: Pt[]; xMin: number; xMax: number; yMin: n
         {p.points.map((q, i) => <circle key={i} cx={X(q.x)} cy={Y(q.y)} r={i === p.points.length - 1 ? 3.5 : 2} fill="#0a6b6b" />)}
       </svg>
       <span className="spark-text">
-        {last ? <b>{last.y}<small>/10 now</small></b> : <small>No answers</small>}
+        {last ? <b>{last.y}<small>/10 today{p.usual !== undefined ? ` · usual ${p.usual}` : ''}</small></b> : <small>No answers</small>}
         {p.change && <span className="spark-change">{p.change}</span>}
-        {p.threshold !== undefined && !showRef && <small>urgent at {p.threshold}</small>}
       </span>
     </span>
   );

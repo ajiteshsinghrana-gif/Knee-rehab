@@ -684,3 +684,22 @@ main.home { gap: var(--s3); padding-top: var(--s3); }
 .exs-note p { margin: 0; font-size: var(--fs-b); line-height: 1.45; }
 .exs-note .readaloud { align-self: flex-start; }
 .exsheet .tiny { margin: 0; }
+
+/* ---------- clutter pass ---------- */
+.spark b small { font-weight: 400; }
+.missednote { padding: var(--s2) var(--s3); font-size: 13px; }
+.notechip { display: inline-block; margin: 0 var(--s2); padding: 0 var(--s1); border-radius: var(--s1); background: var(--teal-soft); color: var(--teal); font-weight: 600; font-size: 11px; line-height: 16px; cursor: help; }
+.doseby { display: flex; align-items: center; flex-wrap: wrap; gap: 0 var(--s1); }
+.doseby .linkbtn { margin-left: auto; }
+.protorow .cardhead small { color: var(--muted); font-size: 12px; }
+.escalation { padding: var(--s2) var(--s3); }
+.clinicsettings .menufield { font-size: 12px; }
+.clinicsettings h3 { font-size: 14px; }
+.clinicsettings .cs-sub { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: var(--s3); }
+/* patient check-in: compact reasons under an exercise; a disabled pinned button stays solid */
+.exquick .why .grid2 { grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.exquick .why .tile { min-height: 48px; flex-direction: row; justify-content: flex-start; gap: var(--s2); padding: var(--s1) var(--s3); font-size: var(--fs-s); text-align: left; }
+.exquick .why .tile .emoji { font-size: 1.1rem; }
+.exquick .why p { margin: 0; font-size: var(--fs-s); color: var(--muted); }
+.stickynext:disabled { opacity: 1; background: #b7cfcf; border-color: #b7cfcf; color: #fff; }
+.stickynext:disabled { background: var(--line); border-color: var(--line); color: var(--muted); }
