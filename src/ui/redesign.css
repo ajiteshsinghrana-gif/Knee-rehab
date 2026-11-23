@@ -425,8 +425,8 @@ main { gap: var(--s3); }
 .tabpanel .charts .card { padding: var(--s3); }
 .chart svg { max-height: 240px; }
 .chartnote { margin-left: var(--s2); color: var(--muted); font-weight: 400; cursor: help; font-size: 14px; }
-.check { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 1px solid #d0d5dd; border-radius: var(--s1); font-size: 11px; color: #fff; }
-.check.met { background: var(--onplan); border-color: var(--onplan); }
+.gcheck { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 1px solid #d0d5dd; border-radius: var(--s1); font-size: 11px; color: #fff; }
+.gcheck.met { background: var(--onplan); border-color: var(--onplan); }
 
 /* settings tab: destructive actions at the bottom, set apart */
 .dangerzone { display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s4); padding-top: var(--s4); border-top: 1px solid var(--line); }
@@ -562,3 +562,14 @@ main.checkin { padding-top: var(--s2); }
 .review li button { min-height: 48px; min-width: 0; padding: 0 var(--s3); border: 1px solid #d0d5dd; color: var(--ink); background: var(--surface); font-weight: 600; font-size: var(--fs-s); }
 .review strong { font-size: var(--fs-b); font-weight: 600; }
 .review small { font-size: 12px; }
+label.check { display: flex; align-items: flex-start; gap: var(--s2); font-weight: 500; font-size: var(--fs-s); }
+label.check input { margin-top: 3px; flex: none; }
+.condition .filebtn, .filebtn { border: 1px solid #d0d5dd; border-radius: var(--radius); color: var(--ink); font-weight: 600; font-size: var(--fs-s); min-height: 36px; padding: 0 var(--s3); display: inline-flex; align-items: center; }
+.bifield { border-color: var(--line); border-radius: var(--radius); }
+.condition .subcard { border-color: var(--line); border-radius: var(--radius); }
+.stepbtn { border: 1px solid #d0d5dd; color: var(--ink); font-size: 1.25rem; font-weight: 500; min-width: 48px; min-height: 48px; }
+.numrow input { min-height: 48px; font-size: 1.125rem; font-weight: 600; border-width: 1px; }
+.big.gs-stop, .gs-stop { color: var(--urgent); border-color: #f1c6c2; }
+.gs-hold { border-width: 1px; border-radius: var(--radius); font-size: 2rem; }
+.gs-count { font-size: 2.5rem; font-weight: 600; }
+.gs-msg { font-size: var(--fs-b); font-weight: 600; color: var(--teal); }

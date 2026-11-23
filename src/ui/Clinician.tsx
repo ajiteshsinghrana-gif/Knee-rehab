@@ -438,7 +438,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             <details className="card" open>
               <summary><b>{pack.phases.find((x) => x.id === gate.fromPhase)?.name.en} to {pack.phases.find((x) => x.id === gate.toPhase)?.name.en}: gate criteria</b>&nbsp;<small>({gate.criteria.filter((c) => c.met).length}/{gate.criteria.length} met)</small></summary>
               <table className="gate"><tbody>{gate.criteria.map((c) => (
-                <tr key={c.id}><td><span className={`check ${c.met ? 'met' : ''}`} role="img" aria-label={c.met ? 'met' : 'not met'}>{c.met ? '✓' : ''}</span></td><td>{c.label.en}<br /><small>needs {c.required}</small></td><td>{c.actual}</td><td><Src s={c.source} /></td></tr>))}</tbody></table>
+                <tr key={c.id}><td><span className={`gcheck ${c.met ? 'met' : ''}`} role="img" aria-label={c.met ? 'met' : 'not met'}>{c.met ? '✓' : ''}</span></td><td>{c.label.en}<br /><small>needs {c.required}</small></td><td>{c.actual}</td><td><Src s={c.source} /></td></tr>))}</tbody></table>
             </details>
           )}
         </div>
