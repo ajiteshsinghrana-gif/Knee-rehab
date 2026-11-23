@@ -37,6 +37,7 @@ import { missedCheckIns } from '../reminders';
 import { hasPhone, telHref, waHref } from '../contact';
 import { templateFromPatient } from '../templates';
 import { exerciseRecord, reasonLabel } from '../exerciseRecord';
+import { nextVisit, nowStamp, toMark, visitCounts, visitWhen } from '../visits';
 import { DetailsFields } from './DetailsFields';
 import { deleteLocalVideo, loadLocalVideo, newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { validHours } from '../engine/hours';
@@ -162,6 +163,7 @@ export function Clinician({ state }: { state: AppState }) {
               </>)}
             </Menu>
           </div>
+          <TodaysVisits state={state} onOpen={open} />
           <div className="tierfilter" role="group" aria-label="Show only one tier">
             {counts.map(([t, n]) => (
               <button key={t} type="button" className={`tchip ${t} ${filter === t ? 'on' : ''}`} aria-pressed={filter === t} onClick={() => setFilter(filter === t ? null : t)}>
@@ -431,6 +433,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
           {(caregiverN > 0 || p.caregiverMode) && <p className="tiny" data-testid="caregiver-note" title="Answers a carer gives for the patient are a second-hand report.">{caregiverN} of the last 7 check-ins answered by a caregiver</p>}
           </div>
           <div className="ov-col">
+          <MarkVisits patient={p} now={now} />
           <ScheduleCard patient={p} pack={pack} r={r} now={now} onApply={apply} />
           <ProposalCard patient={p} pack={pack} r={r} now={now} />
 
@@ -482,6 +485,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
 
       {tab === 'plan' && (
         <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-plan`} aria-labelledby={`${idBase}-tab-plan`}>
+          <VisitsCard patient={p} now={now} />
           <AdviceCard patient={p} pack={pack} now={now} />
           <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} onAdjust={p.status !== 'completed' && !adjustOpen ? () => setAdjustOpen(true) : undefined} />
           {p.status !== 'completed' && adjustOpen && <AdjustCard patient={p} pack={pack} now={now} onClose={() => setAdjustOpen(false)} />}
@@ -603,6 +607,77 @@ function painChange(pts: { x: number; y: number }[]): string {
 }
 
 const PHYSIO_NAME = 'Demo physio';
+/** "Today's visits" at the top of the worklist, from the patients' planned clinic sessions. No time-slot calendar. */
+function TodaysVisits({ state, onOpen }: { state: AppState; onOpen: (id: string) => void }) {
+  const day = state.today;
+  const rows = state.patients.filter(isActive).flatMap((p) => (p.visits ?? []).filter((v) => v.at.slice(0, 10) === day).map((v) => ({ p, v }))).sort((a, b) => a.v.at.localeCompare(b.v.at));
+  if (!rows.length) return null;
+  return (
+    <div className="todayvisits" data-testid="todays-visits">
+      <h3>Today's visits</h3>
+      <ul>{rows.map(({ p, v }) => (
+        <li key={v.id}><button type="button" className="tvrow" onClick={() => onOpen(p.id)}>
+          <span className="tvtime">{v.at.slice(11)}</span><span className="tvname">{p.name}</span>
+          <small className={`tvstatus ${v.status}`}>{v.status === 'planned' ? 'Due' : v.status === 'attended' ? 'Attended' : 'Missed'}</small>
+        </button></li>))}
+      </ul>
+    </div>
+  );
+}
+
+/** After a session's time has passed: one tap to mark it attended or missed. A missed session is a REVIEW signal (rule V1). Logged. */
+function MarkVisits({ patient: p, now }: { patient: Patient; now: number }) {
+  const st = getState();
+  const due = toMark(p, nowStamp(st));
+  if (!due.length) return null;
+  const mark = (id: string, status: 'attended' | 'missed') => {
+    const v = due.find((x) => x.id === id)!;
+    const at = new Date(now).toISOString();
+    updatePatient(p.id, (q) => withAuditNote({ ...q, visits: (q.visits ?? []).map((x) => (x.id === id ? { ...x, status, markedAt: at, by: PHYSIO_NAME } : x)) }, 'visit', `Clinic session ${v.at.replace('T', ' ')} marked ${status}`, { status: 'planned' }, { status }, 'One tap from the Overview', { nowMs: now, today: st.today }));
+  };
+  return (
+    <div className="card markvisits" data-testid="mark-visits">
+      {due.map((v) => (
+        <div key={v.id} className="mvrow">
+          <span>Session on <b>{visitWhen(v.at, 'en')}</b></span>
+          <span className="mvbtns"><button className="btn" onClick={() => mark(v.id, 'attended')}>Attended</button><button className="btn" onClick={() => mark(v.id, 'missed')}>Missed</button></span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Clinic sessions on the Plan tab: the next one (set or change it), and the simple count. */
+function VisitsCard({ patient: p, now }: { patient: Patient; now: number }) {
+  const st = getState();
+  const nowS = nowStamp(st);
+  const next = nextVisit(p, nowS);
+  const c = visitCounts(p);
+  const [when, setWhen] = useState(`${addDays(st.today, 1)}T10:00`);
+  const [msg, setMsg] = useState('');
+  const add = () => {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when) || when < nowS) { setMsg('Choose a date and time from now on.'); return; }
+    const at = new Date(now).toISOString();
+    updatePatient(p.id, (q) => withAuditNote({
+      ...q,
+      visits: [...(q.visits ?? []), { id: `v${now.toString(36)}${(q.visits ?? []).length}`, at: when, status: 'planned' as const }],
+      notices: [...q.notices, { id: `n${now.toString(36)}v`, at, changes: [{ kind: 'visit' as const, at: when }], seen: false }],
+    }, 'visit', `Next clinic session set: ${when.replace('T', ' ')}`, null, { at: when }, 'Set by the physio', { nowMs: now, today: st.today }));
+    setMsg('Saved. The patient sees it on their home screen.');
+  };
+  return (
+    <div className="card" data-testid="visits-card">
+      <div className="cardhead"><h3>Clinic sessions <small>{c.planned} planned · {c.attended} attended · {c.missed} missed</small></h3></div>
+      <p className="tiny">{next ? <>Next: <b>{visitWhen(next.at, 'en')}</b></> : 'No session planned.'}</p>
+      <div className="btnrow">
+        <input type="datetime-local" aria-label="Next session date and time" value={when} min={nowS} onChange={(e) => { setWhen(e.target.value); setMsg(''); }} />
+        <button className="btn" onClick={add}>Set next session</button>
+        {msg && <small className="tiny" role="status">{msg}</small>}
+      </div>
+    </div>
+  );
+}
+
 /** Per-exercise record: exercises down the side, the last 7 days across. Tap a cell for what happened. Display only. */
 function ExerciseRecordCard({ patient: p, pack }: { patient: Patient; pack: ProtocolPack }) {
   const today = getState().today;

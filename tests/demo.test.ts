@@ -151,3 +151,15 @@ describe('per-exercise record (physio feedback phase 3)', () => {
     expect(r.triggers.map((t) => t.ruleId)).toContain('R5');
   });
 });
+
+describe('clinic sessions in the demo (physio feedback phase 4)', () => {
+  it('two visits today, Imran tomorrow, Meera\'s session yesterday waiting to be marked; nobody flagged by V1', async () => {
+    const { toMark, visitReminder } = await import('../src/visits');
+    const all = makeAllPatients();
+    const today = '2026-11-15';
+    expect(all.filter((p) => (p.visits ?? []).some((v) => v.at.startsWith(today))).map((p) => p.id).sort()).toEqual(['arjun', 'kamla']);
+    expect(visitReminder(all.find((p) => p.id === 'imran')!, today)?.kind).toBe('tomorrow');
+    expect(toMark(all.find((p) => p.id === 'meera')!, `${today}T09:00`).length).toBe(1);
+    for (const p of all) expect(triage(p, getPack(p.packId), { nowMs: Date.parse(`${today}T09:00:00Z`) }).triggers.map((t) => t.ruleId)).not.toContain('V1');
+  });
+});

@@ -199,6 +199,15 @@ function aboveUsual(r: Extract<Rule, { type: 'aboveUsual' }>, p: Patient, d: str
   return trig(r, `${r.measure} ${last.join(', ')} on the last ${r.consecutive} check-ins; usual ${u.usual} (median of the ${u.n} before)`, d);
 }
 
+/** A clinic session marked missed in the last `windowDays` (up to today when the clock is known). */
+function missedVisit(r: Extract<Rule, { type: 'missedVisit' }>, p: Patient, d: string, nowMs?: number): Trigger | null {
+  const end = nowMs !== undefined ? [d, new Date(nowMs).toISOString().slice(0, 10)].sort()[1] : d;
+  const from = addDays(end, -(r.windowDays - 1));
+  const hit = (p.visits ?? []).filter((v) => v.status === 'missed' && v.at.slice(0, 10) >= from && v.at.slice(0, 10) <= end);
+  if (!hit.length) return null;
+  return trig(r, `missed clinic session${hit.length === 1 ? '' : 's'} on ${hit.map((v) => v.at.replace('T', ' ')).join(', ')}`, d);
+}
+
 /** Check-in interval in days from the patient's current follow-up (a temporary change reverts after its end date). */
 function checkInEvery(p: Patient, today: string): number {
   const f = p.plan?.followUp;
@@ -245,6 +254,7 @@ function evaluateBase(full: Patient, pack: ProtocolPack, d: string, nowMs?: numb
       case 'silence': t = silence(r, p, nowMs); break;
       case 'precautionBreach': t = precautionBreach(r, p, pack, d); break;
       case 'aboveUsual': t = aboveUsual(r, p, d); break;
+      case 'missedVisit': t = missedVisit(r, p, d, nowMs); break;
       case 'combination': break;
     }
     if (t) out.push({ t, counts: true });

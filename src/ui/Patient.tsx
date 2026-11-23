@@ -21,6 +21,7 @@ import { DemoButton } from './Demo';
 import { demoFor } from '../exercises/demos';
 import { doseLine } from '../exercises/dose';
 import { missedCheckIns } from '../reminders';
+import { nextVisit, nowStamp, visitReminder, visitTime, visitWhen } from '../visits';
 import { AngleTool } from './AngleTool';
 import { noticeText } from '../notices';
 import { GuidedSession } from './GuidedSession';
@@ -142,6 +143,24 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
             <ReadAloud key={lang + msg} text={`${msg} ${carer}`} lang={lang} compact />
           </div>
         );
+      })()}
+      {(() => {
+        // Clinic session: a (simulated) reminder the day before and on the day; otherwise one line with the next session.
+        const rem = visitReminder(patient, today);
+        const nx = nextVisit(patient, nowStamp(s));
+        if (rem) {
+          const msg = rem.kind === 'today' ? T('sessionToday', { time: visitTime(rem.visit.at, lang) }) : T('sessionTomorrow', { when: visitWhen(rem.visit.at, lang) });
+          return (
+            <div className="wareminder visitrem" role="status" data-testid="visit-reminder">
+              <small className="wa-tag">{T('reminderTitle')}</small>
+              <p>{msg}</p>
+              <ReadAloud key={lang + msg} text={msg} lang={lang} compact />
+            </div>
+          );
+        }
+        if (!nx) return null;
+        const line = T('nextSession', { when: visitWhen(nx.at, lang) });
+        return <p className="nextsession" data-testid="next-session">{line} <ReadAloud key={lang + line} text={line} lang={lang} compact /></p>;
       })()}
       <Notices patient={patient} pack={pack} lang={lang} />
       {doneToday && <p className="okline">{T('doneToday')}</p>}

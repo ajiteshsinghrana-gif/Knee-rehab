@@ -217,7 +217,7 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 
 <!-- SIGNOFF:START -->
 
-#### acl-reconstruction (14 values)
+#### acl-reconstruction (15 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -232,11 +232,12 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | rule R3 pain stage weeks 2-6 | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
 | rule R3 pain stage weeks 6-end | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
 | rule A8 pain above usual by | 2 on 2 check-ins (usual = median of 7, min 5) | NEEDS_PHYSIO_SIGNOFF |
+| rule V1 missed clinic session counts for | 7 d | NEEDS_PHYSIO_SIGNOFF |
 | rule S1 silence | 72 h | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 | questionnaire tsk11 permission to use | Tampa Scale for Kinesiophobia, 11-item version (TSK-11): Woby SR, Roach NK, Urmston M, Watson PJ. Pain 2005;117:137-144. Permission to use in this app: to be confirmed by the physio. | NEEDS_PHYSIO_SIGNOFF |
 
-#### total-knee-replacement (27 values)
+#### total-knee-replacement (28 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -265,10 +266,11 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | rule A3 streak | 2 in a row; adherence < 60% | NEEDS_PHYSIO_SIGNOFF |
 | rule A6 (gateOverdue) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
 | rule C1 (belowCurve) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
+| rule V1 missed clinic session counts for | 7 d | NEEDS_PHYSIO_SIGNOFF |
 | rule S1 silence | 72 h | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 
-#### rotator-cuff-repair (23 values)
+#### rotator-cuff-repair (24 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -292,11 +294,12 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | rule A6 (gateOverdue) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
 | rule P1 (precautionBreach) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
 | rule C1 (belowCurve) tier | REVIEW | NEEDS_PHYSIO_SIGNOFF |
+| rule V1 missed clinic session counts for | 7 d | NEEDS_PHYSIO_SIGNOFF |
 | rule S1 silence | 72 h | NEEDS_PHYSIO_SIGNOFF |
 | precaution sling-off restricted phases | p1 | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 
-#### general (12 values)
+#### general (13 values)
 
 | Where | Value | Source tag |
 |---|---|---|
@@ -310,6 +313,7 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | warning sign numbness -> tier | REVIEW (A8) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
 | warning sign weaknessBladderBowel -> tier | SAFETY (R1) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
 | rule R3 pain stage weeks 0-end | >= 7 | DEFAULT; NEEDS_PHYSIO_SIGNOFF |
+| rule V1 missed clinic session counts for | 7 d | NEEDS_PHYSIO_SIGNOFF |
 | rule S1 silence | 72 h | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 

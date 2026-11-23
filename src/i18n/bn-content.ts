@@ -34,6 +34,7 @@ export const BN_CONTENT: Record<string, string> = {
  "Ongoing care": "চলমান চিকিৎসা",
  "New weakness, or loss of bladder or bowel control": "নতুন দুর্বলতা, বা প্রস্রাব বা পায়খানা নিয়ন্ত্রণে না থাকা",
  "Say e.g. \"pain 4, did all my exercises, no fever\"": "যেমন বলুন: \"ব্যথা 4, সব ব্যায়াম করেছি, জ্বর নেই\"",
+ "Missed a clinic session": "ক্লিনিকের সেশন বাদ পড়েছে",
  "Pain above usual": "স্বাভাবিকের চেয়ে বেশি ব্যথা",
  "Missed sessions": "ব্যায়াম বাদ যাচ্ছে",
  "Phase taking longer than expected": "ধাপ প্রত্যাশার চেয়ে বেশি সময় নিচ্ছে",

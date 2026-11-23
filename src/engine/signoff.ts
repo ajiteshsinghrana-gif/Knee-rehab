@@ -26,6 +26,7 @@ export function collectSignoffs(p: ProtocolPack): SignoffItem[] {
       case 'trend': add(`rule ${r.id} ${r.measure} ${r.direction} by`, `${r.delta} over ${r.window} check-ins`, r.deltaSource); break;
       case 'streak': add(`rule ${r.id} streak`, `${r.count}${r.windowDays ? ` in ${r.windowDays} d` : ' in a row'}${r.orAdherenceBelowPct !== undefined ? `; adherence < ${r.orAdherenceBelowPct}%` : ''}`, r.countSource); break;
       case 'aboveUsual': add(`rule ${r.id} ${r.measure} above usual by`, `${r.delta} on ${r.consecutive} check-ins (usual = median of ${r.baselineWindow}, min ${r.minBaseline})`, r.deltaSource); break;
+      case 'missedVisit': add(`rule ${r.id} missed clinic session counts for`, `${r.windowDays} d`, r.windowSource); break;
       case 'silence': add(`rule ${r.id} silence`, `${r.hours} h`, r.hoursSource); break;
       case 'combination': add(`rule ${r.id} combination`, `>= ${r.minDistinct} ${r.ofTier} rules in ${r.windowDays} d`, r.countSource); break;
       default: add(`rule ${r.id} (${r.type}) tier`, r.tier, r.source);

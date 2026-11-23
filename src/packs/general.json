@@ -227,6 +227,18 @@
    "countSource": "DEFAULT"
   },
   {
+   "id": "V1",
+   "label": {
+    "en": "Missed a clinic session",
+    "hi": "क्लिनिक का सेशन छूट गया"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "missedVisit",
+   "windowDays": 7,
+   "windowSource": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  {
    "id": "S1",
    "label": {
     "en": "No check-in for several days",
@@ -259,6 +271,10 @@
    "call-patient"
   ],
   "R3": [
+   "call-patient",
+   "reassess-bring-visit-forward"
+  ],
+  "V1": [
    "call-patient",
    "reassess-bring-visit-forward"
   ]

@@ -210,6 +210,10 @@ export function validatePack(p: ProtocolPack): string[] {
         if (!hasSource(r.deltaSource)) err(`rule ${r.id} has a threshold without a source tag`);
         if (!(r.consecutive >= 1) || !(r.baselineWindow >= r.minBaseline) || !(r.minBaseline >= 2)) err(`rule ${r.id} needs consecutive >= 1 and baselineWindow >= minBaseline >= 2`);
         break;
+      case 'missedVisit':
+        if (!hasSource(r.windowSource)) err(`rule ${r.id} has a threshold without a source tag`);
+        if (!(r.windowDays >= 1)) err(`rule ${r.id} windowDays must be >= 1`);
+        break;
       case 'precautionBreach':
         if (!(p.precautions ?? []).length) err(`rule ${r.id} (precautionBreach) needs precautions[]`);
         break;

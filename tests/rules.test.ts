@@ -371,3 +371,18 @@ describe('a reduced check-in schedule is not counted as missed sessions (fix pha
     expect(ids(tri(sparse))).toContain('A3');
   });
 });
+
+describe('V1: missed clinic session (physio feedback phase 4)', () => {
+  const p = mk(10, () => ({}));
+  const last = p.daily.at(-1)!.date;
+  it('a session marked missed is a REVIEW signal for 7 days', () => {
+    const q = { ...p, visits: [{ id: 'v', at: `${last}T10:00`, status: 'missed' as const }] };
+    const r = tri(q);
+    expect(ids(r)).toContain('V1');
+    expect(r.triggers.find((t) => t.ruleId === 'V1')!.tier).toBe('REVIEW');
+    expect(ids(tri({ ...p, visits: [{ id: 'v', at: `${addDays(last, -8)}T10:00`, status: 'missed' as const }] }))).not.toContain('V1');
+  });
+  it('attended or still planned sessions are not signals', () => {
+    expect(ids(tri({ ...p, visits: [{ id: 'v', at: `${last}T10:00`, status: 'attended' as const }, { id: 'w', at: `${last}T12:00`, status: 'planned' as const }] }))).not.toContain('V1');
+  });
+});

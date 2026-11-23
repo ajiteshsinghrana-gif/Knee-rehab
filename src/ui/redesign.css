@@ -804,3 +804,21 @@ main.home { gap: var(--s3); padding-top: var(--s3); }
   .xcell { height: 48px; }
   .xlegend .xcell { height: 20px; }
 }
+
+/* ---------- clinic sessions ---------- */
+.todayvisits { padding: 0 var(--s3) var(--s2); border-bottom: 1px solid var(--line); margin-bottom: var(--s2); }
+.todayvisits h3 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 0 0 var(--s1); text-transform: uppercase; letter-spacing: .04em; }
+.todayvisits ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; overflow: visible; }
+.tvrow { display: flex; align-items: center; gap: var(--s2); width: 100%; min-height: 36px; padding: 0 var(--s2); border: 0; border-radius: var(--radius); background: var(--teal-soft); text-align: left; font: inherit; font-size: 13px; cursor: pointer; }
+.tvrow:hover { background: #d7ecec; }
+.tvtime { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--teal); }
+.tvname { flex: 1; font-weight: 600; }
+.tvstatus { font-size: 11px; font-weight: 600; color: var(--muted); }
+.tvstatus.attended { color: var(--onplan); } .tvstatus.missed { color: var(--urgent); }
+.markvisits { border-left: 3px solid var(--teal); }
+.mvrow { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); flex-wrap: wrap; font-size: 13px; }
+.mvbtns { display: flex; gap: var(--s2); }
+.nextsession { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin: 0; padding: var(--s2) var(--s3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: var(--fs-s); font-weight: 600; }
+.visitrem { background: var(--teal-soft); border-color: #bfdede; }
+.visitrem .wa-tag { color: var(--teal); }
+@media (max-width: 720px) { .tvrow { min-height: 48px; } .mvbtns { width: 100%; } .mvbtns .btn { flex: 1; } }

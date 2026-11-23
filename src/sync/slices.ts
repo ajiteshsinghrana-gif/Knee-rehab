@@ -9,7 +9,7 @@
  * Everything that arrives is checked and copied field by field. Unknown fields are dropped, so a damaged or
  * tampered row cannot change anything it should not, and the physio's private reasons never leave his computer.
  */
-import type { DailyCheckIn, ExerciseDemo, Notice, Patient, PeriodicEntry, Plan, SessionLog, SyncedDemo, FormRequest, FormReply } from '../types';
+import type { ClinicVisit, DailyCheckIn, ExerciseDemo, Notice, Patient, PeriodicEntry, Plan, SessionLog, SyncedDemo, FormRequest, FormReply } from '../types';
 import { cleanSyncedDemos, demosForPatient } from '../exercises/demos';
 import { isLang } from '../types';
 import { getPack } from '../engine/packs';
@@ -23,6 +23,8 @@ export interface DownSlice {
   demos?: Record<string, SyncedDemo>;
   /** The physio's replies to form-check videos, and clips he deleted, keyed by request id. */
   forms?: Record<string, { reply?: FormReply; clipGone?: string; deleteAfter?: string }>;
+  /** Clinic sessions the physio planned or marked (physio feedback round). */
+  visits?: ClinicVisit[];
 }
 
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -181,8 +183,11 @@ export function downSlice(p: Patient, clinicDemos?: Record<string, ExerciseDemo>
     ...(p.status === 'completed' ? { status: 'completed' as const, ...(p.completedAt ? { completedAt: p.completedAt } : {}) } : {}), ...(p.erasureNote ? { erasureNote: p.erasureNote } : {}), ...(p.clinicContact ? { clinicContact: p.clinicContact } : {}),
     ...(clinicDemos ? { demos } : {}),
     ...(formsDown(p) ? { forms: formsDown(p) } : {}),
+    ...(p.visits ? { visits: p.visits.map((v) => ({ id: v.id, at: v.at, status: v.status })) } : {}),
   };
 }
+const validVisit = (v: unknown): v is ClinicVisit => isObj(v) && typeof v.id === 'string' && v.id.length <= 40 && typeof v.at === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v.at)
+  && (v.status === 'planned' || v.status === 'attended' || v.status === 'missed');
 const validNotice = (n: unknown): n is Notice => isObj(n) && typeof n.id === 'string' && typeof n.at === 'string' && typeof n.seen === 'boolean' && Array.isArray(n.changes) && n.changes.every((c) => isObj(c) && typeof c.kind === 'string');
 const validPlan = (x: unknown): x is Plan => isObj(x) && isObj(x.swaps) && Array.isArray(x.added) && Array.isArray(x.removed) && Array.isArray(x.overrides)
   && (x.hold === null || isObj(x.hold)) && (x.followUp === null || isObj(x.followUp));
@@ -207,6 +212,7 @@ export function applyDown(p: Patient, raw: unknown): Patient {
     clinicContact: typeof raw.clinicContact === 'string' ? raw.clinicContact.slice(0, 120) : p.clinicContact,
     // An older physio build sends no demos: keep what this phone has. Otherwise take exactly what the physio sent, so a removed video disappears.
     ...(raw.demos !== undefined ? { demos: cleanSyncedDemos(raw.demos) } : {}),
+    ...(Array.isArray(raw.visits) ? { visits: raw.visits.filter(validVisit).slice(0, 100).map((v) => ({ id: v.id, at: v.at, status: v.status })) } : {}),
     ...(() => { const ff = applyForms(p.formRequests, raw.forms); return ff ? { formRequests: ff } : {}; })(),
   };
 }

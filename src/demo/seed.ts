@@ -174,8 +174,22 @@ function makeImran(last: string): Patient {
 
 /** Demo phone numbers are deliberately not real (all zeros), so a Call or WhatsApp tap reaches nobody. */
 const DEMO_PHONE: Record<string, string> = { ravi: '+91 00000 00001', meera: '+91 00000 00002', arjun: '+91 00000 00003', sana: '+91 00000 00004', kamla: '+91 00000 00005', imran: '+91 00000 00006' };
+/** Demo clinic sessions around the demo's "today" (the day after the last check-in). Calendar events: fast-forward does not move them. */
+function demoVisits(last: string): Record<string, NonNullable<Patient['visits']>> {
+  const today = addDays(last, 1);
+  const v = (id: string, day: string, time: string, status: 'planned' | 'attended' | 'missed' = 'planned') => ({ id, at: `${day}T${time}`, status });
+  return {
+    ravi: [v('v-r1', addDays(today, -7), '10:00', 'attended'), v('v-r2', addDays(today, 3), '10:00')],
+    meera: [v('v-m1', addDays(today, -1), '11:30')],
+    arjun: [v('v-a1', addDays(today, -6), '17:00', 'attended'), v('v-a2', today, '10:30')],
+    sana: [v('v-s1', addDays(today, -12), '09:30', 'attended'), v('v-s2', addDays(today, -2), '09:30', 'attended'), v('v-s3', addDays(today, 5), '09:30')],
+    kamla: [v('v-k1', today, '16:00')],
+    imran: [v('v-i1', addDays(today, 1), '11:00')],
+  };
+}
 export function makeAllPatients(last = DEMO_TODAY_LAST): Patient[] {
-  return makeAllPatientsRaw(last).map((p) => ({ ...p, details: { ...(p.details ?? {}), phone: DEMO_PHONE[p.id] } }));
+  const visits = demoVisits(last);
+  return makeAllPatientsRaw(last).map((p) => ({ ...p, details: { ...(p.details ?? {}), phone: DEMO_PHONE[p.id] }, visits: visits[p.id] }));
 }
 function makeAllPatientsRaw(last: string): Patient[] {
   return [

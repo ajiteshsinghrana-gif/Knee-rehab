@@ -250,6 +250,7 @@ export interface CombinationRule extends RuleBase {
 export type Rule =
   | ThresholdRule
   | AboveUsualRule
+  | MissedVisitRule
   | TrendRule
   | StreakRule
   | BelowCurveRule
@@ -436,6 +437,8 @@ export interface Patient {
   /** The physio's own clinical notes (free text), and photos attached to them (stored on the physio's device only). */
   clinicalNotes?: { text: string; at: string; by: string };
   attachments?: { id: string; name: string; mime: string; size: number; at: string }[];
+  /** Clinic sessions (physio feedback round): 'at' is the clinic's local date and time, "YYYY-MM-DDTHH:MM". */
+  visits?: ClinicVisit[];
 }
 
 export interface FollowUp {
@@ -486,6 +489,13 @@ export interface Plan {
   /** "Advice from your physio": free text the patient sees on their home screen (diet, icing, precautions...). */
   advice?: { text: string; at: string; by: string };
 }
+export interface ClinicVisit { id: string; at: string; status: 'planned' | 'attended' | 'missed'; markedAt?: string; by?: string }
+export interface MissedVisitRule extends RuleBase {
+  type: 'missedVisit';
+  /** A session marked missed counts for this many days. */
+  windowDays: number;
+  windowSource: SourceTag;
+}
 export interface PatientDetails {
   phone?: string; gender?: string; city?: string; occupation?: string; diagnosis?: string;
   surgeryDate?: string; surgeon?: string; diabetes?: boolean; bloodPressure?: boolean; otherConditions?: string;
@@ -516,7 +526,8 @@ export type NoticeChange =
   | { kind: 'instruction'; text: string }
   | { kind: 'instructionRemoved'; text: string }
   | { kind: 'dose'; exercise: string }
-  | { kind: 'advice' };
+  | { kind: 'advice' }
+  | { kind: 'visit'; at: string };
 export interface Notice {
   id: string;
   at: string;
