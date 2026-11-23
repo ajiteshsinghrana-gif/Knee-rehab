@@ -1,5 +1,5 @@
 import { auditCsv } from '../audit';
-import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Menu } from './TopBar';
 import { LoginCard } from './Login';
 import { DEFAULT_RETENTION_YEARS, completeTreatment, eraseLocal, isActive, reopenTreatment, retentionDue, retentionEnd } from '../lifecycle';
@@ -16,7 +16,7 @@ import { evaluateGate } from '../engine/gates';
 import { ACTION_LABELS, suggestedActions } from '../engine/actions';
 import { collectSignoffs } from '../engine/signoff';
 import { clockMs, getState, realToday, removeClinicCurve, setClinicCurve, setState, updatePatient, type AppState } from '../store';
-import { LineChart } from './Charts';
+import { LineChart, Sparkline } from './Charts';
 import { Onboarding } from './Onboarding';
 import { ImportProtocol } from './Import';
 import { NewCondition } from './Condition';
@@ -25,7 +25,7 @@ import { getDemo } from '../exercises/demos';
 import type { ConditionDraft } from '../author/condition';
 import { applyAction, applyManual, currentExercises, currentFollowUp, pendingProposal, type PlanAction } from '../engine/plan';
 import { effectivePack, listOverridable } from '../engine/overrides';
-import { curveOrigin, PLACEHOLDER_NOTE } from '../engine/curves';
+import { curveOrigin } from '../engine/curves';
 import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
 import { SessionsCard } from './SessionsCard';
 import { FormReview } from './FormReview';
@@ -33,7 +33,14 @@ import { pendingForms } from '../forms/model';
 
 const TIER_LABEL: Record<Tier, string> = { SAFETY: 'SAFETY', URGENT: 'URGENT', REVIEW: 'REVIEW', ON_PLAN: 'ON PLAN' };
 const srcClass = (s: string) => s.split(/[;( ]/)[0].replace(/[^A-Z_]/g, '');
-const Src = ({ s }: { s: string }) => <span className={`src ${srcClass(s)}`} title={s}>{s.length > 34 ? s.slice(0, 32) + '…' : s}</span>;
+/** Placeholder values are shown in plain words, never as the raw NEEDS_PHYSIO_SIGNOFF code. */
+const DEFAULT_NOTE = 'Default value, not yet reviewed by your clinic';
+const srcText = (s: string) => s.replace(/NEEDS_PHYSIO_SIGNOFF:?\s*/g, `${DEFAULT_NOTE}. `).replace(/\.\s*$/, '');
+const Src = ({ s }: { s: string }) => {
+  const t = srcText(s);
+  const short = s.startsWith('NEEDS_PHYSIO_SIGNOFF') ? 'Default, not reviewed' : t.length > 34 ? t.slice(0, 32) + '…' : t;
+  return <span className={`src ${srcClass(s)}`} title={t}>{short}</span>;
+};
 const hrs = (ms: number) => `${Math.round(Math.abs(ms) / 3_600_000)} h`;
 
 export function Tier({ tier, xl }: { tier: Tier; xl?: boolean }) {
@@ -104,7 +111,7 @@ export function Clinician({ state }: { state: AppState }) {
           <div className="tierfilter" role="group" aria-label="Show only one tier">
             {counts.map(([t, n]) => (
               <button key={t} type="button" className={`tchip ${t} ${filter === t ? 'on' : ''}`} aria-pressed={filter === t} onClick={() => setFilter(filter === t ? null : t)}>
-                <span className={`dot ${t}`} aria-hidden />{TIER_LABEL[t]}<b>{n}</b>
+                {TIER_LABEL[t]}<b>{n}</b>
               </button>
             ))}
           </div>
@@ -172,6 +179,32 @@ export function PhysioHeaderControls({ state }: { state: AppState }) {
   );
 }
 
+type TabId = 'overview' | 'plan' | 'progress' | 'history' | 'settings';
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'overview', label: 'Overview' }, { id: 'plan', label: 'Plan' }, { id: 'progress', label: 'Progress' }, { id: 'history', label: 'History' }, { id: 'settings', label: 'Settings' },
+];
+
+/** Accessible tab list: arrow keys move between tabs, only the selected tab is in the Tab order. */
+function TabList({ tab, setTab, idBase }: { tab: TabId; setTab: (t: TabId) => void; idBase: string }) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const onKey = (e: ReactKeyboardEvent, i: number) => {
+    const n = TABS.length;
+    const to = e.key === 'ArrowRight' ? (i + 1) % n : e.key === 'ArrowLeft' ? (i - 1 + n) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
+    if (to < 0) return;
+    e.preventDefault(); setTab(TABS[to].id); refs.current[to]?.focus();
+  };
+  return (
+    <div className="dtabs" role="tablist" aria-label="Patient record">
+      {TABS.map((t, i) => (
+        <button key={t.id} ref={(el) => { refs.current[i] = el; }} type="button" role="tab" id={`${idBase}-tab-${t.id}`} aria-controls={`${idBase}-panel-${t.id}`}
+          aria-selected={tab === t.id} tabIndex={tab === t.id ? 0 : -1} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)} onKeyDown={(e) => onKey(e, i)}>{t.label}</button>
+      ))}
+    </div>
+  );
+}
+
+const everyDays = (n: number) => (n === 1 ? 'every day' : `every ${n} days`);
+
 function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: ProtocolPack; r: TriageResult; now: number }) {
   const phase = pack.phases.find((x) => x.id === p.currentPhase)!;
   const wk = weeksSince(p, r.asOf);
@@ -181,6 +214,9 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
   const [note, setNote] = useState<Record<string, string>>({});
   const [modifying, setModifying] = useState<string | null>(null);
   const [err, setErr] = useState('');
+  const [tab, setTab] = useState<TabId>('overview');
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const idBase = `pt-${p.id}`;
   const st = getState();
   const exs = currentExercises(p, pack);
   const [pick, setPick] = useState('');
@@ -215,163 +251,261 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
     if (act && apply(act, { action: a, status: 'approved' })) setModifying(null);
   };
   const markReviewed = () => r.flagKey && updatePatient(p.id, (q) => ({ ...q, reviewed: { ...q.reviewed, [r.flagKey!]: new Date(now).toISOString() } }));
+  const openAdjust = () => { setTab('plan'); setAdjustOpen(true); };
 
-  // charts
+  // charts and evidence
   const first = addDays(r.asOf, -41);
   const pain = p.daily.filter((d) => d.date >= first && d.values.pain !== undefined).map((d) => ({ x: Math.round((diffDays(d.date, p.anchorDate) / 7) * 10) / 10, y: Number(d.values.pain) }));
   const r3 = pack.rules.find((x) => x.type === 'threshold' && x.measure === 'pain');
   const painRef = r3 && r3.type === 'threshold' ? stageFor(r3.stages, wk) : undefined;
   const lastWeek = Array.from({ length: 7 }, (_, i) => addDays(r.asOf, i - 6));
   const curves = effectivePack(p, pack).expectedCurves; // protocol curve, clinic default or this patient's own
+  const caregiverN = lastWeek.filter((d) => p.daily.find((x) => x.date === d)?.answeredBy === 'caregiver').length;
+  const pendingVideos = pendingForms(p).length > 0;
+  const flagged = r.tier !== 'ON_PLAN' && !r.reviewedAt;
 
   return (
-    <section className="detail">
+    <section className="detail" aria-label={`${p.name}'s record`}>
       <div className={`card head ${r.tier}`}>
-        <div>
-          <h2>{p.name}, {p.age} <small>{pack.condition.en}</small></h2>
-          <p className="sub">Week {wk.toFixed(1)} {pack.anchorLabel.en} · {phase.name.en} ({weeksInPhase(p, r.asOf).toFixed(1)} wk in phase) · as of {r.asOf}</p>
+        <div className="dh-main">
+          <h2>{p.name}, {p.age}</h2>
+          <p className="sub">{pack.condition.en} · Week {wk.toFixed(1)} {pack.anchorLabel.en} · {phase.name.en} <small>({weeksInPhase(p, r.asOf).toFixed(1)} wk in phase, as of {r.asOf})</small></p>
         </div>
-        <div className="tierbox">
-          <span><Tier tier={r.tier} xl />{r.overdue && <span className="overdue">Overdue</span>}</span>
-          <small>{dueText(r, now)}{r.responseHours ? ` (${r.responseHours} h target)` : ''}</small>
+        <div className="dh-side">
+          <div className="tierbox">
+            <span className="tierline"><Tier tier={r.tier} xl />{r.overdue && <span className="overdue">Overdue</span>}</span>
+            <small>{dueText(r, now)}{r.responseHours ? ` (${r.responseHours} h target)` : ''}</small>
+          </div>
+          {flagged
+            ? <button className="btn primary" onClick={markReviewed}>Mark as reviewed</button>
+            : <button className="btn primary" onClick={openAdjust}>Adjust treatment</button>}
         </div>
       </div>
-      <AccessCard patient={p} />
 
-      {signoffs.length > 0 && (
-        <details className="placeholders">
-          <summary>{signoffs.length} values in this protocol pack are placeholders awaiting physio sign-off (NEEDS_PHYSIO_SIGNOFF)</summary>
-          <ul>{signoffs.map((s, i) => <li key={i}>{s.where.replace(pack.id + ': ', '')}: <b>{s.value}</b></li>)}</ul>
-        </details>
+      {p.erasureRequestedAt && (
+        <p className="warnline" role="alert">The patient asked for their data to be erased on {p.erasureRequestedAt.slice(0, 10)}. <button className="linkbtn" onClick={() => setTab('settings')}>Answer in Settings</button></p>
       )}
 
-      {r.triggers.length > 0 && (
-        <div className="card">
-          <h3>Why this tier</h3>
-          <ul className="evidence">
-            {r.triggers.map((t) => (
-              <li key={t.ruleId}>
-                <span className={`rid ${t.tier}`}>{t.ruleId}</span>
-                <div><b>{t.label.en}</b> <Tier tier={t.tier} /> <Src s={t.source} />{t.source.includes('PHYSIO_OVERRIDE') && <span className="src" data-testid="override-tag">PHYSIO_OVERRIDE: {t.source.split('PHYSIO_OVERRIDE:')[1]?.trim()}</span>}<p>{t.evidence}</p>{t.combinedFrom && <small>Combined from: {t.combinedFrom.join(', ')}</small>}</div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <TabList tab={tab} setTab={setTab} idBase={idBase} />
 
-      <ProposalCard patient={p} pack={pack} r={r} now={now} />
-
-      <div className="card">
-        <h3>Suggested actions <small>(never applied until you approve)</small></h3>
-        {r.reviewedAt && <p className="reviewed">Reviewed {r.reviewedAt.slice(0, 16).replace('T', ' ')}</p>}
-        {actions.length === 0 && <p className="tiny">No action suggested. Weekly summary only.</p>}
-        {err && <p className="err" role="alert">{err}</p>}
-        {actions.map((a) => (
-          <div className="actrow" key={a} data-action={a}>
-            <span className="name">{ACTION_LABELS[a]?.en ?? a}</span>
-            {modifying === a && a === 'regress-exercise' && (
-              <select aria-label="Exercise to make easier" value={pick} onChange={(e) => setPick(e.target.value)}>
-                <option value="">Choose exercise…</option>
-                {exs.map((id) => <option key={id} value={id} disabled={!getExercise(id)?.regressionId}>{exerciseName(id, 'en')}{getExercise(id)?.regressionId ? ` → ${exerciseName(getExercise(id)!.regressionId!, 'en')}` : ' (no easier version defined)'}</option>)}
-              </select>
-            )}
-            {modifying === a && a === 'reassess-bring-visit-forward' && (
-              <span className="fu">
-                <label>Next review <input type="date" value={fuDate} onChange={(e) => setFuDate(e.target.value)} /></label>
-                <label>Check in every <input type="number" min={1} max={14} value={fuEvery} onChange={(e) => setFuEvery(Number(e.target.value))} /> day(s)</label>
-              </span>
-            )}
-            {modifying === a && <input aria-label="Note" placeholder="Note (optional)" value={note[a] ?? ''} onChange={(e) => setNote({ ...note, [a]: e.target.value })} />}
-            {modifying === a ? (
-              <>
-                <button className="btn primary" onClick={() => confirm(a)}>Confirm and apply</button>
-                <button className="btn" onClick={() => setModifying(null)}>Cancel</button>
-              </>
-            ) : (
-              <button className="btn primary" onClick={() => start(a)}>{PLAN_ACTIONS.includes(a) ? 'Approve…' : 'Approve'}</button>
+      {tab === 'overview' && (
+        <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-overview`} aria-labelledby={`${idBase}-tab-overview`}>
+          <div className="ovgrid">
+          <div className="ov-col">
+          <div className="card">
+            <h3>Why this patient is flagged</h3>
+            {r.triggers.length === 0 ? <p className="tiny">Nothing is flagged. The patient is on plan; weekly summary only.</p> : (
+              <ul className="reasons">
+                {r.triggers.map((t) => (
+                  <li key={t.ruleId}>
+                    <span className={`dot ${t.tier}`} aria-hidden />
+                    <span className="r-text">
+                      <span className="r-label">{t.label.en}</span>
+                      <span className="r-ev">{t.evidence}</span>
+                      {t.combinedFrom && <span className="r-ev">Combined from {t.combinedFrom.join(', ')}</span>}
+                      {t.source.includes('PHYSIO_OVERRIDE') && <span className="src" data-testid="override-tag">Your threshold: {t.source.split('PHYSIO_OVERRIDE:')[1]?.trim()}</span>}
+                    </span>
+                    <span className="r-meta"><Tier tier={t.tier} /><span className="r-code" title={`Rule ${t.ruleId}. Source: ${srcText(t.source)}`}>{t.ruleId}</span></span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-        ))}
-        <p className="tiny">Approving a plan action changes the patient's plan and is written to the audit log. The patient is told in their own language.</p>
-        {r.tier !== 'ON_PLAN' && !r.reviewedAt && <div className="btnrow"><button className="btn" onClick={markReviewed}>Mark as reviewed</button></div>}
-      </div>
 
-      <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} />
-      <LifecycleCard patient={p} now={now} />
-      {p.status !== 'completed' && <AdjustCard patient={p} pack={pack} now={now} />}
-      <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
-      <CurvesCard patient={p} pack={pack} now={now} />
-
-      {pack.questionnaires.map((q) => {
-        const rows = p.periodic.filter((e) => e.values[q.measure] !== undefined);
-        const last = rows[rows.length - 1];
-        return (
-          <div className="card" key={q.id} data-testid="questionnaire-card">
-            <h3>{q.title.en} <small>{q.items.length} question{q.items.length === 1 ? "" : "s"}, scored by adding the answers</small></h3>
-            {last ? <p>Latest score <b>{String(last.values[q.measure])}</b> on {last.date}{last.answeredBy === 'caregiver' ? ' (answered by a caregiver)' : ''}{rows.length > 1 ? `; before that ${rows.slice(0, -1).map((e) => `${String(e.values[q.measure])} (${e.date})`).join(', ')}` : ''}.</p> : <p>Not answered yet.</p>}
-            <p className="tiny">{q.credit}{q.licenceConfirmed ? '' : ' (permission to use: NEEDS_PHYSIO_SIGNOFF)'}</p>
-          </div>);
-      })}
-
-      <div className="charts">
-        <div className="card">
-          <LineChart title="Pain (last 6 weeks)" xLabel={`weeks ${pack.anchorLabel.en}`} yLabel="0-10" yMin={0} yMax={10}
-            series={[{ name: 'Pain', color: '#0a6b6b', points: pain, dots: true }]}
-            refs={painRef ? [{ y: painRef.value, label: `urgent at ${painRef.value}`, color: '#b3261e' }] : []} />
-        </div>
-        {curves.map((c) => {
-          const m = pack.measures.find((x) => x.id === c.measure)!;
-          const pts = p.periodic.filter((e) => e.values[c.measure] !== undefined).map((e) => ({ x: weeksSince(p, e.date), y: Number(e.values[c.measure]) }));
-          return (
-            <div className="card" key={c.measure}>
-              <LineChart title={`${L(m.short ?? m.label, 'en')} vs expected`} xLabel={`weeks ${pack.anchorLabel.en}`} yLabel={m.unit ?? ''}
-                series={[{ name: 'Measured', color: '#0a6b6b', points: pts, dots: true }, { name: 'Expected', color: '#6b7a80', dashed: true, points: c.points.map(([x, y]) => ({ x, y })) }]}
-                band={c.points.map(([x, y]) => ({ x, lo: y - c.tolerance, hi: y + c.tolerance }))} />
-              <CurveNote c={c} />
+          <div className="card evstrip" aria-label="Evidence">
+            <div className="ev">
+              <span className="ev-k">Pain, last 14 days</span>
+              <Sparkline points={p.daily.filter((d) => d.date > addDays(r.asOf, -14) && d.values.pain !== undefined).map((d) => ({ x: diffDays(d.date, r.asOf), y: Number(d.values.pain) }))} xMin={-13} xMax={0} yMin={0} yMax={10} threshold={painRef?.value} label="Pain, 0 to 10, over the last 14 days" />
             </div>
-          );
-        })}
-      </div>
+            <div className="ev">
+              <span className="ev-k">Exercises, last 7 days</span>
+              <span className="adh" role="img" aria-label={lastWeek.map((d) => { const e = p.daily.find((x) => x.date === d); return `${d}: ${e ? (e.exercises === 'all' ? 'all done' : e.exercises === 'some' ? 'some done' : 'none done') : 'no check-in'}`; }).join('; ')}>
+                {lastWeek.map((d) => { const e = p.daily.find((x) => x.date === d); return <i key={d} className={e ? e.exercises : 'nodata'} />; })}
+              </span>
+              <span className="ev-v">{lastWeek.filter((d) => p.daily.find((x) => x.date === d)?.exercises === 'all').length} of 7 days complete</span>
+            </div>
+            <div className="ev">
+              <span className="ev-k">Hardest movement</span>
+              {(() => { const h = hardest(p, r.asOf); return h ? <><span className="ev-big">{exerciseName(h.id, 'en')}</span><span className="ev-v">reported on {h.n} of the last 14 days</span></> : <span className="ev-v">None reported</span>; })()}
+            </div>
+          </div>
+          {(caregiverN > 0 || p.caregiverMode) && <p className="tiny" data-testid="caregiver-note">{caregiverN} of the last 7 check-ins were answered by a caregiver, not the patient. Answers a carer gives for the patient are a second-hand report.</p>}
+          </div>
+          <div className="ov-col">
 
-      <FormReview patient={p} pack={pack} now={now} />
-      <SessionsCard patient={p} pack={pack} />
+          <div className="card">
+            <h3>Suggested actions <small>Nothing changes until you approve</small></h3>
+            {actions.length > 0 && <p className="tiny">Approved changes go in the audit log, and the patient is told in their own language.</p>}
+            {r.reviewedAt && <p className="reviewed">Reviewed {r.reviewedAt.slice(0, 16).replace('T', ' ')}</p>}
+            {actions.length === 0 && <p className="tiny">No action suggested. Weekly summary only.</p>}
+            {err && <p className="err" role="alert">{err}</p>}
+            {actions.map((a) => (
+              <div className="actrow" key={a} data-action={a}>
+                <span className="name">{ACTION_LABELS[a]?.en ?? a}</span>
+                {modifying === a && a === 'regress-exercise' && (
+                  <select aria-label="Exercise to make easier" value={pick} onChange={(e) => setPick(e.target.value)}>
+                    <option value="">Choose exercise…</option>
+                    {exs.map((id) => <option key={id} value={id} disabled={!getExercise(id)?.regressionId}>{exerciseName(id, 'en')}{getExercise(id)?.regressionId ? ` → ${exerciseName(getExercise(id)!.regressionId!, 'en')}` : ' (no easier version defined)'}</option>)}
+                  </select>
+                )}
+                {modifying === a && a === 'reassess-bring-visit-forward' && (
+                  <span className="fu">
+                    <label>Next review <input type="date" value={fuDate} onChange={(e) => setFuDate(e.target.value)} /></label>
+                    <label>Check in every <input type="number" min={1} max={14} value={fuEvery} onChange={(e) => setFuEvery(Number(e.target.value))} /> {fuEvery === 1 ? 'day' : 'days'}</label>
+                  </span>
+                )}
+                {modifying === a && <input aria-label="Note" placeholder="Note (optional)" value={note[a] ?? ''} onChange={(e) => setNote({ ...note, [a]: e.target.value })} />}
+                {modifying === a ? (
+                  <>
+                    <button className="btn primary" onClick={() => confirm(a)}>Confirm and apply</button>
+                    <button className="btn" onClick={() => setModifying(null)}>Cancel</button>
+                  </>
+                ) : (
+                  <button className="btn" onClick={() => start(a)}>{PLAN_ACTIONS.includes(a) ? 'Approve…' : 'Approve'}</button>
+                )}
+              </div>
+            ))}
+          </div>
 
-      <div className="card">
-        <h3>Last 7 days</h3>
-        {(() => { const n = lastWeek.filter((d) => p.daily.find((x) => x.date === d)?.answeredBy === 'caregiver').length; return n > 0 || p.caregiverMode ? <p className="tiny" data-testid="caregiver-note">{n} of the last 7 check-ins were answered by a caregiver, not the patient. Answers a carer gives for the patient are a second-hand report.</p> : null; })()}
-        <table className="gate"><tbody>
-          {lastWeek.map((d) => {
-            const e = p.daily.find((x) => x.date === d);
-            const signs = e ? pack.warningSigns.filter((s) => e.warnings[s.id]).map((s) => s.label.en) : [];
+          <ProposalCard patient={p} pack={pack} r={r} now={now} />
+          </div>
+          </div>
+          {gate?.allMet && <GateReady gate={gate} pack={pack} onApply={apply} />}
+          {pendingVideos && <FormReview patient={p} pack={pack} now={now} />}
+        </div>
+      )}
+
+      {tab === 'plan' && (
+        <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-plan`} aria-labelledby={`${idBase}-tab-plan`}>
+          <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} onAdjust={p.status !== 'completed' && !adjustOpen ? () => setAdjustOpen(true) : undefined} />
+          {p.status !== 'completed' && adjustOpen && <AdjustCard patient={p} pack={pack} now={now} onClose={() => setAdjustOpen(false)} />}
+        </div>
+      )}
+
+      {tab === 'progress' && (
+        <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-progress`} aria-labelledby={`${idBase}-tab-progress`}>
+          <div className="charts">
+            <div className="card">
+              <LineChart title="Pain, last 6 weeks" xLabel={`weeks ${pack.anchorLabel.en}`} yLabel="0-10" yMin={0} yMax={10}
+                series={[{ name: 'Pain', color: '#0a6b6b', points: pain, dots: true }]}
+                refs={painRef ? [{ y: painRef.value, label: `urgent at ${painRef.value}`, color: '#c62828' }] : []} />
+            </div>
+            {curves.map((c) => {
+              const m = pack.measures.find((x) => x.id === c.measure)!;
+              const pts = p.periodic.filter((e) => e.values[c.measure] !== undefined).map((e) => ({ x: weeksSince(p, e.date), y: Number(e.values[c.measure]) }));
+              const placeholder = curveOrigin(c) === 'placeholder';
+              return (
+                <div className="card" key={c.measure}>
+                  <LineChart title={`${L(m.short ?? m.label, 'en')} vs expected`} note={placeholder ? DEFAULT_NOTE : undefined} xLabel={`weeks ${pack.anchorLabel.en}`} yLabel={m.unit ?? ''}
+                    series={[{ name: 'Measured', color: '#0a6b6b', points: pts, dots: true }, { name: 'Expected', color: '#8a979c', dashed: true, points: c.points.map(([x, y]) => ({ x, y })) }]}
+                    band={c.points.map(([x, y]) => ({ x, lo: y - c.tolerance, hi: y + c.tolerance }))} />
+                  {!placeholder && <CurveNote c={c} />}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="card">
+            <h3>Last 7 days</h3>
+            <table className="gate"><tbody>
+              {lastWeek.map((d) => {
+                const e = p.daily.find((x) => x.date === d);
+                const signs = e ? pack.warningSigns.filter((s) => e.warnings[s.id]).map((s) => s.label.en) : [];
+                return (
+                  <tr key={d}>
+                    <td>{d}{e?.answeredBy === 'caregiver' ? ' (caregiver)' : ''}</td>
+                    <td>{e ? `pain ${e.values.pain ?? '—'}, ${e.exercises === 'all' ? 'all exercises' : e.exercises === 'some' ? 'some exercises' : 'no exercises'}${e.skipReason ? ` (${e.skipReason})` : ''}` : <i>no check-in</i>}</td>
+                    <td>{e && e.hardMovement !== 'none' ? `hard: ${e.hardMovement}` : ''}</td>
+                    <td>{signs.length ? <b>{signs.join(', ')}</b> : ''}</td>
+                  </tr>
+                );
+              })}
+            </tbody></table>
+          </div>
+
+          {pack.questionnaires.map((q) => {
+            const rows = p.periodic.filter((e) => e.values[q.measure] !== undefined);
+            const last = rows[rows.length - 1];
             return (
-              <tr key={d}>
-                <td>{d}{e?.answeredBy === 'caregiver' ? ' (caregiver)' : ''}</td>
-                <td>{e ? `pain ${e.values.pain ?? '—'}, ${e.exercises === 'all' ? 'all exercises' : e.exercises === 'some' ? 'some exercises' : 'no exercises'}${e.skipReason ? ` (${e.skipReason})` : ''}` : <i>no check-in</i>}</td>
-                <td>{e && e.hardMovement !== 'none' ? `hard: ${e.hardMovement}` : ''}</td>
-                <td>{signs.length ? <b>{signs.join(', ')}</b> : ''}</td>
-              </tr>
-            );
+              <div className="card" key={q.id} data-testid="questionnaire-card">
+                <h3>{q.title.en} <small>{q.items.length} question{q.items.length === 1 ? '' : 's'}, scored by adding the answers</small></h3>
+                {last ? <p>Latest score <b>{String(last.values[q.measure])}</b> on {last.date}{last.answeredBy === 'caregiver' ? ' (answered by a caregiver)' : ''}{rows.length > 1 ? `; before that ${rows.slice(0, -1).map((e) => `${String(e.values[q.measure])} (${e.date})`).join(', ')}` : ''}.</p> : <p className="tiny">Not answered yet.</p>}
+                <p className="tiny">{q.credit}{q.licenceConfirmed ? '' : ' (permission to use: default, not yet reviewed by your clinic)'}</p>
+              </div>);
           })}
-        </tbody></table>
-      </div>
 
-      {gate && (
-        <>
-          {gate.allMet && (
-            <div className="card ready" data-testid="gate-ready"><div><b>Ready for {pack.phases.find((x) => x.id === gate.toPhase)?.name.en}</b>
-              {gate.held
-                ? <p className="err">All criteria met, but progression is on hold. Sign-off is blocked until the hold is removed.</p>
-                : <p>All criteria met. For physio sign-off. The app never advances a patient by itself.</p>}
-              <button className="btn primary" disabled={!gate.canSignOff} onClick={() => apply({ type: 'sign-off-phase' })}>Sign off phase change</button></div></div>
+          {gate && (
+            <details className="card" open>
+              <summary><b>{pack.phases.find((x) => x.id === gate.fromPhase)?.name.en} to {pack.phases.find((x) => x.id === gate.toPhase)?.name.en}: gate criteria</b>&nbsp;<small>({gate.criteria.filter((c) => c.met).length}/{gate.criteria.length} met)</small></summary>
+              <table className="gate"><tbody>{gate.criteria.map((c) => (
+                <tr key={c.id}><td><span className={`check ${c.met ? 'met' : ''}`} role="img" aria-label={c.met ? 'met' : 'not met'}>{c.met ? '✓' : ''}</span></td><td>{c.label.en}<br /><small>needs {c.required}</small></td><td>{c.actual}</td><td><Src s={c.source} /></td></tr>))}</tbody></table>
+            </details>
           )}
-          <details className="card">
-            <summary><b>{pack.phases.find((x) => x.id === gate.fromPhase)?.name.en} to {pack.phases.find((x) => x.id === gate.toPhase)?.name.en}: gate criteria</b> ({gate.criteria.filter((c) => c.met).length}/{gate.criteria.length} met)</summary>
-            <table className="gate"><tbody>{gate.criteria.map((c) => (
-              <tr key={c.id}><td>{c.met ? '✅' : '⬜'}</td><td>{c.label.en}<br /><small>needs {c.required}</small></td><td>{c.actual}</td><td><Src s={c.source} /></td></tr>))}</tbody></table>
-          </details>
-        </>
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-history`} aria-labelledby={`${idBase}-tab-history`}>
+          <div className="card">
+            <h3>Treatment status</h3>
+            <p>{p.status === 'completed' ? <>Treatment complete since <b>{p.completedAt?.slice(0, 10)}</b>.</> : 'Active.'} <span className="tiny">Mark complete or erase in Settings.</span></p>
+          </div>
+          <AuditCard patient={p} />
+          {!pendingVideos && <FormReview patient={p} pack={pack} now={now} />}
+          <SessionsCard patient={p} pack={pack} />
+        </div>
+      )}
+
+      {tab === 'settings' && (
+        <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-settings`} aria-labelledby={`${idBase}-tab-settings`}>
+          <AccessCard patient={p} />
+          {signoffs.length > 0 && (
+            <details className="card placeholders">
+              <summary><span>ⓘ {signoffs.length} values in this protocol are a default value, not yet reviewed by your clinic</span></summary>
+              <ul>{signoffs.map((s, i) => <li key={i}>{s.where.replace(pack.id + ': ', '')}: <b>{s.value}</b></li>)}</ul>
+            </details>
+          )}
+          <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
+          <CurvesCard patient={p} pack={pack} now={now} />
+          <div className="dangerzone">
+            <h3>Treatment and data</h3>
+            <LifecycleCard patient={p} now={now} />
+          </div>
+        </div>
       )}
     </section>
+  );
+}
+
+/** The exercise the patient most often reported as hard in the last 14 days. */
+function hardest(p: Patient, asOf: string): { id: string; n: number } | null {
+  const from = addDays(asOf, -13);
+  const n = new Map<string, number>();
+  for (const d of p.daily) if (d.date >= from && d.date <= asOf && d.hardMovement && d.hardMovement !== 'none') n.set(d.hardMovement, (n.get(d.hardMovement) ?? 0) + 1);
+  const top = [...n.entries()].sort((a, b) => b[1] - a[1])[0];
+  return top ? { id: top[0], n: top[1] } : null;
+}
+
+function GateReady({ gate, pack, onApply }: { gate: NonNullable<ReturnType<typeof evaluateGate>>; pack: ProtocolPack; onApply: ApplyFn }) {
+  return (
+    <div className="card ready" data-testid="gate-ready"><div><b>Ready for {pack.phases.find((x) => x.id === gate.toPhase)?.name.en}</b>
+      {gate.held
+        ? <p className="err">All criteria met, but progression is on hold. Sign-off is blocked until the hold is removed.</p>
+        : <p className="tiny">All criteria met. For physio sign-off. The app never advances a patient by itself.</p>}
+      <button className="btn" disabled={!gate.canSignOff} onClick={() => onApply({ type: 'sign-off-phase' })}>Sign off phase change</button></div></div>
+  );
+}
+
+function AuditCard({ patient: p }: { patient: Patient }) {
+  return (
+    <div className="card" data-testid="audit">
+      <div className="cardhead"><h3>Audit log <small>({p.audit.length})</small></h3><button className="btn" disabled={p.audit.length === 0} onClick={() => downloadAudit(p)}>Download as CSV</button></div>
+      <p className="tiny">Every change to this patient's plan: who made it, when, what changed, and your written reason. It is saved on this device and cannot be edited.</p>
+      {p.audit.length === 0 ? <p className="tiny">No plan changes yet.</p> : (
+        <ul className="audit">{[...p.audit].reverse().map((a) => (
+          <li key={a.id}><b>{a.at.slice(0, 16).replace('T', ' ')}</b> · {a.who}: {a.manual && <span className="src PHYSIO_OVERRIDE">physio-initiated</span>} {a.summary}{a.note ? <> <i>“{a.note}”</i></> : null}</li>))}</ul>
+      )}
+    </div>
   );
 }
 
@@ -394,20 +528,19 @@ function ProposalCard({ patient: p, pack, r, now }: { patient: Patient; pack: Pr
   const reviewDate = review || a.teleReviewBy;
   return (
     <div className="card proposal" data-testid="proposal">
-      <h3>Proposed follow-up <small>(flag raised by a combination of rules; nothing changes until you approve)</small></h3>
+      <h3 title={`Source: ${srcText(pack.followUpProposal.source)}`}>Proposed follow-up <small>Raised by several rules together</small></h3>
       <table className="gate beforeafter"><thead><tr><th></th><th>Now</th><th>Proposed</th></tr></thead><tbody>
         <tr><td>Tele-review</td><td>{b.nextReviewDate ?? `every ${b.reviewEveryDays} days`}</td><td><b>by {a.teleReviewBy}</b> (within {a.teleReviewWithinHours} h)</td></tr>
-        <tr><td>Check-ins</td><td>every {b.checkInEveryDays} day(s)</td><td><b>every {a.checkInEveryDays} day(s) for {a.forDays} days</b> (until {a.until})</td></tr>
+        <tr><td>Check-ins</td><td>{everyDays(b.checkInEveryDays)}</td><td><b>{everyDays(a.checkInEveryDays)} for {a.forDays} days</b> (until {a.until})</td></tr>
       </tbody></table>
-      <p className="tiny">Source: {pack.followUpProposal.source}</p>
       {editing && (
         <p className="fu">
           <label>Tele-review by <input type="date" value={reviewDate} onChange={(e) => setReview(e.target.value)} /></label>
-          <label>Check in every <input type="number" min={1} max={14} value={days} onChange={(e) => setDays(Number(e.target.value))} /> day(s)</label>
+          <label>Check in every <input type="number" min={1} max={14} value={days} onChange={(e) => setDays(Number(e.target.value))} /> {days === 1 ? 'day' : 'days'}</label>
         </p>
       )}
-      <input aria-label="Note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-      <div className="btnrow">
+      <div className="btnrow proprow">
+        <input aria-label="Note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
         {!editing ? (
           <>
             <button className="btn primary" onClick={() => run({ type: 'change-follow-up', checkInEveryDays: a.checkInEveryDays, nextReviewDate: a.teleReviewBy, until: a.until, flagKey: prop.flagKey, proposalStatus: 'approved', note }, 'approved')}>Approve</button>
@@ -436,7 +569,7 @@ function AccessCard({ patient: p }: { patient: Patient }) {
   const qr = (() => { try { return qrSvg(url, 5); } catch { return null; } })();
   return (
     <details className="card access" data-testid="access" open={false}>
-      <summary><b>Patient link and QR code</b> · send it again, or let a new phone join</summary>
+      <summary><b>Patient link and QR code</b>&nbsp;<small>Send it again, or let a new phone join</small></summary>
       {!p.syncKey && <p className="tiny">Live sync is off for this patient, so the link opens their plan on one phone and their answers stay on that phone.</p>}
       {p.syncKey && sync.auth ? (
         <p>{email ? <>Patient account: <b>{email}</b>. They can sign in on any phone.</> : <>No patient account yet. The first person to open the link makes the account, so send it privately.</>}</p>
@@ -546,7 +679,7 @@ function LifecycleCard({ patient: p, now }: { patient: Patient; now: number }) {
         <input aria-label="Note for the audit log" placeholder={done ? 'Why is treatment starting again? (required)' : 'Why is treatment complete? (required)'} value={note} onChange={(e) => setNote(e.target.value)} />
         {done
           ? <button className="btn" onClick={() => change(() => reopenTreatment(p, note, ctx))}>Reopen treatment</button>
-          : <button className="btn primary" onClick={() => change(() => completeTreatment(p, note, ctx))}>Mark treatment complete</button>}
+          : <button className="btn" onClick={() => change(() => completeTreatment(p, note, ctx))}>Mark treatment complete</button>}
       </div>
       {err && <p className="err" role="alert">{err}</p>}
       {msg && <p className="okline" role="status">{msg}</p>}
@@ -576,22 +709,33 @@ function downloadAudit(p: Patient) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-function PlanCard({ patient: p, pack, now, onApply, err }: { patient: Patient; pack: ProtocolPack; now: number; onApply: ApplyFn; err: string }) {
+function PlanCard({ patient: p, pack, now, onApply, err, onAdjust }: { patient: Patient; pack: ProtocolPack; now: number; onApply: ApplyFn; err: string; onAdjust?: () => void }) {
   const st = getState();
   const exs = currentExercises(p, pack);
   const fu = currentFollowUp(p, pack, st.today);
   const swapped = Object.entries(p.plan.swaps);
+  void now;
   return (
     <div className="card plan" data-testid="plan">
-      <h3>Current plan</h3>
-      <ul className="planlist">
+      <div className="cardhead"><h3>Current plan</h3>{onAdjust && <button className="btn" onClick={onAdjust}>Adjust the treatment</button>}</div>
+      <dl className="facts">
+        <div><dt>Check-ins</dt><dd>{everyDays(fu.checkInEveryDays)}{p.plan.followUp?.until && <small> until {p.plan.followUp.until}</small>}</dd></div>
+        <div><dt>Next review</dt><dd>{fu.nextReviewDate ?? 'Not set'}</dd></div>
+        <div><dt>Progression</dt><dd>{p.plan.hold ? <><b className="holdtag">On hold since {p.plan.hold.at.slice(0, 10)}</b> <button className="linkbtn" onClick={() => onApply({ type: 'release-hold' })}>Remove hold</button></> : 'Not on hold'}</dd></div>
+      </dl>
+      <table className="extable"><thead><tr><th>Exercise</th><th>Dose</th><th>Video</th></tr></thead><tbody>
         {exs.map((id) => {
           const orig = swapped.find(([, v]) => v === id)?.[0];
-          return <li key={id}>{exerciseName(id, 'en')}<span className="sr-only">, </span>{getDemo(id) ? <span className="demobadge" title="Patients can watch a demonstration of this exercise">Video</span> : <span className="demobadge none" title="No demonstration attached yet. Add one under Exercise videos.">No video</span>}{orig && <> <small>(easier version of {exerciseName(orig, 'en')})</small> <button className="btn" onClick={() => onApply({ type: 'restore-exercise', exerciseId: id })}>Restore</button></>}</li>;
+          const ex = getExercise(id);
+          return (
+            <tr key={id}>
+              <td>{exerciseName(id, 'en')}{orig && <><br /><small>Easier version of {exerciseName(orig, 'en')}</small> <button className="linkbtn" onClick={() => onApply({ type: 'restore-exercise', exerciseId: id })}>Restore</button></>}</td>
+              <td><small>{ex ? L(ex.dose.text, 'en') : '—'}</small></td>
+              <td>{getDemo(id) ? <span className="demobadge" title="Patients can watch a demonstration of this exercise">Video</span> : <span className="demobadge none" title="No demonstration attached yet. Add one under More, Exercise videos.">No video</span>}</td>
+            </tr>
+          );
         })}
-      </ul>
-      <p>Check-ins: every <b>{fu.checkInEveryDays}</b> day(s) · Next review: <b>{fu.nextReviewDate ?? 'not set'}</b>{p.plan.followUp?.until && <> <small>(until {p.plan.followUp.until})</small></>}</p>
-      <p>Progression: {p.plan.hold ? <b className="holdtag">On hold since {p.plan.hold.at.slice(0, 10)}</b> : 'not on hold'} {p.plan.hold && <button className="btn" onClick={() => onApply({ type: 'release-hold' })}>Remove hold</button>}</p>
+      </tbody></table>
       {err && <p className="err" role="alert">{err}</p>}
       {(p.plan.instructions ?? []).length > 0 && (
         <>
@@ -599,15 +743,6 @@ function PlanCard({ patient: p, pack, now, onApply, err }: { patient: Patient; p
           <ul className="planlist">{(p.plan.instructions ?? []).map((x) => <li key={x.id}>{x.text}</li>)}</ul>
         </>
       )}
-      <details className="auditbox" data-testid="audit">
-        <summary className="btn" role="button">Audit log ({p.audit.length}) · see every plan change</summary>
-        <p className="tiny">Every change to this patient's plan: who made it, when, what changed, and your written reason. It is saved on this device and cannot be edited.</p>
-        <button className="btn" disabled={p.audit.length === 0} onClick={() => downloadAudit(p)}>Download as CSV</button>
-        {p.audit.length === 0 ? <p className="tiny">No plan changes yet.</p> : (
-          <ul className="audit">{[...p.audit].reverse().map((a) => (
-            <li key={a.id}><b>{a.at.slice(0, 16).replace('T', ' ')}</b> · {a.who}: {a.manual && <span className="src PHYSIO_OVERRIDE">physio-initiated</span>} {a.summary}{a.note ? <> <i>“{a.note}”</i></> : null}</li>))}</ul>
-        )}
-      </details>
     </div>
   );
 }
@@ -620,7 +755,7 @@ function OverridesCard({ patient: p, pack, onApply, err }: { patient: Patient; p
   const cur = list.find((x) => x.target === target);
   return (
     <details className="card overrides" data-testid="overrides">
-      <summary><b>Thresholds for this patient</b> ({p.plan.overrides.length} overridden)</summary>
+      <summary><b>Thresholds for this patient</b>&nbsp;<small>({p.plan.overrides.length} overridden)</small></summary>
       {p.plan.overrides.length > 0 && (
         <ul className="audit">{p.plan.overrides.map((o) => (
           <li key={o.id}>{o.label}: <s>{o.original}</s> <b>{o.value}</b> <span className="src">PHYSIO_OVERRIDE</span> · {o.by}, {o.at.slice(0, 10)} · “{o.reason}” <button className="btn" onClick={() => onApply({ type: 'remove-override', id: o.id })}>Remove</button></li>))}</ul>
@@ -642,7 +777,7 @@ function OverridesCard({ patient: p, pack, onApply, err }: { patient: Patient; p
 
 // ------------------------------------------------------------------ physio-initiated changes (Phase 5.4)
 type AdjustKind = 'add' | 'remove' | 'easier' | 'hold' | 'phase' | 'custom' | 'uncustom';
-function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
+function AdjustCard({ patient: p, pack, now, onClose }: { patient: Patient; pack: ProtocolPack; now: number; onClose: () => void }) {
   const st = getState();
   const [kind, setKind] = useState<AdjustKind>('add');
   const [ex, setEx] = useState('');
@@ -688,8 +823,8 @@ function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
     } catch (e) { setErr((e as Error).message); setDone(''); }
   };
   return (
-    <details className="card adjust" data-testid="adjust" open>
-      <summary><b>Adjust the treatment yourself</b></summary>
+    <section className="card adjust" data-testid="adjust" aria-label="Adjust the treatment">
+      <div className="cardhead"><h3>Adjust the treatment</h3><button type="button" className="iconbtn" aria-label="Close the form" onClick={onClose}>✕</button></div>
       <p className="tiny">Use this when you want to change the plan without waiting for a suggestion. You can go beyond the protocol. A reason is required for every change; it is saved in the audit log and the patient is told what changed.</p>
       <div className="fu">
         <select aria-label="What do you want to change" value={kind} onChange={(e) => { setKind(e.target.value as AdjustKind); setEx(''); setToPhase(''); setAck(false); setDone(''); setErr(''); }}>
@@ -746,7 +881,7 @@ function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
       </div>
       {err && <p className="err" role="alert">{err}</p>}
       {done && <p className="okline" role="status" data-testid="adjust-done">{done}</p>}
-    </details>
+    </section>
   );
 }
 
@@ -754,10 +889,10 @@ function AdjustCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
 function CurveNote({ c }: { c: ProtocolPack['expectedCurves'][number] }) {
   const o = curveOrigin(c);
   const why = c.source.replace(/^PHYSIO_(CLINIC|OVERRIDE): /, '');
-  if (o === 'placeholder') return <p className="err curvenote" data-testid="curve-note" data-origin="placeholder">⚠ {PLACEHOLDER_NOTE}</p>;
+  if (o === 'placeholder') return <p className="tiny curvenote" data-testid="curve-note" data-origin="placeholder">{DEFAULT_NOTE}.</p>;
   if (o === 'clinic') return <p className="tiny curvenote" data-testid="curve-note" data-origin="clinic">Clinic default for every patient with this condition. Reason: {why}</p>;
   if (o === 'patient') return <p className="tiny curvenote" data-testid="curve-note" data-origin="patient">Set for this patient. Reason: {why}</p>;
-  return <p className="tiny curvenote" data-testid="curve-note" data-origin="protocol">Source: {c.source}</p>;
+  return <p className="tiny curvenote" data-testid="curve-note" data-origin="protocol">Source: {srcText(c.source)}</p>;
 }
 
 function CurvesCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
@@ -797,7 +932,7 @@ function CurvesCard({ patient: p, pack, now }: { patient: Patient; pack: Protoco
     } catch (e) { fail(e); }
   };
   return (
-    <details className="card curves" data-testid="curves" open>
+    <details className="card curves" data-testid="curves">
       <summary><b>Expected recovery curves</b></summary>
       <p className="tiny">The shaded band on the charts is built from these. Replace a placeholder with your own protocol's numbers. A reason is required and is saved in the audit log.</p>
       {eff.expectedCurves.map((c) => {
