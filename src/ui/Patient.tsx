@@ -100,6 +100,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
   const last7 = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6));
   const sym = { all: ['ok', '✓'], some: ['part', '½'], none: ['miss', '✕'] } as const;
   const [allEx, setAllEx] = useState(false);
+  const [sheet, setSheet] = useState<string | null>(null);
   const shownEx = allEx ? exs : exs.slice(0, 5);
   const hintId = `cg-hint-${patient.id}`;
   return (
@@ -184,12 +185,15 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
             const ex = getExercise(id);
             return (
               <li key={id} className="exitem">
-                <span className="exthumb"><ExPicture src={ex?.picture} size={40} /></span>
-                <span className="extext"><b>{exerciseName(id, lang)}</b><small>{doseLine(patient, id, lang)}</small><DoseBy patient={patient} id={id} lang={lang} /><SwapInfo patient={patient} id={id} lang={lang} /></span>
+                <button type="button" className="exopen" onClick={() => setSheet(id)} aria-haspopup="dialog">
+                  <span className="exthumb"><ExPicture src={ex?.picture} size={40} /></span>
+                  <span className="extext"><b>{exerciseName(id, lang)}</b><small>{doseLine(patient, id, lang)}</small><ExTag patient={patient} id={id} lang={lang} /></span>
+                </button>
                 <DemoButton patient={patient} exerciseId={id} lang={lang} compact />
               </li>
             );
           })}</ul>
+          {sheet && <ExerciseSheet patient={patient} id={sheet} lang={lang} onClose={() => setSheet(null)} />}
           {exs.length > 5 && <button type="button" className="linkbtn" aria-expanded={allEx} onClick={() => setAllEx(!allEx)}>{allEx ? T('showFewer') : T('showAll', { n: exs.length })}</button>}
           <div className="exbtns">
             <button className="btn" data-testid="open-forms" onClick={() => go('forms')}>{(patient.formRequests ?? []).length ? fs(lang, 'fMine') : fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</button>
@@ -216,35 +220,44 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
   );
 }
 
-/** "Set by your physio on 10/11/2026" under a personal dose; also shows a note that is not about a swap. */
-function DoseBy({ patient, id, lang }: { patient: Patient; id: string; lang: Lang }) {
-  const d = patient.plan.doses?.[id];
+/** One small tag on an exercise row when there is more to see: an easier version, or a note from the physio. Details open in the sheet. */
+function ExTag({ patient, id, lang }: { patient: Patient; id: string; lang: Lang }) {
   const swapped = Object.values(patient.plan.swaps).includes(id);
-  const n = !swapped ? patient.plan.exerciseNotes?.[id] : undefined; // a swapped exercise shows its note in SwapInfo
-  if (!d && !n) return null;
-  const [y, m, dd] = (d ?? n)!.at.slice(0, 10).split('-');
-  return (
-    <span className="swapinfo">
-      {n && <span className="swap-note"><b>{t(lang, 'physioNote')}:</b> {n.text} <ReadAloud key={lang + n.text} text={`${t(lang, 'physioNote')}. ${n.text}`} lang={lang} /></span>}
-      <span className="swap-novideo">{t(lang, 'setByPhysio', { date: `${dd}/${m}/${y}` })}</span>
-    </span>
-  );
+  const note = patient.plan.exerciseNotes?.[id];
+  if (!swapped && !note) return null;
+  return <span className="extag" data-testid="swap-info">{swapped ? t(lang, 'easierTag') : t(lang, 'physioNote')} ›</span>;
 }
 
 /**
- * For an exercise the physio swapped in (an easier version): what it replaces, the physio's note for the patient, and,
- * when no video is attached yet, a line saying so. Renders nothing for an ordinary exercise.
+ * Everything about one exercise, on demand: picture, dose, what an easier version replaces, the physio's note (read aloud),
+ * when the dose was set, and the video (or a line saying there is none yet).
  */
-function SwapInfo({ patient, id, lang }: { patient: Patient; id: string; lang: Lang }) {
+function ExerciseSheet({ patient, id, lang, onClose }: { patient: Patient; id: string; lang: Lang; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => { ref.current?.showModal(); }, []);
+  const ex = getExercise(id);
   const orig = Object.entries(patient.plan.swaps).find(([, v]) => v === id)?.[0];
   const note = patient.plan.exerciseNotes?.[id];
-  if (!orig && !note) return null;
+  const set = patient.plan.doses?.[id] ?? note;
+  const date = set ? set.at.slice(0, 10).split('-').reverse().join('/') : '';
   return (
-    <span className="swapinfo" data-testid="swap-info">
-      {orig && <span className="swap-of">{t(lang, 'easierVersionOf', { name: exerciseName(orig, lang) })}</span>}
-      {note && <span className="swap-note"><b>{t(lang, 'physioNote')}:</b> {note.text} <ReadAloud key={lang + note.text} text={`${t(lang, 'physioNote')}. ${note.text}`} lang={lang} /></span>}
-      {orig && !demoFor(patient, id) && <span className="swap-novideo">{t(lang, 'noVideoYet')}</span>}
-    </span>
+    <dialog ref={ref} className="dialog exsheet" aria-labelledby={`exs-${id}`} onClose={onClose} onClick={(e) => { if (e.target === ref.current) ref.current.close(); }}>
+      <div className="exs-head">
+        <ExPicture src={ex?.picture} size={56} />
+        <div><h2 id={`exs-${id}`}>{exerciseName(id, lang)}</h2><p className="sub">{doseLine(patient, id, lang)}</p></div>
+      </div>
+      {orig && <p className="exs-line">{t(lang, 'easierVersionOf', { name: exerciseName(orig, lang) })}</p>}
+      {note && (
+        <div className="exs-note">
+          <small>{t(lang, 'physioNote')}</small>
+          <p>{note.text}</p>
+          <ReadAloud key={lang + note.text} text={`${t(lang, 'physioNote')}. ${note.text}`} lang={lang} />
+        </div>
+      )}
+      {demoFor(patient, id) ? <DemoButton patient={patient} exerciseId={id} lang={lang} /> : <p className="tiny">{t(lang, 'noVideoYet')}</p>}
+      {set && <p className="tiny">{t(lang, 'setByPhysio', { date })}</p>}
+      <button type="button" className="big secondary" autoFocus onClick={() => ref.current?.close()}>{t(lang, 'closeSheet')}</button>
+    </dialog>
   );
 }
 
@@ -308,6 +321,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack, problem }: { patient: Pa
   // Answers before "None of these", so "No, go back" on the confirmation screen restores them.
   const [beforeNone, setBeforeNone] = useState<Draft['warnings'] | null>(null);
   const [problemRest, setProblemRest] = useState(false);
+  const [sheet, setSheet] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [voiceMsg, setVoiceMsg] = useState('');
   const [typed, setTyped] = useState('');
@@ -406,6 +420,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack, problem }: { patient: Pa
       <Progress i={idx} n={order.length} />
       <CaregiverBanner patient={patient} lang={lang} />
       {problem && problemRest && step !== 'review' && step !== 'warnings' && <p className="hint" role="note">{T('problemContinue')}</p>}
+      {sheet && <ExerciseSheet patient={patient} id={sheet} lang={lang} onClose={() => setSheet(null)} />}
       {listening && <div className="voice" role="status">🎙️ {T('listening')}<br /><small>{L(pack.checkIn.voiceExample, lang)}</small></div>}
       <main className="checkin">
 
@@ -484,7 +499,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack, problem }: { patient: Pa
                 <div className="excard" key={id} data-ex={id}>
                   <div className="exhead">
                     <ExPicture src={ex?.picture} size={48} />
-                    <div><b>{exerciseName(id, lang)}</b>{ex && <small>{T('exDose')}: {doseLine(patient, id, lang)}</small>}<SwapInfo patient={patient} id={id} lang={lang} /></div>
+                    <div><b>{exerciseName(id, lang)}</b>{ex && <small>{T('exDose')}: {doseLine(patient, id, lang)}</small>}{(patient.plan.exerciseNotes?.[id] || Object.values(patient.plan.swaps).includes(id)) && <button type="button" className="extag linklike" onClick={() => setSheet(id)}>{Object.values(patient.plan.swaps).includes(id) ? T('easierTag') : T('physioNote')} ›</button>}</div>
                   </div>
                   <DemoButton patient={patient} exerciseId={id} lang={lang} />
                   <div className="yn">
