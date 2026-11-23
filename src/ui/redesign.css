@@ -593,3 +593,36 @@ label.check input { margin-top: 3px; flex: none; }
 .dialog-q { margin: 0 0 var(--s4); font-size: var(--fs-b); font-weight: 600; }
 .dialog-btns { display: flex; justify-content: flex-end; gap: var(--s2); }
 .dialog-btns .btn { min-height: 48px; min-width: 96px; }
+
+/* ---------- fix phase 2: patient side ---------- */
+.statuscard { display: flex; align-items: center; gap: var(--s3); padding: var(--s3); border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); }
+.statuscard .sc-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.statuscard.ok { background: #e8f4ec; border-color: #b9dcc6; }
+.statuscard.ok .sc-dot { background: var(--onplan); }
+.statuscard.watch { background: #fdf3e1; border-color: #f0d6a6; }
+.statuscard.watch .sc-dot { background: #d98a00; }
+.sc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sc-text b { font-weight: 600; font-size: var(--fs-b); color: var(--ink); }
+.sc-text small { font-size: var(--fs-s); color: var(--ink); }
+.statuscard .readaloud { min-height: 44px; flex: none; }
+.problembtn { min-height: 48px; width: 100%; color: var(--urgent); border-color: #f1c6c2; font-size: var(--fs-s); }
+.swapinfo { display: flex; flex-direction: column; gap: 2px; margin-top: var(--s1); font-size: 12px; }
+.swap-of { color: var(--teal); font-weight: 600; }
+.swap-note { color: var(--ink); }
+.swap-note .readaloud { min-height: 32px; padding: 0 var(--s2); font-size: 12px; margin-left: var(--s1); vertical-align: middle; }
+.swap-novideo { color: var(--muted); }
+.exquick { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.exquick li { padding: var(--s2) var(--s3); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--s2); }
+.exquick li:first-child { border-top: 0; }
+.exquick li.notdone { background: #fdf3e1; }
+.eq-row { display: flex; align-items: center; gap: var(--s3); }
+.eq-row .btn { min-height: 44px; flex: none; white-space: normal; max-width: 45%; text-align: center; }
+.confirmlist { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.confirmlist li { padding: var(--s2) var(--s3); border-top: 1px solid var(--line); font-size: var(--fs-b); }
+.confirmlist li:first-child { border-top: 0; }
+.confirmlist li span { color: var(--muted); margin-right: var(--s2); }
+.readaloud.icon { width: 44px; min-width: 44px; padding: 0; justify-content: center; }
+.statuscard { padding: var(--s2) var(--s3); gap: var(--s2); }
+.twobtns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.twobtns .btn { min-height: 48px; white-space: normal; text-align: center; line-height: 1.25; padding: var(--s1) var(--s2); }
+main.home { gap: var(--s3); padding-top: var(--s3); }

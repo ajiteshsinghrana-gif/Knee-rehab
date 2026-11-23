@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { applyVoice, draftFromEntry, isComplete, newDraft, saveCheckIn, saveWeekly, toDaily, unansweredSigns, weeklyMeasures, withDerived, saveQuestionnaire, dueState } from '../src/checkin';
+import { applyVoice, draftFromEntry, isComplete, newDraft, saveCheckIn, saveWeekly, toDaily, unansweredSigns, weeklyMeasures, weeklyComplete, withDerived, saveQuestionnaire, dueState } from '../src/checkin';
 import { parseVoice } from '../src/voice/parser';
 import { getPack } from '../src/engine/packs';
-import { makeAllPatients } from '../src/demo/seed';
+import { makeAllPatients, makeRavi } from '../src/demo/seed';
 import { diffDays } from '../src/engine/dates';
 import { triage } from '../src/engine/triage';
 import { DICT, t } from '../src/i18n';
@@ -112,7 +112,8 @@ describe('weekly self-test and questionnaire from the pack', () => {
   });
   it('saveWeekly refuses an incomplete test and saves a complete one', () => {
     const p1 = { ...ravi, currentPhase: 'p1' };
-    expect(() => saveWeekly(pack, p1, '2026-11-15', { extensionDeficitCm: 0 })).toThrow('incomplete');
+    expect(() => saveWeekly(pack, p1, '2026-11-15', {})).toThrow('incomplete'); // nothing filled in
+    expect(saveWeekly(pack, p1, '2026-11-15', { extensionDeficitCm: 0 }).periodic.at(-1)!.values).toEqual({ extensionDeficitCm: 0 }); // any item is enough
     const out = saveWeekly(pack, p1, '2026-11-15', { extensionDeficitCm: 0, flexionDeg: 120, kneeCircumferenceDiffCm: 1, slrLag: false });
     expect(out.periodic[out.periodic.length - 1].values.flexionDeg).toBe(120);
   });
@@ -141,5 +142,18 @@ describe('every patient-facing string exists in English and Hindi (rule 4)', () 
   it('the SAFETY banner mentions 112 in both languages', () => {
     expect(t('en', 'safetyTitle')).toContain('112');
     expect(t('hi', 'safetyTitle')).toContain('112');
+  });
+});
+
+describe('weekly self-test options (fix phase 2)', () => {
+  const pack = getPack('acl-reconstruction');
+  const ravi = makeRavi();
+  it('leaves out eyes-closed balance unless the physio switches it on for this patient', () => {
+    expect(weeklyMeasures(pack, ravi).map((m) => m.id)).not.toContain('balanceEyesClosedSec');
+    expect(weeklyMeasures(pack, { ...ravi, weeklyOptIn: ['balanceEyesClosedSec'] }).map((m) => m.id)).toContain('balanceEyesClosedSec');
+  });
+  it('a two-leg item needs both legs once either is filled', () => {
+    expect(weeklyComplete(pack, ravi, { bridgeReps: 12 })).toBe(false);
+    expect(weeklyComplete(pack, ravi, { bridgeReps: 12, bridgeRepsOther: 15 })).toBe(true);
   });
 });

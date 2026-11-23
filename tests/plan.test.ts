@@ -52,6 +52,12 @@ describe('approving an action changes the plan (Phase 2.4)', () => {
     expect(out.audit[0]).toMatchObject({ who: 'Demo physio', at: new Date(NOW).toISOString(), note: 'knee pain on squat', before: { exercise: 'squats' }, after: { exercise: 'mini-squats' } });
     expect(out.notices).toHaveLength(1);
     expect(p.audit).toHaveLength(0); // input is not mutated
+    expect(out.plan.exerciseNotes).toBeUndefined(); // no patient note unless the physio writes one
+  });
+  it('a note for the patient is kept with the easier exercise; the audit note stays private', () => {
+    const out = applyAction(p2(), pack, { type: 'regress-exercise', exerciseId: 'squats', note: 'knee pain on squat', patientNote: 'Only bend as far as is comfortable.' }, ctx);
+    expect(out.plan.exerciseNotes?.['mini-squats']).toMatchObject({ text: 'Only bend as far as is comfortable.', by: 'Demo physio' });
+    expect(JSON.stringify(out.notices)).not.toContain('knee pain on squat');
   });
   it('cannot regress an exercise with no easier version, or one not in the plan', () => {
     expect(() => applyAction(p2(), pack, { type: 'regress-exercise', exerciseId: 'walking' }, ctx)).toThrow(/easier/);

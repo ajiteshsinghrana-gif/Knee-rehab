@@ -413,6 +413,8 @@ export interface Patient {
   notices: Notice[];
   /** flagKey -> what the physio did with the follow-up proposal. */
   proposalStatus: Record<string, { status: 'approved' | 'modified' | 'rejected'; at: string; note?: string }>;
+  /** Weekly self-test items that are off unless the physio switches them on for this patient (e.g. eyes-closed balance). */
+  weeklyOptIn?: string[];
 }
 
 export interface FollowUp {
@@ -456,6 +458,8 @@ export interface Plan {
   curveOverrides?: CurveEdit[];
   /** Free-text instructions the physio wrote himself (Phase 6.3). The patient sees the text, never the reason. */
   instructions?: CustomInstruction[];
+  /** A short note for the patient about one exercise, keyed by exercise id (shown to the patient, e.g. when an easier version is swapped in). */
+  exerciseNotes?: Record<string, { text: string; at: string; by: string }>;
 }
 export interface CustomInstruction { id: string; text: string; at: string; }
 export interface AuditEntry {

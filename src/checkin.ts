@@ -132,18 +132,28 @@ export function saveCheckIn(p: Patient, e: DailyCheckIn): Patient {
 }
 
 // ---------------- weekly self-test, generated from measures ----------------
+/** Items left out of the weekly self-test unless the physio switches them on for that patient (harder or riskier to do alone). */
+export const OPT_IN_WEEKLY = new Set(['balanceEyesClosedSec']);
+export const optInWeeklyMeasures = (pack: ProtocolPack, p: Patient) => {
+  const order = pack.phases.find((x) => x.id === p.currentPhase)?.order ?? 1;
+  return pack.measures.filter((m) => OPT_IN_WEEKLY.has(m.id) && m.frequency === 'weekly' && (m.fromPhaseOrder ?? 1) <= order);
+};
 export const weeklyMeasures = (pack: ProtocolPack, p: Patient) => {
   const order = pack.phases.find((x) => x.id === p.currentPhase)?.order ?? 1;
-  return pack.measures.filter((m) => m.frequency === 'weekly' && !m.setBy && !m.derived && !m.pairOf && (m.fromPhaseOrder ?? 1) <= order);
+  return pack.measures.filter((m) => m.frequency === 'weekly' && !m.setBy && !m.derived && !m.pairOf && (m.fromPhaseOrder ?? 1) <= order
+    && (!OPT_IN_WEEKLY.has(m.id) || (p.weeklyOptIn ?? []).includes(m.id)));
 };
 
+/** The weekly test can be saved with any items filled in; at least one is needed. A two-leg item needs both legs once either is filled. */
 export function weeklyComplete(pack: ProtocolPack, p: Patient, vals: Record<string, Value | null>): boolean {
+  const filled = (id: string) => vals[id] !== null && vals[id] !== undefined;
+  let any = false;
   for (const m of weeklyMeasures(pack, p)) {
-    if (vals[m.id] === null || vals[m.id] === undefined) return false;
     const partner = pack.measures.find((x) => x.pairOf === m.id);
-    if (partner && (vals[partner.id] === null || vals[partner.id] === undefined || Number(vals[partner.id]) <= 0)) return false;
+    if (filled(m.id)) any = true;
+    if (partner && (filled(m.id) || filled(partner.id)) && (!filled(m.id) || !filled(partner.id) || Number(vals[partner.id]) <= 0)) return false;
   }
-  return true;
+  return any;
 }
 
 /** Adds derived limb-symmetry values. */

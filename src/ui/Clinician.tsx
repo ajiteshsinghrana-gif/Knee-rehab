@@ -30,6 +30,7 @@ import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
 import { SessionsCard } from './SessionsCard';
 import { FormReview } from './FormReview';
 import { pendingForms } from '../forms/model';
+import { optInWeeklyMeasures } from '../checkin';
 
 const TIER_LABEL: Record<Tier, string> = { SAFETY: 'SAFETY', URGENT: 'URGENT', REVIEW: 'REVIEW', ON_PLAN: 'ON PLAN' };
 const srcClass = (s: string) => s.split(/[;( ]/)[0].replace(/[^A-Z_]/g, '');
@@ -263,6 +264,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
   const [pick, setPick] = useState('');
   const [fuDate, setFuDate] = useState(addDays(st.today, 2));
   const [fuEvery, setFuEvery] = useState(1);
+  const [forPatient, setForPatient] = useState('');
   const PLAN_ACTIONS = ['regress-exercise', 'hold-progression', 'reassess-bring-visit-forward'];
 
   /** Apply a plan action (physio only). Errors are shown, never swallowed. */
@@ -286,7 +288,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
   const confirm = (a: string) => {
     const n = note[a];
     let act: PlanAction | null = null;
-    if (a === 'regress-exercise') { if (!pick) { setErr('Choose which exercise to make easier'); return; } act = { type: 'regress-exercise', exerciseId: pick, note: n }; }
+    if (a === 'regress-exercise') { if (!pick) { setErr('Choose which exercise to make easier'); return; } act = { type: 'regress-exercise', exerciseId: pick, note: n, patientNote: forPatient }; }
     if (a === 'hold-progression') act = { type: 'hold-progression', note: n };
     if (a === 'reassess-bring-visit-forward') act = { type: 'change-follow-up', checkInEveryDays: fuEvery, nextReviewDate: fuDate, note: n };
     if (act && apply(act, { action: a, status: 'approved' })) setModifying(null);
@@ -417,6 +419,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
                   </span>
                 )}
                 {modifying === a && <input aria-label="Note" placeholder="Note (optional)" value={note[a] ?? ''} onChange={(e) => setNote({ ...note, [a]: e.target.value })} />}
+                {modifying === a && a === 'regress-exercise' && <input aria-label="Note for the patient (optional, they will see it)" placeholder="Note for the patient (optional, they see it)" maxLength={300} value={forPatient} onChange={(e) => setForPatient(e.target.value)} />}
                 {modifying === a ? (
                   <>
                     <button className="btn primary" onClick={() => confirm(a)}>Confirm and apply</button>
@@ -526,6 +529,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
               <ul>{signoffs.map((s, i) => <li key={i}>{s.where.replace(pack.id + ': ', '')}: <b>{s.value}</b></li>)}</ul>
             </details>
           )}
+          <WeeklyItemsCard patient={p} pack={pack} onApply={apply} />
           <OverridesCard patient={p} pack={pack} onApply={apply} err={err} />
           <CurvesCard patient={p} pack={pack} now={now} />
           <div className="dangerzone">
@@ -547,6 +551,26 @@ function painChange(pts: { x: number; y: number }[]): string {
   const days = last.x - first.x;
   if (first.y === last.y) return `Steady at ${last.y} for ${days} day${days === 1 ? '' : 's'}`;
   return `${first.y} → ${last.y} in ${days} day${days === 1 ? '' : 's'}`;
+}
+
+/** Optional weekly self-test items (off by default) the physio can switch on for this patient. Each switch is logged. */
+function WeeklyItemsCard({ patient: p, pack, onApply }: { patient: Patient; pack: ProtocolPack; onApply: ApplyFn }) {
+  const items = optInWeeklyMeasures(pack, p);
+  if (!items.length) return null;
+  return (
+    <div className="card" data-testid="weekly-items">
+      <h3>Weekly self-test <small>Optional items, off unless you switch them on for this patient</small></h3>
+      {items.map((m) => {
+        const on = (p.weeklyOptIn ?? []).includes(m.id);
+        return (
+          <label key={m.id} className="check">
+            <input type="checkbox" checked={on} onChange={(e) => onApply({ type: 'set-weekly-item', measure: m.id, on: e.target.checked })} />
+            <span>{m.label.en} <small>({on ? 'on: the patient is asked this every week' : 'off: not asked'})</small></span>
+          </label>
+        );
+      })}
+    </div>
+  );
 }
 
 /** The exercise the patient most often reported as hard in the last 14 days. */
@@ -855,6 +879,7 @@ function AdjustCard({ patient: p, pack, now, onClose }: { patient: Patient; pack
   const [ex, setEx] = useState('');
   const [text, setText] = useState('');
   const [toPhase, setToPhase] = useState('');
+  const [forPatient, setForPatient] = useState('');
   const [reason, setReason] = useState('');
   const [ack, setAck] = useState(false);
   const [err, setErr] = useState('');
@@ -881,7 +906,7 @@ function AdjustCard({ patient: p, pack, now, onClose }: { patient: Patient; pack
   const action = (): PlanAction => {
     if (kind === 'add') return { type: 'set-exercises', add: [ex] };
     if (kind === 'remove') return { type: 'set-exercises', remove: [ex] };
-    if (kind === 'easier') return { type: 'regress-exercise', exerciseId: ex };
+    if (kind === 'easier') return { type: 'regress-exercise', exerciseId: ex, patientNote: forPatient };
     if (kind === 'custom') return { type: 'add-instruction', text };
     if (kind === 'uncustom') return { type: 'remove-instruction', id: ex };
     if (kind === 'hold') return p.plan.hold ? { type: 'release-hold' } : { type: 'hold-progression' };
@@ -942,6 +967,11 @@ function AdjustCard({ patient: p, pack, now, onClose }: { patient: Patient; pack
           </select>
         )}
       </div>
+      {kind === 'easier' && (
+        <label className="menufield" style={{ padding: 0 }}>Note for the patient (optional; they see it with the easier exercise, your reason stays private)
+          <input aria-label="Note for the patient" maxLength={300} placeholder="e.g. Only bend as far as is comfortable." value={forPatient} onChange={(e) => setForPatient(e.target.value)} />
+        </label>
+      )}
       {kind === 'custom' && <p className="tiny">The patient sees this text on their home screen and as a "what changed" notice. Your reason is not shown to them. It goes in the audit log.</p>}
       {kind === 'phase' && <p className="tiny">Moving phase resets this patient's exercise swaps and additions to the new phase's list.</p>}
       {warn && (

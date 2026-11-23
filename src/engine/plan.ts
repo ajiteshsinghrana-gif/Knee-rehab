@@ -61,7 +61,8 @@ export function pendingProposal(p: Patient, pack: ProtocolPack, tri: { tier: str
 
 // ---------------- actions ----------------
 export type PlanAction =
-  | { type: 'regress-exercise'; exerciseId: string; note?: string }
+  | { type: 'regress-exercise'; exerciseId: string; note?: string; patientNote?: string }
+  | { type: 'set-weekly-item'; measure: string; on: boolean; note?: string }
   | { type: 'restore-exercise'; exerciseId: string; note?: string }
   | { type: 'set-exercises'; add?: string[]; remove?: string[]; note?: string; notify?: boolean }
   | { type: 'move-phase'; toPhase: string; note: string }
@@ -101,6 +102,8 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       if (!to) throw new Error('No easier version is defined for this exercise yet');
       const original = Object.entries(plan.swaps).find(([, v]) => v === a.exerciseId)?.[0] ?? a.exerciseId;
       plan.swaps[original] = to;
+      // An optional note the patient sees with the easier exercise (the audit note stays private to the physio).
+      if (a.patientNote?.trim()) plan.exerciseNotes = { ...(plan.exerciseNotes ?? {}), [to]: { text: a.patientNote.trim().slice(0, 300), at, by: who } };
       changes.push({ kind: 'regress', from: a.exerciseId, to });
       audit = entry(a.type, `Regressed ${a.exerciseId} to ${to}`, { exercise: a.exerciseId }, { exercise: to }, a.note);
       break;
@@ -219,6 +222,14 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       plan = { ...plan, swaps: {}, added: [], removed: [] };
       changes.push({ kind: 'phase', phaseId: a.toPhase });
       audit = entry(a.type, `Phase moved by the physio: ${p.currentPhase} to ${a.toPhase} (${direction})${overrode ? ', protocol overridden' : ''}`, { phase: p.currentPhase }, { phase: a.toPhase, direction, overrodeProtocol: overrode, unmetCriteria: unmet, holdWasOn: !!plan.hold }, a.note.trim());
+      break;
+    }
+    case 'set-weekly-item': {
+      // The physio switches an optional weekly self-test item (e.g. eyes-closed balance) on or off for this patient.
+      const cur = p.weeklyOptIn ?? [];
+      const next = a.on ? [...new Set([...cur, a.measure])] : cur.filter((x) => x !== a.measure);
+      out = { ...out, weeklyOptIn: next };
+      audit = entry(a.type, `Weekly self-test: ${a.measure} switched ${a.on ? 'on' : 'off'} for this patient`, { on: cur.includes(a.measure) }, { on: a.on }, a.note);
       break;
     }
     case 'set-curve': {

@@ -18,6 +18,7 @@ import { speak, speakSupported } from '../voice/speak';
 import { currentExercises } from '../engine/plan';
 import { exerciseName, getExercise } from '../exercises/library';
 import { DemoButton } from './Demo';
+import { demoFor } from '../exercises/demos';
 import { AngleTool } from './AngleTool';
 import { noticeText } from '../notices';
 import { GuidedSession } from './GuidedSession';
@@ -32,7 +33,7 @@ const SKIP_EMOJI: Record<string, string> = { pain: '😣', fear: '😨', time: '
 const EXS = [['all', '✅'], ['some', '🟡'], ['none', '❌']] as const;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-type Screen = 'home' | 'checkin' | 'weekly' | 'monthly' | 'done' | 'session' | 'forms';
+type Screen = 'home' | 'checkin' | 'problem' | 'weekly' | 'monthly' | 'done' | 'session' | 'forms';
 
 export function PatientView({ patient }: { patient: Patient }) {
   const pack = getPack(patient.packId);
@@ -56,6 +57,7 @@ export function PatientView({ patient }: { patient: Patient }) {
       {screen === 'session' && <GuidedSession key={patient.id} patient={patient} pack={pack} lang={lang} onExit={(toCheckIn) => setScreen(toCheckIn ? 'checkin' : 'home')} onNeedHelp={(id) => { setFormEx(id); setScreen('forms'); }} />}
       {screen === 'forms' && <FormRequestScreen key={patient.id + (formEx ?? '')} patient={patient} pack={pack} lang={lang} exerciseId={formEx} onBack={() => { setFormEx(null); setScreen('home'); }} />}
       {screen === 'checkin' && <CheckIn key={patient.id} patient={patient} pack={pack} lang={lang} onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
+      {screen === 'problem' && <CheckIn key={patient.id + 'p'} patient={patient} pack={pack} lang={lang} problem onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
       {screen === 'weekly' && <Weekly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
       {screen === 'monthly' && <Monthly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
       {screen === 'done' && <Done patient={patient} pack={pack} lang={lang} onHome={() => setScreen('home')} />}
@@ -110,6 +112,19 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
           <span className="sr-only" id={hintId}>{T('caregiverHint')}</span>
         </label>
       </div>
+      {tri.tier !== 'SAFETY' && (() => {
+        // From the deterministic tier only: no diagnosis, no detail of which rule fired.
+        const ok = tri.tier === 'ON_PLAN';
+        const head = ok ? T('statusOnTrack', { n: Math.max(1, Math.floor(day / 7)) }) : T('statusReview');
+        const fact = T('factExercises', { n: last7.filter((d) => patient.daily.find((x) => x.date === d)?.exercises === 'all').length });
+        return (
+          <div className={`statuscard ${ok ? 'ok' : 'watch'}`} role="status" data-testid="status-card">
+            <span className="sc-dot" aria-hidden />
+            <span className="sc-text"><b>{head}</b><small>{fact}</small></span>
+            <ReadAloud key={lang + head} text={`${head}. ${fact}.`} lang={lang} compact />
+          </div>
+        );
+      })()}
       <Notices patient={patient} pack={pack} lang={lang} />
       {doneToday && <p className="okline">{T('doneToday')}</p>}
       {exs.length > 0 ? (
@@ -117,10 +132,16 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
         <div className="mainaction">
           <button className="big primary" data-testid="start-session" onClick={() => go('session')}>{ss(lang, 'sStart')}</button>
           <p className="tiny" id={`flow-${patient.id}`}>{T('sessionThenCheckin')}</p>
-          <button className="btn" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('onlyQuestions')}</button>
+          <div className="twobtns">
+            <button className="btn" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('onlyQuestions')}</button>
+            <button type="button" className="btn problembtn" data-testid="have-problem" onClick={() => go('problem')}>{T('haveProblem')}</button>
+          </div>
         </div>
       ) : (
-        <button className="big primary" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('startCheckIn')}</button>
+        <>
+          <button className="big primary" onClick={() => go('checkin')}>{doneToday ? T('editToday') : T('startCheckIn')}</button>
+          <button type="button" className="btn problembtn" data-testid="have-problem" onClick={() => go('problem')}>{T('haveProblem')}</button>
+        </>
       )}
       <section className="last7">
         <h3>{T('last7')}</h3>
@@ -147,7 +168,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
             return (
               <li key={id} className="exitem">
                 <span className="exthumb"><ExPicture src={ex?.picture} size={40} /></span>
-                <span className="extext"><b>{exerciseName(id, lang)}</b>{ex && <small>{L(ex.dose.text, lang)}</small>}</span>
+                <span className="extext"><b>{exerciseName(id, lang)}</b>{ex && <small>{L(ex.dose.text, lang)}</small>}<SwapInfo patient={patient} id={id} lang={lang} /></span>
                 <DemoButton patient={patient} exerciseId={id} lang={lang} compact />
               </li>
             );
@@ -178,17 +199,34 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
   );
 }
 
-function ReadAloud({ text, lang }: { text: string; lang: Lang }) {
+/**
+ * For an exercise the physio swapped in (an easier version): what it replaces, the physio's note for the patient, and,
+ * when no video is attached yet, a line saying so. Renders nothing for an ordinary exercise.
+ */
+function SwapInfo({ patient, id, lang }: { patient: Patient; id: string; lang: Lang }) {
+  const orig = Object.entries(patient.plan.swaps).find(([, v]) => v === id)?.[0];
+  const note = patient.plan.exerciseNotes?.[id];
+  if (!orig && !note) return null;
+  return (
+    <span className="swapinfo" data-testid="swap-info">
+      {orig && <span className="swap-of">{t(lang, 'easierVersionOf', { name: exerciseName(orig, lang) })}</span>}
+      {note && <span className="swap-note"><b>{t(lang, 'physioNote')}:</b> {note.text} <ReadAloud key={lang + note.text} text={`${t(lang, 'physioNote')}. ${note.text}`} lang={lang} /></span>}
+      {orig && !demoFor(patient, id) && <span className="swap-novideo">{t(lang, 'noVideoYet')}</span>}
+    </span>
+  );
+}
+
+function ReadAloud({ text, lang, compact }: { text: string; lang: Lang; compact?: boolean }) {
   const [on, setOn] = useState(false);
   const stopRef = useRef<null | (() => void)>(null);
   useEffect(() => () => { stopRef.current?.(); }, []); // leaving the question stops the voice
   if (!speakSupported(lang)) return null;
   return (
-    <button className="readaloud" aria-pressed={on} onClick={() => {
+    <button className={`readaloud${compact ? ' icon' : ''}`} aria-pressed={on} aria-label={compact ? t(lang, on ? 'stopReading' : 'readAloud') : undefined} onClick={() => {
       if (on) { stopRef.current?.(); setOn(false); return; }
       setOn(true);
       stopRef.current = speak(text, lang, () => setOn(false));
-    }}>🔊 {t(lang, on ? 'stopReading' : 'readAloud')}</button>
+    }}>🔊{compact ? null : <> {t(lang, on ? 'stopReading' : 'readAloud')}</>}</button>
   );
 }
 
@@ -222,13 +260,22 @@ function StepHead({ i, n, lang, onBack }: { i: number; n: number; lang: Lang; on
   );
 }
 
-function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pack: ProtocolPack; lang: Lang; onDone: () => void; onBack: () => void }) {
+/**
+ * The daily check-in. With `problem` ("I have a problem", any day) it opens on the warning signs; a Yes then leads on to the rest of
+ * today's questions so the physio gets a full check-in, and the same rules apply as in a normal check-in.
+ */
+function CheckIn({ patient, pack, lang, onDone, onBack, problem }: { patient: Patient; pack: ProtocolPack; lang: Lang; onDone: () => void; onBack: () => void; problem?: boolean }) {
   const T = (k: string, p?: Record<string, string | number>) => t(lang, k, p);
   const s = getState();
   const existing = patient.daily.find((d) => d.date === s.today);
   const [draft, setDraft] = useState<Draft>(() => (existing ? draftFromEntry(pack, patient, existing) : prefillFromSessions(newDraft(pack, patient), patient, s.today)));
-  const [step, setStep] = useState<Step>(existing ? 'review' : `m:${pack.checkIn.dailyMeasures[0]}`);
-  const [fromReview, setFromReview] = useState(!!existing);
+  const [step, setStep] = useState<Step>(problem ? 'warnings' : existing ? 'review' : `m:${pack.checkIn.dailyMeasures[0]}`);
+  const [fromReview, setFromReview] = useState(!problem && !!existing);
+  // "I did them all" switches to a short list where the patient changes only the ones they could not do.
+  const [quickEx, setQuickEx] = useState(() => allExercisesDone(draft));
+  // Answers before "None of these", so "No, go back" on the confirmation screen restores them.
+  const [beforeNone, setBeforeNone] = useState<Draft['warnings'] | null>(null);
+  const [problemRest, setProblemRest] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceMsg, setVoiceMsg] = useState('');
   const [typed, setTyped] = useState('');
@@ -242,7 +289,14 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
     ...pack.checkIn.dailyMeasures.map((m) => `m:${m}`), 'exercises', ...(!hasList && draft.exercises && draft.exercises !== 'all' ? ['why'] : []), 'hard',
     ...(precs.length ? ['precautions'] : []), 'warnings', 'review',
   ], [pack, draft.exercises, precs.length]);
-  const idx = Math.max(0, order.indexOf(step));
+  const idx = Math.max(0, order.indexOf(step === 'warnConfirm' ? 'warnings' : step));
+  /** What happens after the warning signs are answered (Next, or Yes on the "none of these" confirmation). */
+  const afterWarnings = (d: Draft) => {
+    if (!problem || isComplete(d)) { setFromReview(false); setStep('review'); return; }
+    const anyYes = Object.values(d.warnings).some((v) => v === true);
+    if (!anyYes && !existing) { setStep('problemOk'); return; }
+    setProblemRest(true); setFromReview(false); setStep(order[0]);
+  };
   const next = (cur: Step, d: Draft = draft) => {
     if (fromReview && cur !== 'warnings') { setStep('review'); return; }
     const o = [
@@ -311,9 +365,15 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
 
   return (
     <>
-      <StepHead i={idx} n={order.length} lang={lang} onBack={() => { stop.current?.(); (fromReview && step !== 'review') ? setStep('review') : idx === 0 || step === 'review' ? onBack() : setStep(order[idx - 1]); }} />
+      <StepHead i={idx} n={order.length} lang={lang} onBack={() => {
+        stop.current?.();
+        if (step === 'warnConfirm') { if (beforeNone) setDraft({ ...draft, warnings: beforeNone }); setStep('warnings'); return; }
+        if (step === 'problemOk' || (problem && !problemRest && step === 'warnings')) { onBack(); return; }
+        (fromReview && step !== 'review') ? setStep('review') : idx === 0 || step === 'review' ? onBack() : setStep(order[idx - 1]);
+      }} />
       <Progress i={idx} n={order.length} />
       <CaregiverBanner patient={patient} lang={lang} />
+      {problem && problemRest && step !== 'review' && step !== 'warnings' && <p className="hint" role="note">{T('problemContinue')}</p>}
       {listening && <div className="voice" role="status">🎙️ {T('listening')}<br /><small>{L(pack.checkIn.voiceExample, lang)}</small></div>}
       <main className="checkin">
 
@@ -358,7 +418,32 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
             <h2>{T('exTodayTitle')}</h2>
             {R(`${T('exTodayTitle')}. ${exIds.map((id) => exerciseName(id, lang)).join('. ')}`)}
             <p className="sub">{T('exTodaySub')}</p>
-            <button type="button" className={`big secondary quickall ${allExercisesDone(draft) ? 'sel' : ''}`} data-testid="did-all" aria-pressed={allExercisesDone(draft)} onClick={() => setDraft(markAllExercisesDone(draft))}>✓ {T('exAllDone')}</button>
+            <button type="button" className={`big secondary quickall ${allExercisesDone(draft) ? 'sel' : ''}`} data-testid="did-all" aria-pressed={allExercisesDone(draft)} onClick={() => { setDraft(markAllExercisesDone(draft)); setQuickEx(true); }}>✓ {T('exAllDone')}</button>
+            {quickEx ? (
+              <ul className="exquick" data-testid="ex-quick">{exIds.map((id) => {
+                const ex = getExercise(id);
+                const r = draft.results[id];
+                const setR = (v: { done: boolean | null; reason: string | null }) => setDraft({ ...draft, results: { ...draft.results, [id]: v } });
+                return (
+                  <li key={id} data-ex={id} className={r.done === false ? 'notdone' : ''}>
+                    <div className="eq-row">
+                      <ExPicture src={ex?.picture} size={40} />
+                      <span className="extext"><b>{exerciseName(id, lang)}</b><small>{r.done ? `✓ ${T('exDone')}` : `✕ ${T('exCouldnt')}`}</small></span>
+                      {r.done
+                        ? <button type="button" className="btn" onClick={() => setR({ done: false, reason: null })}>{T('couldntThis')}</button>
+                        : <button type="button" className="btn" onClick={() => setR({ done: true, reason: null })}>{T('didItAfterAll')}</button>}
+                    </div>
+                    {r.done === false && (
+                      <div className="why">
+                        <p>{T('exWhy')}</p>
+                        <div className="grid2">{pack.checkIn.skipReasons.map((k) => (
+                          <button key={k} className={`tile ${r.reason === k ? 'sel' : ''}`} aria-pressed={r.reason === k} onClick={() => setR({ done: false, reason: k })}><span className="emoji">{SKIP_EMOJI[k]}</span><span>{T(`skip_${k}`)}</span></button>))}</div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}</ul>
+            ) : (
             <div className="excards">{exIds.map((id) => {
               const ex = getExercise(id);
               const r = draft.results[id];
@@ -367,7 +452,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
                 <div className="excard" key={id} data-ex={id}>
                   <div className="exhead">
                     <ExPicture src={ex?.picture} size={48} />
-                    <div><b>{exerciseName(id, lang)}</b>{ex && <small>{T('exDose')}: {L(ex.dose.text, lang)}</small>}</div>
+                    <div><b>{exerciseName(id, lang)}</b>{ex && <small>{T('exDose')}: {L(ex.dose.text, lang)}</small>}<SwapInfo patient={patient} id={id} lang={lang} /></div>
                   </div>
                   <DemoButton patient={patient} exerciseId={id} lang={lang} />
                   <div className="yn">
@@ -384,6 +469,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
                 </div>
               );
             })}</div>
+            )}
             <button className="big primary stickynext" disabled={exIds.some((id) => draft.results[id].done === null || (draft.results[id].done === false && draft.results[id].reason === null))} onClick={() => next('exercises')}>{T('next')}</button>
           </>
         )}
@@ -431,16 +517,43 @@ function CheckIn({ patient, pack, lang, onDone, onBack }: { patient: Patient; pa
 
         {step === 'warnings' && (
           <>
-            <h2>{T('q_safety')}</h2>
-            {R(`${T('q_safety')} ${pack.warningSigns.map((w) => L(w.label, lang)).join('. ')}`)}
+            <h2>{problem ? T('problemTitle') : T('q_safety')}</h2>
+            {R(`${problem ? T('problemTitle') : T('q_safety')} ${pack.warningSigns.map((w) => L(w.label, lang)).join('. ')}`)}
+            {/* "I have a problem": a red-flag Yes shows what to do straight away, before anything else is asked. */}
+            {problem && pack.warningSigns.some((w) => draft.warnings[w.id] && w.tier === 'SAFETY') && <SafetyBanner lang={lang} emergency={hasEmergencySign(draft.warnings as Record<string, boolean>)} />}
             <p className="hint">{T('warnStepIntro')}</p>
-            {canMarkNoWarnings(draft) && <button type="button" className={`big secondary quickall ${noWarningsAnswered(draft) ? 'sel' : ''}`} data-testid="none-of-these" aria-pressed={noWarningsAnswered(draft)} onClick={() => setDraft(markNoWarnings(draft))}>{T('noneOfThese')}</button>}
+            {canMarkNoWarnings(draft) && <button type="button" className={`big secondary quickall ${noWarningsAnswered(draft) ? 'sel' : ''}`} data-testid="none-of-these" aria-pressed={noWarningsAnswered(draft)} onClick={() => {
+              const d = markNoWarnings(draft);
+              setBeforeNone(draft.warnings);
+              setDraft(d);
+              if (!unansweredSigns(d).length) setStep('warnConfirm'); // a sign voice heard as "yes" still has to be tapped first
+            }}>{T('noneOfThese')}</button>}
             <div className="safety">{pack.warningSigns.map((w) => (
               <div className="srow" key={w.id}>
                 <span>{L(w.label, lang)}{draft.warnings[w.id] === null && draft.suggested[w.id] !== undefined && <><br /><span className="sugnote">{T('suggestedByVoice')}</span></>}</span>
                 {yn(draft.warnings[w.id], draft.suggested[w.id], (v) => setDraft({ ...draft, warnings: { ...draft.warnings, [w.id]: v } }), L(w.label, lang))}
               </div>))}</div>
-            <button className="big primary stickynext" disabled={unanswered.length > 0} onClick={() => { setFromReview(false); setStep('review'); }}>{unanswered.length ? T('answerEverySign') : T('next')}</button>
+            <button className="big primary stickynext" disabled={unanswered.length > 0} onClick={() => afterWarnings(draft)}>{unanswered.length ? T('answerEverySign') : T('next')}</button>
+          </>
+        )}
+
+        {step === 'warnConfirm' && (
+          <>
+            <h2>{T('confirmNoneTitle')}</h2>
+            {R(`${T('confirmNoneTitle')} ${pack.warningSigns.map((w) => L(w.label, lang)).join('. ')}`)}
+            <ul className="confirmlist" data-testid="none-confirm">{pack.warningSigns.map((w) => <li key={w.id}><span aria-hidden>✕</span> {L(w.label, lang)}</li>)}</ul>
+            <button className="big primary" onClick={() => afterWarnings(draft)}>{T('confirmNoneYes')}</button>
+            <button className="big secondary" onClick={() => { if (beforeNone) setDraft({ ...draft, warnings: beforeNone }); setStep('warnings'); }}>{T('confirmNoneBack')}</button>
+          </>
+        )}
+
+        {step === 'problemOk' && (
+          <>
+            <h2>{T('thanks')}</h2>
+            <p>{T('problemNone')}</p>
+            {R(T('problemNone'))}
+            <button className="big primary" onClick={onBack}>{T('backHome')}</button>
+            <button className="big secondary" onClick={() => { setProblemRest(true); setStep(order[0]); }}>{T('onlyQuestions')}</button>
           </>
         )}
 
@@ -504,6 +617,7 @@ function Weekly({ patient, pack, lang, onDone, onBack }: { patient: Patient; pac
     <main>
       <button className="back" onClick={onBack}>← {T('backHome')}</button>
       <h2>{T('weeklyTitle')}</h2>
+      <p className="sub">{T('weeklyOptional')}</p>
       <CaregiverBanner patient={patient} lang={lang} />
       {ms.map((m) => {
         const partner = pack.measures.find((x) => x.pairOf === m.id);
@@ -534,7 +648,7 @@ function Weekly({ patient, pack, lang, onDone, onBack }: { patient: Patient; pac
           </div>
         );
       })}
-      <button className="big primary" disabled={!ok} onClick={() => { updatePatient(patient.id, (p) => saveWeekly(pack, p, getState().today, vals, Object.fromEntries(Object.entries(photos).filter(([, v]) => v)), methods, answerer(patient))); onDone(); }}>{ok ? T('saveWeekly') : T('fillAll')}</button>
+      <button className="big primary" disabled={!ok} onClick={() => { updatePatient(patient.id, (p) => saveWeekly(pack, p, getState().today, vals, Object.fromEntries(Object.entries(photos).filter(([, v]) => v)), methods, answerer(patient))); onDone(); }}>{ok ? T('saveWeekly') : T('fillOne')}</button>
     </main>
   );
 }
