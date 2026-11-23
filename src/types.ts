@@ -365,8 +365,12 @@ export interface PeriodicEntry {
   values: Record<string, Value>;
   /** measure id -> photo file name (upload arrives with the backend). */
   photos?: Record<string, string>;
-  /** measure id -> 'photo' when the number was measured on a photo in the app (Phase 4.1). */
-  methods?: Record<string, 'photo'>;
+  /** measure id -> how the number was measured: on a photo (Phase 4.1), with the phone's tilt sensor, or typed. */
+  methods?: Record<string, 'photo' | 'phone' | 'manual'>;
+  /** Where the reading was taken. Absent means at home (the patient's weekly self-test). */
+  where?: 'home' | 'clinic';
+  /** measure id -> where the photo is kept: on the phone that took it, or in the clinic's private cloud store. */
+  photoRefs?: Record<string, { where: 'device' | 'cloud'; ref: string }>;
   /** Who typed the answers. Absent means the patient (Phase 5.3). */
   answeredBy?: AnsweredBy;
 }

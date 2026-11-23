@@ -822,3 +822,16 @@ main.home { gap: var(--s3); padding-top: var(--s3); }
 .visitrem { background: var(--teal-soft); border-color: #bfdede; }
 .visitrem .wa-tag { color: var(--teal); }
 @media (max-width: 720px) { .tvrow { min-height: 48px; } .mvbtns { width: 100%; } .mvbtns .btn { flex: 1; } }
+
+/* ---------- goniometer ---------- */
+.gonio { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--hover); }
+.gonio-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
+.gonio-head small { color: var(--muted); font-size: 12px; }
+.pose { width: 100%; max-width: 320px; height: auto; color: var(--ink); align-self: center; background: var(--surface); border-radius: var(--radius); }
+.gonio-say { margin: 0; font-size: var(--fs-b); line-height: 1.45; display: flex; gap: var(--s2); align-items: flex-start; justify-content: space-between; }
+.gonio-result { margin: 0; font-size: var(--fs-b); font-weight: 600; display: flex; gap: var(--s2); align-items: center; justify-content: space-between; }
+.gonio .linkbtn { align-self: center; min-height: 44px; }
+.sendphoto { font-size: var(--fs-s); }
+.legend .lg-hollow { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 2px solid; background: #fff; margin-right: 6px; vertical-align: middle; }
+.legend .lg-square { display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: middle; }
+.measphotos a { margin-left: var(--s2); }

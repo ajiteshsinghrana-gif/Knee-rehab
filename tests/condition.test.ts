@@ -196,6 +196,12 @@ describe('expected recovery for written conditions (Phase 3.4)', () => {
     expect(pack.rules.find((r) => r.id === 'C1')).toMatchObject({ type: 'belowCurve', measure: 'm1' });
     let p = withDays(patientOn('custom-c1'), 45);
     p = { ...p, periodic: [{ date: '2026-11-14', values: { m1: 5 } }] };
+    // One home reading never flags on its own (physio feedback round)...
+    expect(triage(p, pack, { nowMs: NOW }).triggers.some((t) => t.ruleId === 'C1')).toBe(false);
+    // ...two weekly tests in a row below the band do, and so does one reading taken in clinic.
+    p = { ...p, periodic: [{ date: '2026-11-10', values: { m1: 0 } }, { date: '2026-11-14', values: { m1: 5 } }] };
+    expect(triage(p, pack, { nowMs: NOW }).triggers.some((t) => t.ruleId === 'C1')).toBe(true);
+    p = { ...p, periodic: [{ date: '2026-11-14', values: { m1: 5 }, where: 'clinic' as const }] };
     expect(triage(p, pack, { nowMs: NOW }).triggers.some((t) => t.ruleId === 'C1')).toBe(true);
     p = { ...p, periodic: [{ date: '2026-11-14', values: { m1: 250 } }] };
     expect(triage(p, pack, { nowMs: NOW }).triggers.some((t) => t.ruleId === 'C1')).toBe(false);

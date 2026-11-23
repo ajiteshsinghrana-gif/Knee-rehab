@@ -141,10 +141,17 @@ function belowCurve(r: Extract<Rule, { type: 'belowCurve' }>, p: Patient, pack: 
   const wk = weeksSince(p, lv.date);
   const exp = curveAt(c.points, wk);
   const v = Number(lv.value);
-  const below = c.better === 'higher' ? v < exp - c.tolerance : v > exp + c.tolerance;
-  return below
-    ? trig(r, `${r.measure} ${v} at week ${wk.toFixed(1)}; expected ${exp.toFixed(1)} (band +/- ${c.tolerance})`, d)
-    : null;
+  const isBelow = (val: number, e: number) => (c.better === 'higher' ? val < e - c.tolerance : val > e + c.tolerance);
+  if (!isBelow(v, exp)) return null;
+  // A home reading (the patient's own, by phone, photo or typed) never flags on its own: it counts only when the weekly test
+  // before it was below the band too. A reading the physio took in clinic counts alone (physio feedback round).
+  const entry = p.periodic.find((e) => e.date === lv.date && e.values[r.measure] !== undefined);
+  if (entry?.where !== 'clinic') {
+    const pv = previousMeasure(p, pack, r.measure, d);
+    if (!pv || !isBelow(Number(pv.value), curveAt(c.points, weeksSince(p, pv.date)))) return null;
+    return trig(r, `${r.measure} ${v} at week ${wk.toFixed(1)} and ${pv.value} the week before, both below expected (band +/- ${c.tolerance}); home readings`, d);
+  }
+  return trig(r, `${r.measure} ${v} at week ${wk.toFixed(1)}; expected ${exp.toFixed(1)} (band +/- ${c.tolerance}); measured in clinic`, d);
 }
 
 function gateOverdue(r: Extract<Rule, { type: 'gateOverdue' }>, p: Patient, pack: ProtocolPack, d: string): Trigger | null {

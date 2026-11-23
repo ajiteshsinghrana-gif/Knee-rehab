@@ -167,12 +167,13 @@ export function withDerived(pack: ProtocolPack, vals: Record<string, Value>): Re
   return out;
 }
 
-export function saveWeekly(pack: ProtocolPack, p: Patient, date: string, vals: Record<string, Value | null>, photos: Record<string, string> = {}, methods: Record<string, 'photo'> = {}, answeredBy: AnsweredBy = 'patient'): Patient {
+export function saveWeekly(pack: ProtocolPack, p: Patient, date: string, vals: Record<string, Value | null>, photos: Record<string, string> = {}, methods: Record<string, 'photo' | 'phone' | 'manual'> = {}, answeredBy: AnsweredBy = 'patient', photoRefs: Record<string, { where: 'device' | 'cloud'; ref: string }> = {}): Patient {
   if (!weeklyComplete(pack, p, vals)) throw new Error('Weekly test incomplete');
   const clean = Object.fromEntries(Object.entries(vals).filter(([, v]) => v !== null && v !== undefined)) as Record<string, Value>;
   // a method is only kept for a number that was actually saved
   const kept = Object.fromEntries(Object.entries(methods).filter(([k]) => clean[k] !== undefined));
-  const entry = { date, values: withDerived(pack, clean), ...(Object.keys(photos).length ? { photos } : {}), ...(Object.keys(kept).length ? { methods: kept } : {}), ...(answeredBy === 'caregiver' ? { answeredBy } : {}) };
+  const refs = Object.fromEntries(Object.entries(photoRefs).filter(([k]) => clean[k] !== undefined));
+  const entry = { date, values: withDerived(pack, clean), where: 'home' as const, ...(Object.keys(photos).length ? { photos } : {}), ...(Object.keys(kept).length ? { methods: kept } : {}), ...(Object.keys(refs).length ? { photoRefs: refs } : {}), ...(answeredBy === 'caregiver' ? { answeredBy } : {}) };
   return { ...p, periodic: [...p.periodic.filter((x) => !(x.date === date && x.values.tsk11 === undefined)), entry].sort((a, b) => a.date.localeCompare(b.date)) };
 }
 

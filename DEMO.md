@@ -66,3 +66,13 @@ Patient screen: **Start my exercises**. Tap through one exercise (Rep done, rest
 - **Meera** (Overview): a red flag suggests only "Call the patient" and "Refer to the surgeon or doctor today", and the overdue escalation step to the clinic's backup contact (set one under the gear first).
 - **More, Clinic summary**: adherence, time from flag to review, patients per physio, and each rule's hit rate from "Was this flag useful?".
 - **Add patient, General (no surgery)**: any patient, any exercises, generic rules only.
+
+## Optional: physio feedback round (2 to 3 min)
+
+- **On a phone**: the physio dashboard works at phone width. Tap a patient, then **Call** or **WhatsApp** in the header (demo numbers are all zeros and reach nobody).
+- **Today's visits** at the top of the worklist (Arjun 10:30, Kamla 16:00). Meera's session yesterday waits for one tap: **Attended** or **Missed** (missed adds rule V1).
+- **Patient phone**: Ravi sees "Your next session"; Imran (Bengali) gets tomorrow's reminder; Kamla (Hindi) today's.
+- **Plan tab**: Advice from your physio (the patient sees it with read-aloud), **Save as my template**, clinic sessions.
+- **Progress tab**: Ravi's **Exercise record** (squats stopped because it hurt, step-ups skipped; tap a cell). Kamla's knee-bend chart: hollow circles at home, squares in clinic; **Add a clinic reading**.
+- **+ Add patient**: General (no fixed protocol) with a typed diagnosis, More details, or start from a saved template.
+- **Weekly self-test, knee bend**: **Measure with your phone** (needs a real phone with a motion sensor; lie on your front, phone on the back of the lower leg, two readings averaged).

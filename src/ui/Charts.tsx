@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 export interface Pt { x: number; y: number }
-export interface Series { name: string; color: string; points: Pt[]; dashed?: boolean; dots?: boolean }
+export interface Series { name: string; color: string; points: Pt[]; dashed?: boolean; dots?: boolean; noLine?: boolean; marker?: 'dot' | 'hollow' | 'square' }
 export interface Band { x: number; lo: number; hi: number }
 
 const scale = (d0: number, d1: number, r0: number, r1: number) => (v: number) => r0 + ((v - d0) / (d1 - d0 || 1)) * (r1 - r0);
@@ -41,12 +41,16 @@ export function LineChart(p: { title: string; note?: string; xLabel: string; yLa
         {(p.refs ?? []).map((r) => (<g key={r.label}><line x1={52} x2={588} y1={Y(r.y)} y2={Y(r.y)} stroke={r.color} strokeDasharray="4 4" strokeWidth="1" /><text x={586} y={Y(r.y) - 4} textAnchor="end" fontSize="12" fill={r.color} stroke="#fff" strokeWidth="4" paintOrder="stroke">{r.label}</text></g>))}
         {p.series.map((s) => (
           <g key={s.name}>
-            <path d={path(s.points)} fill="none" stroke={s.color} strokeWidth="2" strokeDasharray={s.dashed ? '6 5' : undefined} />
-            {s.dots && s.points.map((q, i) => <circle key={i} cx={X(q.x)} cy={Y(q.y)} r={i === s.points.length - 1 ? 4 : 2.5} fill={s.color} />)}
+            {!s.noLine && <path d={path(s.points)} fill="none" stroke={s.color} strokeWidth="2" strokeDasharray={s.dashed ? '6 5' : undefined} />}
+            {s.dots && s.points.map((q, i) => s.marker === 'square'
+              ? <rect key={i} x={X(q.x) - 4.5} y={Y(q.y) - 4.5} width={9} height={9} fill={s.color} />
+              : s.marker === 'hollow'
+                ? <circle key={i} cx={X(q.x)} cy={Y(q.y)} r={4.5} fill="#fff" stroke={s.color} strokeWidth="2" />
+                : <circle key={i} cx={X(q.x)} cy={Y(q.y)} r={i === s.points.length - 1 ? 4 : 2.5} fill={s.color} />)}
           </g>
         ))}
       </svg>
-      <div className="legend">{p.series.map((s) => (<span key={s.name}><i style={{ background: s.color }} />{s.name}</span>))}{band && <span><i style={{ background: '#0a6b6b', opacity: 0.3 }} />expected band</span>}</div>
+      <div className="legend">{p.series.map((s) => (<span key={s.name}>{s.marker === 'hollow' ? <i className="lg-hollow" style={{ borderColor: s.color }} /> : s.marker === 'square' ? <i className="lg-square" style={{ background: s.color }} /> : <i style={{ background: s.color }} />}{s.name}</span>))}{band && <span><i style={{ background: '#0a6b6b', opacity: 0.3 }} />expected band</span>}</div>
     </figure>
   );
 }

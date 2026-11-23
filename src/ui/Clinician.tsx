@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type Keyboa
 import { Menu } from './TopBar';
 import { LoginCard } from './Login';
 import { DEFAULT_RETENTION_YEARS, completeTreatment, eraseLocal, isActive, reopenTreatment, retentionDue, retentionEnd } from '../lifecycle';
-import { physioErasePatient, physioNewClaimPin } from '../sync/engine';
+import { physioClipUrl, physioErasePatient, physioNewClaimPin } from '../sync/engine';
 import { getSyncStatus, physioResetPatientLink, subscribeSync } from '../sync/engine';
 import { inviteUrl } from '../onboarding';
 import { qrSvg } from '../qr';
@@ -38,6 +38,7 @@ import { hasPhone, telHref, waHref } from '../contact';
 import { templateFromPatient } from '../templates';
 import { exerciseRecord, reasonLabel } from '../exerciseRecord';
 import { nextVisit, nowStamp, toMark, visitCounts, visitWhen } from '../visits';
+import { Goniometer } from './Goniometer';
 import { DetailsFields } from './DetailsFields';
 import { deleteLocalVideo, loadLocalVideo, newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { validHours } from '../engine/hours';
@@ -506,14 +507,24 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             </div>
             {curves.map((c) => {
               const m = pack.measures.find((x) => x.id === c.measure)!;
-              const pts = p.periodic.filter((e) => e.values[c.measure] !== undefined).map((e) => ({ x: weeksSince(p, e.date), y: Number(e.values[c.measure]) }));
+              const rows = p.periodic.filter((e) => e.values[c.measure] !== undefined);
+              const pts = rows.map((e) => ({ x: weeksSince(p, e.date), y: Number(e.values[c.measure]) }));
+              const homePts = rows.filter((e) => e.where !== 'clinic').map((e) => ({ x: weeksSince(p, e.date), y: Number(e.values[c.measure]) }));
+              const clinicPts = rows.filter((e) => e.where === 'clinic').map((e) => ({ x: weeksSince(p, e.date), y: Number(e.values[c.measure]) }));
               const placeholder = curveOrigin(c) === 'placeholder';
               return (
                 <div className="card" key={c.measure}>
                   <LineChart title={`${L(m.short ?? m.label, 'en')} vs expected`} note={placeholder ? DEFAULT_NOTE : undefined} xLabel={`weeks ${pack.anchorLabel.en}`} yLabel={m.unit ?? ''}
-                    series={[{ name: 'Measured', color: '#0a6b6b', points: pts, dots: true }, { name: 'Expected', color: '#8a979c', dashed: true, points: c.points.map(([x, y]) => ({ x, y })) }]}
+                    series={[
+                      { name: 'Trend', color: '#9cc4c4', points: pts },
+                      ...(homePts.length ? [{ name: 'Measured at home', color: '#0a6b6b', points: homePts, dots: true, noLine: true, marker: 'hollow' as const }] : []),
+                      ...(clinicPts.length ? [{ name: 'Measured in clinic', color: '#12355b', points: clinicPts, dots: true, noLine: true, marker: 'square' as const }] : []),
+                      { name: 'Expected', color: '#8a979c', dashed: true, points: c.points.map(([x, y]) => ({ x, y })) },
+                    ]}
                     band={c.points.map(([x, y]) => ({ x, lo: y - c.tolerance, hi: y + c.tolerance }))} />
                   {!placeholder && <CurveNote c={c} />}
+                  <MeasurePhotos patient={p} measure={c.measure} />
+                  {c.measure === 'flexionDeg' && p.status !== 'completed' && <ClinicReading patient={p} measure={c.measure} now={now} />}
                 </div>
               );
             })}
@@ -674,6 +685,67 @@ function VisitsCard({ patient: p, now }: { patient: Patient; now: number }) {
         <button className="btn" onClick={add}>Set next session</button>
         {msg && <small className="tiny" role="status">{msg}</small>}
       </div>
+    </div>
+  );
+}
+
+/** Photos the patient chose to send with a weekly test (kept on their phone, or in the clinic's private cloud store). */
+function MeasurePhotos({ patient: p, measure }: { patient: Patient; measure: string }) {
+  const refs = p.periodic.filter((e) => e.photoRefs?.[measure]).map((e) => ({ date: e.date, ...e.photoRefs![measure] }));
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true; const made: string[] = [];
+    void (async () => {
+      const out: Record<string, string> = {};
+      for (const r of refs) {
+        try {
+          if (r.where === 'device') { const b = await loadLocalVideo(r.ref); if (b) { const u = URL.createObjectURL(b); made.push(u); out[r.ref] = u; } }
+          else out[r.ref] = await physioClipUrl(p, r.ref);
+        } catch { /* not available on this device */ }
+      }
+      if (live) setUrls(out);
+    })();
+    return () => { live = false; made.forEach((u) => URL.revokeObjectURL(u)); };
+  }, [refs.map((r) => r.ref).join()]);
+  if (!refs.length) return null;
+  return (
+    <p className="tiny measphotos">Photos from the patient: {refs.map((r) => urls[r.ref]
+      ? <a key={r.ref} href={urls[r.ref]} target="_blank" rel="noopener noreferrer">{r.date}</a>
+      : <span key={r.ref} title="Kept on the patient's phone; not available here">{r.date} (on the patient's phone)</span>)}</p>
+  );
+}
+
+/** A knee-bend reading the physio takes in clinic: typed from a goniometer, or with the same phone tool. Drawn as a square. Logged. */
+function ClinicReading({ patient: p, measure, now }: { patient: Patient; measure: string; now: number }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState('');
+  const [how, setHow] = useState<'manual' | 'phone'>('manual');
+  const [phone, setPhone] = useState(false);
+  const [msg, setMsg] = useState('');
+  const save = () => {
+    const n = Number(val);
+    if (!Number.isFinite(n) || n < 0 || n > 170) { setMsg('Enter a number between 0 and 170.'); return; }
+    const st = getState();
+    const entry = { date: st.today, values: { [measure]: Math.round(n) }, where: 'clinic' as const, methods: { [measure]: how } };
+    updatePatient(p.id, (q) => withAuditNote({ ...q, periodic: [...q.periodic, entry].sort((a, b) => a.date.localeCompare(b.date)) }, 'clinic-reading', `Knee bend measured in clinic: ${Math.round(n)} degrees (${how === 'phone' ? 'phone tilt sensor' : 'typed'})`, null, { [measure]: Math.round(n) }, 'Measured in clinic', { nowMs: now, today: st.today }));
+    setOpen(false); setVal(''); setMsg('Saved as a clinic reading.');
+  };
+  if (!open) return <div className="btnrow"><button className="btn" onClick={() => { setOpen(true); setMsg(''); }}>Add a clinic reading</button>{msg && <small className="okline" role="status">{msg}</small>}</div>;
+  return (
+    <div className="doseeditor" data-testid="clinic-reading">
+      {phone ? <Goniometer lang="en" onClose={() => setPhone(false)} onUse={(deg) => { setVal(String(deg)); setHow('phone'); setPhone(false); }} /> : (
+        <>
+          <label className="menufield" style={{ padding: 0 }}>Knee bend measured in clinic (degrees)
+            <input type="number" min={0} max={170} value={val} onChange={(e) => { setVal(e.target.value); setHow('manual'); }} />
+          </label>
+          <div className="btnrow">
+            <button className="btn" onClick={() => setPhone(true)}>Measure with this phone</button>
+            <button className="btn primary" disabled={val === ''} onClick={save}>Save clinic reading</button>
+            <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+          {msg && <p className="err">{msg}</p>}
+        </>
+      )}
     </div>
   );
 }

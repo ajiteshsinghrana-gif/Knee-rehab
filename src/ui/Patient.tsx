@@ -21,6 +21,9 @@ import { DemoButton } from './Demo';
 import { demoFor } from '../exercises/demos';
 import { doseLine } from '../exercises/dose';
 import { missedCheckIns } from '../reminders';
+import { Goniometer } from './Goniometer';
+import { patientUploadClip } from '../sync/engine';
+import { newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { nextVisit, nowStamp, visitReminder, visitTime, visitWhen } from '../visits';
 import { AngleTool } from './AngleTool';
 import { noticeText } from '../notices';
@@ -682,8 +685,27 @@ function Weekly({ patient, pack, lang, onDone, onBack }: { patient: Patient; pac
   const [vals, setVals] = useState<Record<string, Value | null>>({});
   const [photos, setPhotos] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Record<string, File>>({});
-  const [methods, setMethods] = useState<Record<string, 'photo'>>({});
+  const [methods, setMethods] = useState<Record<string, 'photo' | 'phone' | 'manual'>>({});
+  const [gonio, setGonio] = useState<string | null>(null);
+  const [send, setSend] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
   const ok = weeklyComplete(pack, patient, vals);
+  /** Save. A photo used for the angle is kept on this phone; with the patient's tick it is also sent to the physio's private cloud store when there is one. */
+  const saveAll = async () => {
+    setBusy(true);
+    const refs: Record<string, { where: 'device' | 'cloud'; ref: string }> = {};
+    for (const [id, f] of Object.entries(files)) {
+      if (methods[id] !== 'photo' || !send[id]) continue;
+      try {
+        const up = await patientUploadClip(patient, `photo-${getState().today}-${id}`, f, f.type || 'image/jpeg').catch(() => null);
+        if (up) refs[id] = { where: 'cloud', ref: up };
+        else { const lid = newLocalId(); await saveLocalVideo(lid, f); refs[id] = { where: 'device', ref: lid }; }
+      } catch { /* the number is still saved without the photo */ }
+    }
+    updatePatient(patient.id, (p) => saveWeekly(pack, p, getState().today, vals, Object.fromEntries(Object.entries(photos).filter(([, v]) => v)), methods, answerer(patient), refs));
+    setBusy(false);
+    onDone();
+  };
   const unit = (m: { unit: string | null }) => (m.unit === 'cm' ? T('units_cm') : m.unit === 'deg' ? T('units_deg') : m.unit === 'reps' ? T('units_reps') : m.unit === 'sec' ? T('units_sec') : m.unit ?? '');
   return (
     <main>
@@ -704,6 +726,10 @@ function Weekly({ patient, pack, lang, onDone, onBack }: { patient: Patient; pac
                 </div></div>
             ) : (
               <>
+                {m.id === 'flexionDeg' && (gonio === m.id
+                  ? <Goniometer lang={lang} onClose={() => setGonio(null)} onUse={(deg) => { setVals({ ...vals, [m.id]: deg }); setMethods({ ...methods, [m.id]: 'phone' }); setGonio(null); }} />
+                  : <button type="button" className="big secondary" data-testid="measure-phone" onClick={() => setGonio(m.id)}>{T('measureWithPhone')}</button>)}
+                {methods[m.id] === 'phone' && <small>✔ {T('measuredPhone')}</small>}
                 <NumField label={partner ? `${L(m.label, lang)}: ${T('opLeg')}` : L(m.label, lang)} hint={m.hint ? L(m.hint, lang) : undefined} value={vals[m.id] ?? null} onChange={(v) => { setVals({ ...vals, [m.id]: v }); setMethods(({ [m.id]: _gone, ...rest }) => rest); }}
                   min={m.input?.min ?? 0} max={m.input?.max ?? 100} step={m.input?.step ?? 1} unit={unit(m)} />
                 {partner && <NumField label={T('otherLeg')} value={vals[partner.id] ?? null} onChange={(v) => setVals({ ...vals, [partner.id]: v })} min={partner.input?.min ?? 1} max={partner.input?.max ?? 100} step={partner.input?.step ?? 1} unit={unit(partner)} />}
@@ -712,15 +738,18 @@ function Weekly({ patient, pack, lang, onDone, onBack }: { patient: Patient; pac
             {m.capture === 'photo' && (
               <>
                 <label className="filebtn">📷 {T('photoOptional')}<input type="file" accept="image/*" capture="environment" onChange={(e) => { const f = e.target.files?.[0]; setPhotos({ ...photos, [m.id]: String(f?.name ?? '') }); if (f) setFiles({ ...files, [m.id]: f }); }} /></label>
-                {photos[m.id] && <small>📎 {photos[m.id]} · {T('photoSoon')}</small>}
+                {photos[m.id] && <small>📎 {photos[m.id]}</small>}
                 {m.photoAngle && files[m.id] && <AngleTool file={files[m.id]} measure={m} lang={lang} onUse={(deg) => { setVals({ ...vals, [m.id]: deg }); setMethods({ ...methods, [m.id]: 'photo' }); }} />}
-                {methods[m.id] && <small>✔ {T('angleFromPhoto')}</small>}
+                {methods[m.id] === 'photo' && <small>✔ {T('angleFromPhoto')}</small>}
+                {methods[m.id] === 'photo' && files[m.id] && (
+                  <label className="check sendphoto"><input type="checkbox" checked={!!send[m.id]} onChange={(e) => setSend({ ...send, [m.id]: e.target.checked })} /> <span>{T('sendPhoto')}</span></label>
+                )}
               </>
             )}
           </div>
         );
       })}
-      <button className="big primary" disabled={!ok} onClick={() => { updatePatient(patient.id, (p) => saveWeekly(pack, p, getState().today, vals, Object.fromEntries(Object.entries(photos).filter(([, v]) => v)), methods, answerer(patient))); onDone(); }}>{ok ? T('saveWeekly') : T('fillOne')}</button>
+      <button className="big primary" disabled={!ok || busy} onClick={() => void saveAll()}>{ok ? T('saveWeekly') : T('fillOne')}</button>
     </main>
   );
 }

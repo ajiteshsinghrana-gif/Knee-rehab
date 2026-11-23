@@ -42,7 +42,9 @@ export const validDaily = (e: unknown): e is DailyCheckIn => isObj(e) && isDate(
 export const validPeriodic = (e: unknown): e is PeriodicEntry => isObj(e) && isDate(e.date) && isValues(e.values)
   && (e.answeredBy === undefined || e.answeredBy === 'patient' || e.answeredBy === 'caregiver')
   && (e.photos === undefined || (isObj(e.photos) && Object.values(e.photos).every((v) => typeof v === 'string')))
-  && (e.methods === undefined || (isObj(e.methods) && Object.values(e.methods).every((v) => v === 'photo')));
+  && (e.methods === undefined || (isObj(e.methods) && Object.values(e.methods).every((v) => v === 'photo' || v === 'phone' || v === 'manual')))
+  && (e.where === undefined || e.where === 'home' || e.where === 'clinic')
+  && (e.photoRefs === undefined || (isObj(e.photoRefs) && Object.values(e.photoRefs).every((v) => isObj(v) && (v.where === 'device' || v.where === 'cloud') && typeof v.ref === 'string' && v.ref.length <= 200)));
 
 // copy only known fields
 const cleanDaily = (e: DailyCheckIn): DailyCheckIn => ({
@@ -52,6 +54,7 @@ const cleanDaily = (e: DailyCheckIn): DailyCheckIn => ({
 });
 const cleanPeriodic = (e: PeriodicEntry): PeriodicEntry => ({
   date: e.date, values: { ...e.values }, ...(e.photos ? { photos: { ...e.photos } } : {}), ...(e.methods ? { methods: { ...e.methods } } : {}), ...(e.answeredBy ? { answeredBy: e.answeredBy } : {}),
+  ...(e.where ? { where: e.where } : {}), ...(e.photoRefs ? { photoRefs: Object.fromEntries(Object.entries(e.photoRefs).map(([k, v]) => [k, { where: v.where, ref: v.ref }])) } : {}),
 });
 
 

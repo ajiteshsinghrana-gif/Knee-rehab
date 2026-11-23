@@ -148,11 +148,11 @@ function makeKamla(last: string): Patient {
     id: 'kamla', name: 'Kamla', age: 67, packId: pack.id, language: 'hi', caregiverMode: true, anchorDate: t0, currentPhase: 'p1', phaseStartDate: t0,
     sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(),
     periodic: [
-      // Tracks the expected knee-bend curve for four weeks, then drifts below the band at week 5.
+      // Tracks the expected knee-bend curve, then two home tests in a row (weeks 4 and 5) sit below the band.
       { date: addDays(t0, 7), values: { flexionDeg: 50, extensionDeficitDeg: 12, kneeCircumferenceDiffCm: 3 } },
-      { date: addDays(t0, 14), values: { flexionDeg: 62, extensionDeficitDeg: 10, kneeCircumferenceDiffCm: 3 } },
+      { date: addDays(t0, 14), values: { flexionDeg: 62, extensionDeficitDeg: 10, kneeCircumferenceDiffCm: 3 }, where: 'clinic' as const }, // measured by the physio at her visit
       { date: addDays(t0, 21), values: { flexionDeg: 66, extensionDeficitDeg: 9, kneeCircumferenceDiffCm: 2.5 } },
-      { date: addDays(t0, 28), values: { flexionDeg: 70, extensionDeficitDeg: 8, kneeCircumferenceDiffCm: 2.5 } },
+      { date: addDays(t0, 28), values: { flexionDeg: 68, extensionDeficitDeg: 8, kneeCircumferenceDiffCm: 2.5 }, methods: { flexionDeg: 'phone' as const } },
       { date: addDays(t0, 35), values: { flexionDeg: 68, extensionDeficitDeg: 8, kneeCircumferenceDiffCm: 2.5 } },
     ],
   };
