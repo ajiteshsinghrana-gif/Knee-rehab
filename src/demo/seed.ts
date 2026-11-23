@@ -1,5 +1,5 @@
 import type { DailyCheckIn, Patient, PeriodicEntry, ProtocolPack, Value } from '../types';
-import { addDays } from '../engine/dates';
+import { addDays, diffDays } from '../engine/dates';
 import { getPack } from '../engine/packs';
 import { planDefaults } from '../engine/plan';
 
@@ -46,7 +46,7 @@ export function makeRavi(last = DEMO_TODAY_LAST): Patient {
   });
   return {
     id: 'ravi', name: 'Ravi', age: 24, packId: pack.id, language: 'en', anchorDate: t0, currentPhase: 'p2', phaseStartDate: addDays(t0, 28),
-    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(),
+    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...ravisPlan(),
     periodic: [
       wk(t0, 7, 3, 70, 3, true), wk(t0, 14, 2, 92, 2, true), wk(t0, 21, 1, 112, 1.5, false), wk(t0, 28, 0.5, 126, 1, false),
       wk(t0, 35, 0, 134, 0.5, false, {
@@ -56,6 +56,12 @@ export function makeRavi(last = DEMO_TODAY_LAST): Patient {
       { date: addDays(t0, 30), values: { tsk11: 16 } },
     ],
   };
+}
+
+/** Ravi is doing well, so his physio has him checking in every 3 days; the R5 proposal then visibly tightens this to daily. */
+function ravisPlan(): ReturnType<typeof planDefaults> {
+  const d = planDefaults();
+  return { ...d, plan: { ...d.plan, followUp: { checkInEveryDays: 3, reviewEveryDays: 7, nextReviewDate: null, until: null } } };
 }
 
 // ---------------- generic ACL builder for the supporting patients ----------------
@@ -167,18 +173,41 @@ export interface DemoStep {
   narration: string;
   patch: { pain: number; ex: Ex; skip?: string; hard: string };
 }
+/** What the demo step line says before the first Fast-forward and after the last one. */
+export const DEMO_INTRO = 'Six demo patients. Ravi is on plan and checks in every 3 days. Press Fast-forward to add his next day.';
+export const DEMO_DONE = 'Ravi is now URGENT via R5: several warning signs together. Open his record to see why and the proposed follow-up.';
 export const DEMO_STEPS: DemoStep[] = [
   { title: 'Day 1: a slightly worse day', narration: 'Ravi reports pain 3 and does only one of two sessions. Still within normal variation.', patch: { pain: 3, ex: 'some', hard: 'walking' } },
   { title: 'Day 2: pain keeps rising, he skips', narration: 'Pain 4 (up 2 over three check-ins). He skips today and says it hurt. Squat is hard again.', patch: { pain: 4, ex: 'none', skip: 'pain', hard: 'squats' } },
   { title: 'Day 3: second missed day, same movement', narration: 'Pain 5, second skipped day in a row, and squat is hard a third time this week.', patch: { pain: 5, ex: 'none', skip: 'pain', hard: 'squats' } },
 ];
 
-/** Appends the next demo day to Ravi. Pure; returns a new patient. */
-export function demoStepPatient(p: Patient, step: number): Patient {
+/** Moves every date in a demo patient's record by `days` (negative = earlier). Used only by the demo fast-forward. */
+function shiftDays(p: Patient, days: number): Patient {
+  if (days === 0) return p;
+  const d = (x: string) => addDays(x, days);
+  const f = p.plan.followUp;
+  return {
+    ...p,
+    anchorDate: d(p.anchorDate), phaseStartDate: d(p.phaseStartDate), ...(p.enrolledOn ? { enrolledOn: d(p.enrolledOn) } : {}),
+    daily: p.daily.map((e) => ({ ...e, date: d(e.date), ...(e.recordedAt !== undefined ? { recordedAt: e.recordedAt + days * 86_400_000 } : {}) })),
+    periodic: p.periodic.map((e) => ({ ...e, date: d(e.date) })),
+    plan: f ? { ...p.plan, followUp: { ...f, nextReviewDate: f.nextReviewDate && d(f.nextReviewDate), until: f.until && d(f.until) } } : p.plan,
+  };
+}
+
+/**
+ * Adds the next demo day to Ravi as `today`. The demo calendar does not move: Ravi's earlier days move back one day instead,
+ * so the other five patients stay exactly as they were (no silence flags, Meera's deadline does not grow) and only Ravi changes.
+ * Without `today` the new day simply follows his last check-in. Pure; returns a new patient.
+ */
+export function demoStepPatient(p: Patient, step: number, today?: string): Patient {
   const s = DEMO_STEPS[step];
   if (!s) return p;
   const pack = getPack(p.packId);
-  const lastE = p.daily[p.daily.length - 1];
-  const e = dailyEntry(pack, { date: addDays(lastE.date, 1), pain: s.patch.pain, swelling: 'same', ex: s.patch.ex, per: p.sessionsPrescribedPerDay, hard: s.patch.hard, skip: s.patch.skip });
-  return { ...p, daily: [...p.daily, e] };
+  const lastDate = p.daily[p.daily.length - 1].date;
+  const day = today ?? addDays(lastDate, 1);
+  const q = shiftDays(p, diffDays(day, addDays(lastDate, 1)));
+  const e = dailyEntry(pack, { date: day, pain: s.patch.pain, swelling: 'same', ex: s.patch.ex, per: p.sessionsPrescribedPerDay, hard: s.patch.hard, skip: s.patch.skip });
+  return { ...q, daily: [...q.daily, e] };
 }

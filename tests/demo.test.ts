@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DEMO_STEPS, DEMO_TODAY_LAST, demoStepPatient, makeAllPatients } from '../src/demo/seed';
 import { getPack } from '../src/engine/packs';
 import { triage } from '../src/engine/triage';
-import { applyManual } from '../src/engine/plan';
+import { applyManual, pendingProposal } from '../src/engine/plan';
 
 const now = Date.parse(`${DEMO_TODAY_LAST}T20:00:00Z`);
 const by = (id: string) => makeAllPatients().find((p) => p.id === id)!;
@@ -46,5 +46,45 @@ describe('demo patients (Phase 7)', () => {
     const k = by('kamla'); const pack = getPack(k.packId);
     const plain = { ...k, caregiverMode: false, daily: k.daily.map((d) => ({ ...d, answeredBy: 'patient' as const })) };
     expect(triage(plain, pack, { nowMs: now }).triggers.map((t) => t.ruleId)).toEqual(triage(k, pack, { nowMs: now }).triggers.map((t) => t.ruleId));
+  });
+});
+
+describe('demo fast-forward in the app (calendar stays put)', () => {
+  const today = '2026-11-15'; // the demo's "today": DEMO_TODAY_LAST + 1
+  const nowMs = Date.parse(`${today}T09:00:00Z`);
+  const run = () => {
+    const all = makeAllPatients();
+    let ravi = all.find((p) => p.id === 'ravi')!;
+    for (let i = 0; i < DEMO_STEPS.length; i++) ravi = demoStepPatient(ravi, i, today);
+    return { all, ravi };
+  };
+  it('Ravi ends URGENT via R5 on the third press, with A1, A3 and A4 firing', () => {
+    const { ravi } = run();
+    const r = triage(ravi, getPack(ravi.packId), { nowMs });
+    expect(r.tier).toBe('URGENT');
+    expect(r.triggers.map((t) => t.ruleId)).toEqual(expect.arrayContaining(['R5', 'A1', 'A3', 'A4']));
+    expect(ravi.daily.at(-1)!.date).toBe(today);
+  });
+  it('only Ravi changes: nobody else goes silent and their tiers stay as seeded', () => {
+    const { all } = run();
+    for (const p of all.filter((x) => x.id !== 'ravi')) {
+      const r = triage(p, getPack(p.packId), { nowMs });
+      expect(r.triggers.map((t) => t.ruleId)).not.toContain('S1');
+    }
+    const tiers = Object.fromEntries(all.filter((x) => x.id !== 'ravi').map((p) => [p.id, triage(p, getPack(p.packId), { nowMs }).tier]));
+    expect(tiers).toEqual({ meera: 'SAFETY', arjun: 'REVIEW', sana: 'ON_PLAN', kamla: 'REVIEW', imran: 'REVIEW' });
+    const meera = all.find((p) => p.id === 'meera')!;
+    const m = triage(meera, getPack(meera.packId), { nowMs });
+    expect(m.tier).toBe('SAFETY');
+    expect((nowMs - m.dueByMs!) / 3_600_000).toBeLessThan(24); // not dozens of hours past deadline
+  });
+  it('the proposal visibly tightens Ravi from every 3 days to daily for 7 days', () => {
+    const { ravi } = run();
+    const pack = getPack(ravi.packId);
+    const r = triage(ravi, pack, { nowMs });
+    const prop = pendingProposal(ravi, pack, r, today, nowMs)!;
+    expect(prop.before.checkInEveryDays).toBe(3);
+    expect(prop.after.checkInEveryDays).toBe(1);
+    expect(prop.after.forDays).toBe(7);
   });
 });

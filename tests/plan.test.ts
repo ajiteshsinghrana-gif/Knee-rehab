@@ -110,7 +110,7 @@ describe('follow-up proposal for a combination URGENT (Phase 2.5)', () => {
       expect(pendingProposal(approved, pack, tri, '2026-02-01', NOW)).toBeNull();
       expect(approved.plan.followUp?.until).toBe(pr.after.until);
       const rejected = applyAction(p, pack, { type: 'reject-proposal', flagKey: pr.flagKey, note: 'will phone instead' }, ctx);
-      expect(rejected.plan.followUp).toBeNull(); // rejecting leaves the plan alone
+      expect(rejected.plan.followUp).toEqual(p.plan.followUp); // rejecting leaves the plan alone
       expect(rejected.notices).toHaveLength(0);
       expect(rejected.audit[0].note).toBe('will phone instead');
     } else throw new Error('fixture did not produce a combination URGENT');

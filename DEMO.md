@@ -10,7 +10,7 @@ Physio dashboard. Patients are sorted by urgency; each row gives one plain reaso
 Say: "No AI decides this. Each tier comes from a rule in the condition's protocol, and each threshold shows its source."
 
 ## 2. Ravi drifts into URGENT (60 s)
-Open the **Demo** menu and press **Fast-forward** three times (the menu stays open). Each press adds a day of Ravi's check-ins (pain rises, he skips, same movement hard again). After the third he becomes URGENT through the "several amber signals together" rule. Open his row: the **Overview** tab shows **Why this patient is flagged**, the evidence strip, the suggested actions and the proposed follow-up on one screen.
+Open the **Demo** menu and press **Fast-forward** three times (the menu stays open). Each press adds Ravi's next check-in as today (pain rises, he skips, same movement hard again); the grey line under the header says what just happened. The other five patients do not change. After the third he becomes URGENT through the "several amber signals together" rule (R5). His **Proposed follow-up** tightens his check-ins from every 3 days to every day for 7 days. Open his row: the **Overview** tab shows **Why this patient is flagged**, the evidence strip, the suggested actions and the proposed follow-up on one screen.
 
 ## 3. Physio changes the treatment himself (60 s)
 Open **Kamla** (knee replacement, below the curve).

@@ -1,7 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { getState, resetState, setState, subscribe, updatePatient } from '../store';
-import { DEMO_STEPS, demoStepPatient } from '../demo/seed';
-import { addDays } from '../engine/dates';
+import { DEMO_DONE, DEMO_INTRO, DEMO_STEPS, demoStepPatient } from '../demo/seed';
 import { getPack } from '../engine/packs';
 import { decodeInvite } from '../onboarding';
 import { PatientView } from './Patient';
@@ -140,9 +139,9 @@ function DemoApp() {
   const fastForward = () => {
     const ravi = state.patients.find((p) => p.id === 'ravi');
     if (!ravi || !s) return;
-    const next = demoStepPatient(ravi, step);
-    const date = next.daily[next.daily.length - 1].date;
-    setState({ ...state, patients: state.patients.map((p) => (p.id === 'ravi' ? next : p)), today: addDays(date, 1), demoStep: step + 1 });
+    // The calendar stays put; Ravi's new day is today (see demoStepPatient), so only Ravi's record changes.
+    const next = demoStepPatient(ravi, step, state.today);
+    setState({ ...state, patients: state.patients.map((p) => (p.id === 'ravi' ? next : p)), demoStep: step + 1 });
   };
 
   return (
@@ -171,7 +170,7 @@ function DemoApp() {
           </Menu>
         </>}
       />
-      <StepLine stepKey={String(step)} text={s ? `${s.title}: ${s.narration}` : 'Demo complete: Ravi is now URGENT via R5. Open the physio view.'} />
+      <StepLine stepKey={String(step)} text={step === 0 ? DEMO_INTRO : `${DEMO_STEPS[step - 1].title}: ${DEMO_STEPS[step - 1].narration}${step >= DEMO_STEPS.length ? ` ${DEMO_DONE}` : ''}`} />
       {view === 'patient' ? <PatientView key={patient.id} patient={patient} /> : <Clinician state={state} />}
           {wa && <WhatsAppSim key={patient.id} patient={patient} canSave onClose={() => setWa(false)} />}
     </>
