@@ -46,7 +46,7 @@ export function makeRavi(last = DEMO_TODAY_LAST): Patient {
   });
   return {
     id: 'ravi', name: 'Ravi', age: 24, packId: pack.id, language: 'en', anchorDate: t0, currentPhase: 'p2', phaseStartDate: addDays(t0, 28),
-    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...ravisPlan(),
+    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...ravisPlan(), sessions: raviSessions(last),
     periodic: [
       wk(t0, 7, 3, 70, 3, true), wk(t0, 14, 2, 92, 2, true), wk(t0, 21, 1, 112, 1.5, false), wk(t0, 28, 0.5, 126, 1, false),
       wk(t0, 35, 0, 134, 0.5, false, {
@@ -62,6 +62,24 @@ export function makeRavi(last = DEMO_TODAY_LAST): Patient {
 function ravisPlan(): ReturnType<typeof planDefaults> {
   const d = planDefaults();
   return { ...d, plan: { ...d.plan, followUp: { checkInEveryDays: 3, reviewEveryDays: 7, nextReviewDate: null, until: null }, ...RAVI_DOSES } };
+}
+
+/** Two guided sessions ("Start my exercises") for the physio's per-exercise record. Sessions never feed a rule. */
+function raviSessions(last: string): NonNullable<Patient['sessions']> {
+  const at = (day: string, h: number) => Date.parse(`${day}T${String(h).padStart(2, '0')}:00:00Z`);
+  const d1 = addDays(last, -1), d2 = last;
+  return [
+    { id: 'demo-s1', date: d1, startedAt: at(d1, 8), endedAt: at(d1, 8) + 1_500_000, answeredBy: 'patient', via: 'app', exercises: [
+      { id: 'lunges', setsPlanned: 2, setsDone: 2, repsPlanned: 8, repsDone: 16, pain: 2 },
+      { id: 'step-ups', setsPlanned: 3, setsDone: 3, repsPlanned: 10, repsDone: 30, pain: 2 },
+      { id: 'squats', setsPlanned: 3, setsDone: 3, repsPlanned: 10, repsDone: 30, pain: 3 },
+    ] },
+    { id: 'demo-s2', date: d2, startedAt: at(d2, 8), endedAt: at(d2, 8) + 1_200_000, answeredBy: 'patient', via: 'app', exercises: [
+      { id: 'lunges', setsPlanned: 2, setsDone: 2, repsPlanned: 8, repsDone: 16, pain: 2 },
+      { id: 'step-ups', setsPlanned: 3, setsDone: 0, repsPlanned: 10, repsDone: 0, stopped: 'skipped' },
+      { id: 'squats', setsPlanned: 3, setsDone: 1, repsPlanned: 10, repsDone: 14, stopped: 'pain', pain: 5, struggling: true },
+    ] },
+  ];
 }
 
 /** The demo physio's own doses (fix phase 3). Ravi and Sana have the same surgery and phase but different plans. */
@@ -214,6 +232,7 @@ function shiftDays(p: Patient, days: number): Patient {
     anchorDate: d(p.anchorDate), phaseStartDate: d(p.phaseStartDate), ...(p.enrolledOn ? { enrolledOn: d(p.enrolledOn) } : {}),
     daily: p.daily.map((e) => ({ ...e, date: d(e.date), ...(e.recordedAt !== undefined ? { recordedAt: e.recordedAt + days * 86_400_000 } : {}) })),
     periodic: p.periodic.map((e) => ({ ...e, date: d(e.date) })),
+    ...(p.sessions ? { sessions: p.sessions.map((x) => ({ ...x, date: d(x.date), startedAt: x.startedAt + days * 86_400_000, endedAt: x.endedAt + days * 86_400_000 })) } : {}),
     plan: f ? { ...p.plan, followUp: { ...f, nextReviewDate: f.nextReviewDate && d(f.nextReviewDate), until: f.until && d(f.until) } } : p.plan,
   };
 }

@@ -779,3 +779,28 @@ main.home { gap: var(--s3); padding-top: var(--s3); }
 .sechead2 { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-bottom: var(--s1); }
 .sechead2 h3 { font-size: var(--fs-s); color: var(--muted); font-weight: 600; margin: 0; }
 @media (max-width: 720px) { .detailsgrid { grid-template-columns: minmax(0, 1fr); } .tplsave input { width: 100%; } }
+
+/* ---------- per-exercise record ---------- */
+.xrec { display: flex; flex-direction: column; gap: var(--s1); }
+.xrow { display: grid; grid-template-columns: minmax(96px, 1.4fr) repeat(7, minmax(0, 1fr)); gap: var(--s1); align-items: center; }
+.xhead { font-size: 11px; color: var(--muted); font-weight: 600; }
+.xday { text-align: center; }
+.xname { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xcell { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 32px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); font-weight: 700; font-size: 13px; color: var(--muted); padding: 0; }
+.xcell.done { background: #e8f4ec; border-color: #b9dcc6; color: var(--onplan); }
+.xcell.partial { background: #fdf3e1; border-color: #f0d6a6; color: var(--review); }
+.xcell.skipped { background: #fdf3e1; border-color: #e6b85c; color: var(--review); }
+.xcell.hurt { background: #fdecea; border-color: #f1b8b2; color: var(--urgent); }
+.xcell.help::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--teal); }
+.xcell.on { outline: 2px solid var(--ink); outline-offset: 1px; }
+.xlegend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin: 0; }
+.xlegend .xcell { width: 20px; height: 20px; font-size: 11px; }
+.xdetail { padding: var(--s2) var(--s3); background: var(--hover); border-radius: var(--radius); font-size: 13px; }
+.xdetail ul { margin: var(--s1) 0 0; padding-left: var(--s4); }
+@media (max-width: 720px) {
+  .xrow { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .xrow .xname { grid-column: 1 / -1; font-weight: 600; margin-top: var(--s1); }
+  .xhead .xname { display: none; }
+  .xcell { height: 48px; }
+  .xlegend .xcell { height: 20px; }
+}

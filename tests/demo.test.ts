@@ -127,3 +127,27 @@ describe('missed check-in reminders (fix phase 5, simulated)', () => {
     for (const p of makeAllPatients().filter((x) => x.id !== 'kamla')) expect(missedCheckIns(p, getPack(p.packId), '2026-11-15').missed).toBe(0);
   });
 });
+
+describe('per-exercise record (physio feedback phase 3)', () => {
+  it('combines guided sessions and check-ins: done, skipped, stopped because it hurt', async () => {
+    const { exerciseRecord } = await import('../src/exerciseRecord');
+    const r = by('ravi');
+    const d = DEMO_TODAY_LAST;
+    const rec = exerciseRecord(r, ['lunges', 'step-ups', 'squats'], [d]);
+    expect(rec.lunges[d].status).toBe('done');
+    expect(rec['step-ups'][d]).toMatchObject({ status: 'skipped', reason: 'skipped' });
+    expect(rec.squats[d]).toMatchObject({ status: 'hurt', pain: 5 });
+    expect(rec.squats[d].lines.join(' ')).toContain('struggling');
+  });
+  it('fast-forward moves Ravi\'s sessions with his days, and he still ends URGENT via R5', () => {
+    let ravi = by('ravi');
+    for (let i = 0; i < DEMO_STEPS.length; i++) ravi = demoStepPatient(ravi, i, '2026-11-15');
+    // The session from his original last check-in day moves back with that day (two presses shift the history by one day each).
+    const day = ravi.sessions!.at(-1)!.date;
+    expect(day).toBe('2026-11-12');
+    expect(ravi.daily.find((e) => e.date === day)?.values.pain).toBe(2);
+    const r = triage(ravi, getPack(ravi.packId), { nowMs: Date.parse('2026-11-15T09:00:00Z') });
+    expect(r.tier).toBe('URGENT');
+    expect(r.triggers.map((t) => t.ruleId)).toContain('R5');
+  });
+});

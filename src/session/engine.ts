@@ -89,7 +89,7 @@ export const exerciseFinished = (l: SessionExerciseLog): boolean => !l.stopped &
 
 /** The record kept on the patient. Exercises not reached are left out. */
 export function toSessionLog(s: SState, date: string, endedAt: number, by: AnsweredBy, via: 'app' | 'whatsapp' = 'app'): SessionLog {
-  const reached = s.logs.filter((l, k) => k < s.i || (k === s.i && (l.repsDone > 0 || l.stopped || s.phase === 'done')) || (s.phase === 'done'));
+  const reached = s.logs.filter((l, k) => k < s.i || (k === s.i && (l.repsDone > 0 || l.stopped || l.struggling || s.phase === 'done')) || (s.phase === 'done'));
   return { id: `s${s.startedAt.toString(36)}`, date, startedAt: s.startedAt, endedAt, exercises: reached.map((l) => ({ ...l })), answeredBy: by, via };
 }
 

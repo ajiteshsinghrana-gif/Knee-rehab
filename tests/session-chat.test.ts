@@ -94,7 +94,7 @@ describe('WhatsApp video request on its own', () => {
     chat = tap(chat, 'start').chat;
     while (chat.phase === 'ex') chat = tap(chat, 'done').chat;
     const log = chatResult(chat, ctx).session!;
-    expect(addSession(patients[0], log).sessions!.length).toBe(1);
+    expect(addSession(patients[0], log).sessions!.length).toBe((patients[0].sessions ?? []).length + 1);
   });
 });
 

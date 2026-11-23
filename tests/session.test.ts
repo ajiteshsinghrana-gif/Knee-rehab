@@ -110,3 +110,11 @@ describe('guided session engine', () => {
     expect(Object.keys(SESSION_STRINGS.bn).sort().join()).toBe(keys);
   });
 });
+
+describe('what a guided session saves (physio feedback phase 3)', () => {
+  it('"I need help" before any rep is still saved', async () => {
+    const { startSession, markStruggling, toSessionLog } = await import('../src/session/engine');
+    const s = markStruggling(startSession([{ exerciseId: 'a', sets: 2, reps: 5, holdSec: null }], 0));
+    expect(toSessionLog(s, '2026-11-15', 1, 'patient').exercises[0].struggling).toBe(true);
+  });
+});

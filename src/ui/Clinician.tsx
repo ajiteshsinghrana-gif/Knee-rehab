@@ -36,6 +36,7 @@ import { scheduleSuggestion } from '../engine/schedule';
 import { missedCheckIns } from '../reminders';
 import { hasPhone, telHref, waHref } from '../contact';
 import { templateFromPatient } from '../templates';
+import { exerciseRecord, reasonLabel } from '../exerciseRecord';
 import { DetailsFields } from './DetailsFields';
 import { deleteLocalVideo, loadLocalVideo, newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { validHours } from '../engine/hours';
@@ -489,6 +490,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
 
       {tab === 'progress' && (
         <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-progress`} aria-labelledby={`${idBase}-tab-progress`}>
+          <ExerciseRecordCard patient={p} pack={pack} />
           <div className="charts">
             <div className="card">
               <LineChart title="Pain, last 6 weeks" xLabel={`weeks ${pack.anchorLabel.en}`} yLabel="0-10" yMin={0} yMax={10}
@@ -601,6 +603,50 @@ function painChange(pts: { x: number; y: number }[]): string {
 }
 
 const PHYSIO_NAME = 'Demo physio';
+/** Per-exercise record: exercises down the side, the last 7 days across. Tap a cell for what happened. Display only. */
+function ExerciseRecordCard({ patient: p, pack }: { patient: Patient; pack: ProtocolPack }) {
+  const today = getState().today;
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6));
+  const exs = currentExercises(p, pack);
+  const rec = useMemo(() => exerciseRecord(p, exs, days), [p, today, exs.join()]);
+  const [pick, setPick] = useState<{ id: string; d: string } | null>(null);
+  if (!exs.length) return null;
+  const sym: Record<string, string> = { done: '✓', partial: '½', skipped: '✕', hurt: '!', none: '·' };
+  const word = (c: { status: string; reason?: string }) => c.status === 'done' ? 'done' : c.status === 'partial' ? 'part done' : c.status === 'hurt' ? 'stopped, it hurt' : c.status === 'skipped' ? `skipped${c.reason ? `: ${reasonLabel(c.reason)}` : ''}` : 'no record';
+  const dl = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
+  const sel = pick ? rec[pick.id]?.[pick.d] : null;
+  return (
+    <div className="card" data-testid="exercise-record">
+      <div className="cardhead"><h3>Exercise record <small>Last 7 days, from check-ins and guided sessions</small></h3></div>
+      <div className="xrec" role="table" aria-label="Exercise record, last 7 days">
+        <div className="xrow xhead" role="row"><span className="xname" role="columnheader">Exercise</span>{days.map((d) => <span key={d} className="xday" role="columnheader">{dl(d)}</span>)}</div>
+        {exs.map((id) => (
+          <div className="xrow" role="row" key={id}>
+            <span className="xname" role="rowheader">{exerciseName(id, 'en')}</span>
+            {days.map((d) => {
+              const c = rec[id][d];
+              const on = pick?.id === id && pick.d === d;
+              return (
+                <button key={d} type="button" role="cell" className={`xcell ${c.status} ${c.help ? 'help' : ''} ${on ? 'on' : ''}`} aria-pressed={on}
+                  aria-label={`${exerciseName(id, 'en')}, ${dl(d)}: ${word(c)}${c.help ? ', asked for help' : ''}`} onClick={() => setPick(on ? null : { id, d })}>
+                  <span aria-hidden>{sym[c.status]}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="xlegend tiny"><span className="xcell done">✓</span> done <span className="xcell partial">½</span> part <span className="xcell skipped">✕</span> skipped <span className="xcell hurt">!</span> stopped, it hurt <span className="xcell none help">·</span> asked for help</p>
+      {sel && pick && (
+        <div className="xdetail" role="status">
+          <b>{exerciseName(pick.id, 'en')}, {dl(pick.d)}: {word(sel)}</b>
+          {sel.lines.length ? <ul>{sel.lines.map((l, i) => <li key={i}>{l}</li>)}</ul> : <p className="tiny">No check-in and no guided session that day.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** What the patient is treated for: the typed diagnosis for the General protocol, otherwise the protocol's condition. */
 const conditionLabel = (p: Patient, pack: ProtocolPack): string => (pack.id === 'general' && p.details?.diagnosis ? p.details.diagnosis : pack.condition.en);
 

@@ -40,7 +40,8 @@ export function GuidedSession({ patient, pack, lang, onExit, onNeedHelp }: {
     if (savedRef.current) return;
     const cur = sRef.current;
     const log = toSessionLog(cur, getState().today, clockMs(getState()), patient.caregiverMode ? 'caregiver' : 'patient');
-    if (!log.exercises.some((l) => l.repsDone > 0 || l.stopped)) return;
+    // Saved as soon as anything happened: a rep, a stop or skip, or 'I need help' (physio feedback round: help was lost before).
+    if (!log.exercises.some((l) => l.repsDone > 0 || l.stopped || l.struggling)) return;
     savedRef.current = true;
     setSaved(true);
     updatePatient(patient.id, (p) => addSession(p, log));
@@ -200,7 +201,7 @@ export function GuidedSession({ patient, pack, lang, onExit, onNeedHelp }: {
               {onNeedHelp && (
                 <button type="button" className="big secondary" onClick={() => { act(markStruggling); save(); onNeedHelp(step.exerciseId); }}>{S('sStruggle')}</button>
               )}
-              {s.phase === 'ready' && <button type="button" className="link" onClick={() => act((x) => stopExercise(x, 'time'))}>{S('sSkipEx')}</button>}
+              {s.phase === 'ready' && <button type="button" className="link" onClick={() => act((x) => stopExercise(x, 'skipped'))}>{S('sSkipEx')}</button>}
             </div>
           )}
         </>
