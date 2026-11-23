@@ -154,7 +154,12 @@ function makeImran(last: string): Patient {
   };
 }
 
+/** Demo phone numbers are deliberately not real (all zeros), so a Call or WhatsApp tap reaches nobody. */
+const DEMO_PHONE: Record<string, string> = { ravi: '+91 00000 00001', meera: '+91 00000 00002', arjun: '+91 00000 00003', sana: '+91 00000 00004', kamla: '+91 00000 00005', imran: '+91 00000 00006' };
 export function makeAllPatients(last = DEMO_TODAY_LAST): Patient[] {
+  return makeAllPatientsRaw(last).map((p) => ({ ...p, details: { ...(p.details ?? {}), phone: DEMO_PHONE[p.id] } }));
+}
+function makeAllPatientsRaw(last: string): Patient[] {
   return [
     makeRavi(last),
     zf({

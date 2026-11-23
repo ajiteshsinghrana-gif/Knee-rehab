@@ -34,6 +34,7 @@ import { optInWeeklyMeasures } from '../checkin';
 import { doseLine } from '../exercises/dose';
 import { scheduleSuggestion } from '../engine/schedule';
 import { missedCheckIns } from '../reminders';
+import { hasPhone, telHref, waHref } from '../contact';
 import { validHours } from '../engine/hours';
 import { ruleHitRates } from '../engine/feedback';
 
@@ -323,6 +324,12 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
           <p className="sub">{pack.condition.en} · Week {wk.toFixed(1)} {pack.anchorLabel.en} · {phase.name.en} <small>({weeksInPhase(p, r.asOf).toFixed(1)} wk in phase, as of {r.asOf})</small></p>
         </div>
         <div className="dh-side">
+          {hasPhone(p.details?.phone) && (
+            <div className="contactbtns">
+              <a className="btn" href={telHref(p.details!.phone!)} aria-label={`Call ${p.name}`} data-testid="call-btn">Call</a>
+              <a className="btn" href={waHref(p.details!.phone!)} target="_blank" rel="noopener noreferrer" aria-label={`WhatsApp ${p.name}`} data-testid="wa-btn">WhatsApp</a>
+            </div>
+          )}
           <div className="tierbox">
             <span className="tierline"><Tier tier={r.tier} xl />{r.overdue && <span className="overdue">Overdue</span>}</span>
             <small>{dueText(r, now)}{r.responseHours ? ` (${r.responseHours} h target)` : ''}</small>
@@ -453,7 +460,10 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
                     <button className="btn" onClick={() => setModifying(null)}>Cancel</button>
                   </>
                 ) : (
-                  <button className="btn" onClick={() => start(a)}>{PLAN_ACTIONS.includes(a) ? 'Approve…' : 'Approve'}</button>
+                  <>
+                    {a === 'call-patient' && hasPhone(p.details?.phone) && <a className="btn" href={telHref(p.details!.phone!)} aria-label={`Call ${p.name} now`}>Call</a>}
+                    <button className="btn" onClick={() => start(a)}>{PLAN_ACTIONS.includes(a) ? 'Approve…' : 'Approve'}</button>
+                  </>
                 )}
               </div>
             ))}

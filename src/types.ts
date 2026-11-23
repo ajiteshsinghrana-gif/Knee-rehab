@@ -431,6 +431,8 @@ export interface Patient {
   flagFeedback?: Record<string, { useful: boolean; at: string; rules: string[] }>;
   /** Overdue SAFETY or URGENT flags handed to the clinic's backup contact, by flag key (fix phase 4). */
   escalated?: Record<string, { at: string; to: string }>;
+  /** Optional details the physio can fill in (physio feedback round). Only name and condition are required. */
+  details?: PatientDetails;
 }
 
 export interface FollowUp {
@@ -478,6 +480,11 @@ export interface Plan {
   exerciseNotes?: Record<string, { text: string; at: string; by: string }>;
   /** The physio's own dose for an exercise for this patient (fix phase 3); wins over the library dose. */
   doses?: Record<string, ExerciseDose>;
+}
+export interface PatientDetails {
+  phone?: string; gender?: string; city?: string; occupation?: string; diagnosis?: string;
+  surgeryDate?: string; surgeon?: string; diabetes?: boolean; bloodPressure?: boolean; otherConditions?: string;
+  carerName?: string; carerPhone?: string; goal?: string;
 }
 export interface ExerciseDose { sets: number | null; reps: number | null; holdSec: number | null; perDay: number | null; at: string; by: string }
 export interface CustomInstruction { id: string; text: string; at: string; }

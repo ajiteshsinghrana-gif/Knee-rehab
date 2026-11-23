@@ -703,3 +703,54 @@ main.home { gap: var(--s3); padding-top: var(--s3); }
 .exquick .why p { margin: 0; font-size: var(--fs-s); color: var(--muted); }
 .stickynext:disabled { opacity: 1; background: #b7cfcf; border-color: #b7cfcf; color: #fff; }
 .stickynext:disabled { background: var(--line); border-color: var(--line); color: var(--muted); }
+
+/* ================= physio dashboard on a phone (360-430 px) ================= */
+@media (max-width: 720px) {
+  /* 48 px tap targets everywhere on the physio side */
+  .dash .btn, .dash a.btn, .dash .menubtn, .dash select, .dash input:not([type=checkbox]):not([type=radio]):not([type=file]),
+  .dash summary, .dash .linkbtn, .dash .tchip, .dash .dtabs button, .dash .backtolist,
+  .topbar .menubtn, .topbar .iconbtn, .viewswitch button, .stepline .iconbtn,
+  .menupanel .menuitem, .menupanel select, .menupanel input:not([type=checkbox]), .dialog .btn, .dialog input:not([type=checkbox]) { min-height: 48px; }
+  .viewswitch { padding: 2px; }
+  .viewswitch button { height: 48px; }
+  .topbar { height: 60px; }
+  .topbar .menubtn, .topbar .iconbtn { height: 48px; }
+  .stepline { min-height: 48px; }
+  .dash .tchip { height: 48px; font-size: 12px; padding: 0 var(--s2); flex: 1 1 calc(50% - var(--s1)); }
+  .dash .tierfilter { flex-wrap: wrap; }
+  .wl-head .btn, .wl-more .menubtn { height: 48px; min-height: 48px; }
+  .dash label.check { min-height: 48px; align-items: center; }
+  .dash input[type=checkbox], .dash input[type=radio] { width: 22px; height: 22px; flex: none; }
+  .dash .linkbtn { display: inline-flex; align-items: center; }
+  .backtolist { padding: 0 var(--s1); }
+  .dtabs { gap: var(--s2); }
+  .dtabs button { height: 48px; padding: 0 var(--s2); }
+  /* nothing wider than the screen: fields, tables, charts */
+  .dash select, .dash input, .dash textarea { max-width: 100%; min-width: 0; }
+  .dash .fu, .dash .btnrow { flex-wrap: wrap; }
+  .dash .fu > *, .dash .proprow > * { flex: 1 1 100%; }
+  .dash .fu label { display: flex; flex-direction: column; gap: var(--s1); width: 100%; }
+  .dash table { width: 100%; table-layout: fixed; }
+  .dash td, .dash th { overflow-wrap: anywhere; word-break: break-word; padding-left: var(--s1); padding-right: var(--s1); }
+  .dash .chart svg { width: 100%; height: auto; }
+  .dash .actrow { flex-wrap: wrap; }
+  .dash .actrow .name { flex: 1 1 100%; }
+  .dash .actrow .btn { flex: 1 1 0; }
+  .contactbtns { display: flex; gap: var(--s2); width: 100%; }
+  .contactbtns .btn { flex: 1 1 0; }
+  .detail .head .dh-side { flex-wrap: wrap; }
+  .detail .head .dh-side > .btn { flex: 1 1 100%; }
+}
+.contactbtns { display: flex; gap: var(--s2); }
+.contactbtns .btn { text-decoration: none; }
+@media (max-width: 720px) {
+  .menupanel input:not([type=checkbox]):not([type=radio]):not([type=file]), .dialog input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: 48px; }
+}
+@media (max-width: 430px) {
+  .dtabs { gap: 0; justify-content: space-between; padding: 0; }
+  .dtabs button { padding: 0 6px; font-size: 13px; }
+}
+@media (max-width: 720px) {
+  .ovgrid .evstrip { grid-template-columns: minmax(0, 1fr); }
+  .ovgrid .evstrip .ev + .ev { border-left: 0; border-top: 1px solid var(--line); }
+}
