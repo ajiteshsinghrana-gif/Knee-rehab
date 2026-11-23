@@ -657,3 +657,10 @@ main.home { gap: var(--s3); padding-top: var(--s3); }
 .summary .kpis b { font-size: var(--fs-h); font-weight: 600; }
 .summary .kpis small { font-size: 12px; }
 @media (max-width: 900px) { .summary .kpis { grid-template-columns: 1fr 1fr; } }
+
+/* ---------- fix phase 5: reach ---------- */
+.wareminder { position: relative; display: flex; flex-direction: column; gap: var(--s1); padding: var(--s2) var(--s3); padding-right: 56px; border-radius: var(--radius); background: #e9f6ee; border: 1px solid #c9e6d3; }
+.wareminder p { margin: 0; font-size: var(--fs-s); color: var(--ink); }
+.wareminder .wa-tag { font-size: 11px; font-weight: 600; color: #1f6d45; }
+.wareminder .readaloud { position: absolute; top: var(--s2); right: var(--s2); }
+.missednote { margin: 0; padding: var(--s2) var(--s3); background: var(--hover); border-radius: var(--radius); font-size: var(--fs-s); }

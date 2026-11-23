@@ -2,11 +2,12 @@ import type { ProtocolPack } from '../types';
 import acl from '../packs/acl-reconstruction.json';
 import tkr from '../packs/total-knee-replacement.json';
 import rc from '../packs/rotator-cuff-repair.json';
+import general from '../packs/general.json';
 import { assertValidPack, validateLibrary } from './validator';
 import { LIBRARY } from '../exercises/library';
 
 /** All packs are validated at load. A pack that fails never reaches the app. */
-const RAW = [acl, tkr, rc] as unknown as ProtocolPack[];
+const RAW = [acl, tkr, rc, general] as unknown as ProtocolPack[];
 export const PACKS: Record<string, ProtocolPack> = {};
 for (const p of RAW) {
   assertValidPack(p);

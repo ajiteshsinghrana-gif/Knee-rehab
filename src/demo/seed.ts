@@ -179,7 +179,7 @@ export function makeAllPatients(last = DEMO_TODAY_LAST): Patient[] {
       ],
       tsk: [[30, 14], [60, 13]],
     }),
-    makeKamla(last),
+    makeKamla(addDays(last, -2)), // Kamla has not checked in for the last 2 days: the demo shows the missed check-in reminders
     makeImran(last),
   ];
 }

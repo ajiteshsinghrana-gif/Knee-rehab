@@ -20,6 +20,7 @@ import { exerciseName, getExercise } from '../exercises/library';
 import { DemoButton } from './Demo';
 import { demoFor } from '../exercises/demos';
 import { doseLine } from '../exercises/dose';
+import { missedCheckIns } from '../reminders';
 import { AngleTool } from './AngleTool';
 import { noticeText } from '../notices';
 import { GuidedSession } from './GuidedSession';
@@ -106,7 +107,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
       {tri.tier === 'SAFETY' && <SafetyBanner lang={lang} emergency={safetyLevel(patient) === 'emergency'} />}
       <div className="greet">
         <h2 className="hello">{T('hello')}, {patient.name}</h2>
-        <p className="sub">{T('dayAfter', { n: day })}</p>
+        <p className="sub">{/surgery/i.test(pack.anchorLabel.en) ? T('dayAfter', { n: day }) : T('dayOfCare', { n: day })}</p>
         <label className="cgtoggle">
           <input type="checkbox" role="switch" checked={!!patient.caregiverMode} aria-label={T('caregiverToggle', { name: patient.name })} aria-describedby={hintId} onChange={(e) => updatePatient(patient.id, (x) => ({ ...x, caregiverMode: e.target.checked }))} />
           <span>{T('caregiverToggle', { name: patient.name })}</span>
@@ -123,6 +124,21 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
             <span className="sc-dot" aria-hidden />
             <span className="sc-text"><b>{head}</b><small>{fact}</small></span>
             <ReadAloud key={lang + head} text={`${head}. ${fact}.`} lang={lang} compact />
+          </div>
+        );
+      })()}
+      {(() => {
+        // Simulated WhatsApp reminder after a missed check-in (nothing is really sent).
+        const m = missedCheckIns(patient, pack, today);
+        if (!m.missed || doneToday) return null;
+        const msg = T('reminderPatient', { name: patient.name });
+        const carer = m.missed >= 2 ? T('reminderCarer') : '';
+        return (
+          <div className="wareminder" role="status" data-testid="wa-reminder">
+            <small className="wa-tag">{T('reminderTitle')}</small>
+            <p>{msg}</p>
+            {carer && <p className="tiny">{carer}</p>}
+            <ReadAloud key={lang + msg} text={`${msg} ${carer}`} lang={lang} compact />
           </div>
         );
       })()}

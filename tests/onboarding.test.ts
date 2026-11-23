@@ -58,3 +58,13 @@ describe('invite link and QR (Phase 3.1)', () => {
     expect(() => qrMatrix('x'.repeat(5000))).toThrow();
   });
 });
+
+describe('General (no surgery) patient (fix phase 5)', () => {
+  it('can be added with exercises the physio types freely', async () => {
+    const { buildPatient } = await import('../src/onboarding');
+    const p = buildPatient({ name: 'Test', age: 50, language: 'en', packId: 'general', anchorDate: '2026-11-01', phaseId: 'p1', exercises: ['walking'], checkInEveryDays: 1, reviewEveryDays: 7, overrides: [], ownExercises: 'Wall push-ups: 2 x 10\n\nWalk 15 minutes after lunch' }, { nowMs: Date.parse('2026-11-15T09:00:00Z'), today: '2026-11-15' });
+    expect(p.packId).toBe('general');
+    expect((p.plan.instructions ?? []).map((x) => x.text)).toEqual(['Wall push-ups: 2 x 10', 'Walk 15 minutes after lunch']);
+    expect(p.notices).toEqual([]);
+  });
+});

@@ -7,7 +7,7 @@ import { aclPack, clone } from './helpers';
 
 describe('pack validator (Phase 1.5)', () => {
   it('all shipped packs are valid', () => {
-    expect(PACK_LIST.map((p) => p.id).sort()).toEqual(['acl-reconstruction', 'rotator-cuff-repair', 'total-knee-replacement']);
+    expect(PACK_LIST.map((p) => p.id).sort()).toEqual(['acl-reconstruction', 'general', 'rotator-cuff-repair', 'total-knee-replacement']);
     for (const p of PACK_LIST) expect(validatePack(p)).toEqual([]);
   });
   it('rejects a pack with no warning signs', () => {
@@ -107,5 +107,20 @@ describe('README lists every NEEDS_PHYSIO_SIGNOFF value (rule 3)', () => {
         expect(readme.includes('| ' + i.where.replace(p.id + ': ', '') + ' |')).toBe(true);
       }
     }
+  });
+});
+
+describe('General (no surgery) protocol (fix phase 5)', () => {
+  const g = () => PACK_LIST.find((p) => p.id === 'general')!;
+  it('uses only the generic rules and red flags', () => {
+    expect(g().rules.map((r) => r.id).sort()).toEqual(['A1', 'A3', 'A4', 'S1']);
+    expect(g().warningSigns.filter((w) => w.tier === 'SAFETY').map((w) => w.id)).toEqual(expect.arrayContaining(['chestPainBreathless', 'calfPainOrRedness', 'fever', 'weaknessBladderBowel']));
+    expect(g().warningSigns.map((w) => w.id)).not.toContain('woundDischarge'); // no surgery, no wound
+  });
+  it('marks its red-flag list as not yet reviewed', () => {
+    expect(g().warningSigns.every((w) => w.source.includes('NEEDS_PHYSIO_SIGNOFF'))).toBe(true);
+  });
+  it('starts with no exercises: the physio chooses them', () => {
+    expect(g().phases[0].exercises).toEqual([]);
   });
 });

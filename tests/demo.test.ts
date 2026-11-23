@@ -110,3 +110,20 @@ describe('personalisation in the demo (fix phase 3)', () => {
     expect(r.plan.doses?.squats).not.toEqual(s.plan.doses?.squats);
   });
 });
+
+describe('missed check-in reminders (fix phase 5, simulated)', () => {
+  it('Kamla missed 2 check-ins: patient reminded, then the carer; not yet silent enough for S1', async () => {
+    const { missedCheckIns } = await import('../src/reminders');
+    const k = by('kamla');
+    const m = missedCheckIns(k, getPack(k.packId), '2026-11-15');
+    expect(m.missed).toBe(2);
+    expect(m.steps.map((s) => s.kind)).toEqual(['patient', 'carer']);
+    const r = triage(k, getPack(k.packId), { nowMs: Date.parse('2026-11-15T09:00:00Z') });
+    expect(r.triggers.map((t) => t.ruleId)).not.toContain('S1');
+    expect(r.tier).toBe('REVIEW');
+  });
+  it('everyone else is up to date', async () => {
+    const { missedCheckIns } = await import('../src/reminders');
+    for (const p of makeAllPatients().filter((x) => x.id !== 'kamla')) expect(missedCheckIns(p, getPack(p.packId), '2026-11-15').missed).toBe(0);
+  });
+});

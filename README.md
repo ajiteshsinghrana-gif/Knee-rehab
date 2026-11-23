@@ -296,6 +296,22 @@ Every value below is a placeholder. Do not treat any of them as clinical guidanc
 | precaution sling-off restricted phases | p1 | NEEDS_PHYSIO_SIGNOFF |
 | followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
 
+#### general (11 values)
+
+| Where | Value | Source tag |
+|---|---|---|
+| responseHours.SAFETY | 2 h | PLACEHOLDER; NEEDS_PHYSIO_SIGNOFF |
+| responseHours.URGENT | 24 h | NEEDS_PHYSIO_SIGNOFF |
+| responseHours.REVIEW | 72 h | NEEDS_PHYSIO_SIGNOFF |
+| phase p1 expectedWeeks / sessions / follow-up | [0,null], 1/day, every 7 d | NEEDS_PHYSIO_SIGNOFF |
+| warning sign calfPainOrRedness -> tier | SAFETY (R1) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
+| warning sign fever -> tier | SAFETY (R1) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
+| warning sign chestPainBreathless -> tier | SAFETY (R1) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
+| warning sign numbness -> tier | REVIEW (A8) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
+| warning sign weaknessBladderBowel -> tier | SAFETY (R1) | SAFETY; NEEDS_PHYSIO_SIGNOFF |
+| rule S1 silence | 72 h | NEEDS_PHYSIO_SIGNOFF |
+| followUpProposal | tele-review within 48 h, check-ins every 1 d for 7 d | NEEDS_PHYSIO_SIGNOFF |
+
 #### exercise library (34 values)
 
 | Where | Value | Source tag |

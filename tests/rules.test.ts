@@ -358,3 +358,16 @@ describe('S1 respects the check-in schedule (fix phase 3)', () => {
     expect(ids(tri(every3, { nowMs: at(121) }))).toContain('S1');
   });
 });
+
+describe('a reduced check-in schedule is not counted as missed sessions (fix phase 5)', () => {
+  it('every 3 days, all exercises done on check-in days: no A3', () => {
+    const base = mk(21, () => ({}));
+    const sparse = { ...base, daily: base.daily.filter((_, i) => i % 3 === 2), plan: { ...base.plan, followUp: { checkInEveryDays: 3, reviewEveryDays: 7, nextReviewDate: null, until: null } } };
+    expect(ids(tri(sparse))).not.toContain('A3');
+  });
+  it('the same gaps on a daily schedule still count (unchanged)', () => {
+    const base = mk(21, () => ({}));
+    const sparse = { ...base, daily: base.daily.filter((_, i) => i % 3 === 2 || i === 19) };
+    expect(ids(tri(sparse))).toContain('A3');
+  });
+});

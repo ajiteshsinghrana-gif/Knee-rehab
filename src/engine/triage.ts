@@ -41,7 +41,10 @@ const truncate = (p: Patient, d: string): Patient => ({
 const entryOn = (p: Patient, d: string): DailyCheckIn | undefined => p.daily.find((x) => x.date === d);
 const isMissed = (p: Patient, d: string): boolean => {
   const e = entryOn(p, d);
-  return !e || e.exercises === 'none';
+  // On a reduced schedule (every 2+ days) the days between check-ins are not reported, so they are not "missed";
+  // only an explicit "no exercises" counts. Silence is caught by S1. Daily patients are judged exactly as before.
+  if (!e) return checkInEvery(p, d) === 1;
+  return e.exercises === 'none';
 };
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
@@ -83,6 +86,12 @@ function trend(r: Extract<Rule, { type: 'trend' }>, p: Patient, d: string): Trig
 }
 
 function adherence(p: Patient, d: string, windowDays: number): number {
+  if (checkInEvery(p, d) > 1) {
+    // Reduced schedule: judge only the days the patient reported on.
+    const es = Array.from({ length: windowDays }, (_, i) => entryOn(p, addDays(d, -i))).filter((e): e is DailyCheckIn => !!e);
+    const pres = es.reduce((n, e) => n + e.sessionsPrescribed, 0);
+    return pres > 0 ? es.reduce((n, e) => n + e.sessionsDone, 0) / pres : 1;
+  }
   let done = 0;
   for (let i = 0; i < windowDays; i++) done += entryOn(p, addDays(d, -i))?.sessionsDone ?? 0;
   // A patient who joined mid-window is judged only on the days since they joined.

@@ -75,7 +75,7 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
           <label className="check"><input type="checkbox" checked={!!d.caregiver} onChange={(e) => set({ caregiver: e.target.checked })} aria-label="A caregiver will answer" /> A family member or carer will usually answer for the patient</label>
           <label>Condition <select value={d.packId} onChange={(e) => choosePack(e.target.value)} aria-label="Condition">{packs.map((p) => <option key={p.id} value={p.id}>{p.condition.en}</option>)}</select></label>
           {onNewCondition && <p className="tiny" data-testid="new-condition-hint">Condition not listed? <button type="button" className="btn" onClick={onNewCondition}>+ Write a new condition</button> You write its phases, exercises and warning signs once, then pick it here.</p>}
-          <label>{pack.anchorLabel.en} date <input type="date" max={s.today} value={d.anchorDate} onChange={(e) => set({ anchorDate: e.target.value })} aria-label="Surgery date" /></label>
+          <label>{/surgery/i.test(pack.anchorLabel.en) ? 'Surgery date' : 'Treatment start date'} <input type="date" max={s.today} value={d.anchorDate} onChange={(e) => set({ anchorDate: e.target.value })} aria-label="Surgery date" /></label>
           <label>Starting phase <select value={d.phaseId} onChange={(e) => choosePhase(e.target.value)} aria-label="Phase">{pack.phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name.en}</option>)}</select></label>
           <div className="btnrow"><button className="btn primary" onClick={next}>Next: adjust the plan</button></div>
         </div>
@@ -86,6 +86,9 @@ export function Onboarding({ onClose, onNewCondition }: { onClose: () => void; o
           <h3>Exercises <small>({phase.name.en}; the pack's list is ticked)</small></h3>
           <ul className="exchecks">{[...LIBRARY].sort((a, b) => Number(d.exercises.includes(b.id)) - Number(d.exercises.includes(a.id)) || a.name.en.localeCompare(b.name.en)).map((e) => (
             <li key={e.id}><label><input type="checkbox" checked={d.exercises.includes(e.id)} onChange={() => toggleEx(e.id)} /> {exerciseName(e.id, 'en')}{phase.exercises.includes(e.id) ? '' : <small> (not in the pack for this phase)</small>}</label></li>))}</ul>
+          <label className="menufield" style={{ padding: 0 }}>Your own exercises or instructions (optional, one per line, in your words; the patient sees each line)
+            <textarea rows={3} maxLength={4000} value={d.ownExercises ?? ''} onChange={(e) => set({ ownExercises: e.target.value })} placeholder={'e.g. Wall push-ups: 2 sets of 10, morning and evening\nWalk 15 minutes after lunch'} aria-label="Your own exercises" />
+          </label>
           <h3>Follow-up</h3>
           <div className="fu">
             <label>Patient checks in every <input type="number" min={1} max={14} value={d.checkInEveryDays} onChange={(e) => set({ checkInEveryDays: Number(e.target.value) })} aria-label="Check-in every" /> {d.checkInEveryDays === 1 ? 'day' : 'days'}</label>

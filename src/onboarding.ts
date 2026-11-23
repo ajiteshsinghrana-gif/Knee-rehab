@@ -26,6 +26,8 @@ export interface OnboardDraft {
   overrides: { target: string; value: number; reason: string }[];
   /** A family member or carer will usually answer for the patient (Phase 5.3). */
   caregiver?: boolean;
+  /** The physio's own exercises or instructions, one per line, in their own words (shown to the patient). */
+  ownExercises?: string;
 }
 
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
@@ -35,8 +37,8 @@ export function validateOnboard(d: OnboardDraft, today: string): string[] {
   if (!d.name.trim()) e.push('Enter the patient name');
   if (!(d.age >= 1 && d.age <= 110)) e.push('Enter an age between 1 and 110');
   if (!PACKS[d.packId]) e.push('Choose a condition');
-  if (!isDate(d.anchorDate)) e.push('Enter the surgery date');
-  else if (d.anchorDate > today) e.push('The surgery date cannot be in the future');
+  if (!isDate(d.anchorDate)) e.push('Enter the surgery or treatment start date');
+  else if (d.anchorDate > today) e.push('The start date cannot be in the future');
   const pack = PACKS[d.packId];
   if (pack && !pack.phases.some((p) => p.id === d.phaseId)) e.push('Choose a phase');
   if (d.exercises.some((id) => !getExercise(id))) e.push('Unknown exercise in the list');
@@ -69,6 +71,9 @@ export function buildPatient(d: OnboardDraft, ctx: { nowMs: number; today: strin
     p = applyAction(p, pack, { type: 'change-follow-up', checkInEveryDays: d.checkInEveryDays, reviewEveryDays: d.reviewEveryDays, nextReviewDate: addDays(ctx.today, d.reviewEveryDays), note: 'Set at onboarding' }, c);
   }
   for (const o of d.overrides) p = applyAction(p, pack, { type: 'set-override', target: o.target, value: o.value, reason: o.reason.trim() || 'Set at onboarding' }, c);
+  for (const line of (d.ownExercises ?? '').split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 20)) {
+    p = applyAction(p, pack, { type: 'add-instruction', text: line.slice(0, 400), note: 'Set at onboarding' }, c);
+  }
   // the patient is not told about their own starting plan
   p = { ...p, notices: [] };
   // approval itself is the first audit line

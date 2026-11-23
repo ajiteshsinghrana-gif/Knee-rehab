@@ -32,7 +32,7 @@ Then **Patient phone**, patient **Kamla**: her exercise list now shows **▶ द
 Say: "The physio records the ideal movement once; every patient with that exercise can watch it in their own language."
 
 ## 4. The patient is told (45 s)
-Switch to **Patient phone**, patient Kamla. The home screen shows "Message from your physio" in Hindi, with a read-aloud button. Kamla's daughter answers for her: the "I am answering for Kamla" switch under the greeting is already on; every question has a read-aloud button; the physio Overview shows "7 of the last 7 check-ins were answered by a caregiver".
+Switch to **Patient phone**, patient Kamla. The home screen shows "Message from your physio" in Hindi, with a read-aloud button. Kamla's daughter answers for her: the "I am answering for Kamla" switch under the greeting is already on; every question has a read-aloud button; the physio Overview shows "7 of the last 7 check-ins were answered by a caregiver". Kamla has not checked in for 2 days: her phone shows the (simulated) WhatsApp reminder, and her Overview shows that the patient and the carer were reminded; the physio is flagged (S1) only if she stays silent.
 
 ## 5. Third language and a different condition (45 s)
 Patient phone, patient **Imran** (shoulder surgery, Bengali). Same app, different protocol: sling phase, arm-raise measured on a photo. The language dropdown at the top of the phone switches between English, हिन्दी and বাংলা.
@@ -56,3 +56,13 @@ Add a patient, open the invite link on a phone, do a check-in. The physio screen
 ## Optional: guided session and a video request (60 s; rehearse first)
 
 Patient screen: **Start my exercises**. Tap through one exercise (Rep done, rest, pain 0 to 10), then **I need help**, tick the consent and pick any short video. Say: "The patient asks the physio to look at it, with consent." Switch to the Physio tab: that patient's row shows a **1 video to review** chip; open their **Overview**, tick a cue, write a reply, **Send reply**. Back on the patient screen the reply shows under **My videos**. In the demo (no cloud) the clip stays on the device and the physio card says so: say that, do not imply it was uploaded. Not tested on a real phone or iPad: do not use in front of the investor unless rehearsed on that device. Reset undoes it.
+
+
+## Optional: what else is new (1 to 2 min)
+
+- **Sana** (Overview): the app suggests "Reduce check-ins to every 3 days" after weeks on plan. Approve or decline; nothing changes by itself.
+- **Ravi vs Sana** (Plan tab): same surgery and phase, different personal doses and notes, each "Set by Demo physio".
+- **Kamla** (Overview): "Usual pain: 5 · Today: 5", so an ordinary day is not flagged. She missed 2 check-ins: the (simulated) WhatsApp reminders went to her and her carer.
+- **Meera** (Overview): a red flag suggests only "Call the patient" and "Refer to the surgeon or doctor today", and the overdue escalation step to the clinic's backup contact (set one under the gear first).
+- **More, Clinic summary**: adherence, time from flag to review, patients per physio, and each rule's hit rate from "Was this flag useful?".
+- **Add patient, General (no surgery)**: any patient, any exercises, generic rules only.

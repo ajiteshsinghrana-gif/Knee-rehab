@@ -1,0 +1,279 @@
+{
+ "id": "general",
+ "condition": {
+  "en": "General (no surgery)",
+  "hi": "सामान्य (बिना सर्जरी)"
+ },
+ "population": "Any adult in physiotherapy without surgery. Generic rules only (pain rising, missed sessions, same hard movement, no check-in, red flags). The physio chooses the exercises. The red-flag list is not yet reviewed by a clinician.",
+ "version": "0.1.0-placeholder",
+ "sources": [
+  "Generic rules from the app's defaults; no condition-specific protocol. Red-flag list: NEEDS_PHYSIO_SIGNOFF."
+ ],
+ "anchorLabel": {
+  "en": "since starting treatment",
+  "hi": "इलाज शुरू होने के बाद"
+ },
+ "phases": [
+  {
+   "id": "p1",
+   "order": 1,
+   "name": {
+    "en": "Ongoing care",
+    "hi": "चल रहा इलाज"
+   },
+   "exercises": [],
+   "sessionsPerDay": 1,
+   "followUpEveryDays": 7,
+   "expectedWeeks": [
+    0,
+    null
+   ],
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  }
+ ],
+ "measures": [
+  {
+   "id": "pain",
+   "label": {
+    "en": "Pain",
+    "hi": "दर्द"
+   },
+   "question": {
+    "en": "How much pain do you have today?",
+    "hi": "आज आपको कितना दर्द है?"
+   },
+   "unit": "0-10",
+   "capture": "tap",
+   "frequency": "daily",
+   "valueType": "number",
+   "scale": {
+    "min": 0,
+    "max": 10
+   }
+  }
+ ],
+ "gates": [],
+ "expectedCurves": [],
+ "precautions": [],
+ "warningSigns": [
+  {
+   "id": "calfPainOrRedness",
+   "label": {
+    "en": "Calf pain or redness",
+    "hi": "पिंडली में दर्द या लाली"
+   },
+   "ruleLabel": {
+    "en": "Red-flag symptom",
+    "hi": "खतरे का लक्षण"
+   },
+   "tier": "SAFETY",
+   "ruleId": "R1",
+   "source": "SAFETY; NEEDS_PHYSIO_SIGNOFF",
+   "voice": [
+    "calf",
+    "pindli",
+    "पिंडली"
+   ]
+  },
+  {
+   "id": "fever",
+   "label": {
+    "en": "Fever",
+    "hi": "बुखार"
+   },
+   "ruleLabel": {
+    "en": "Red-flag symptom",
+    "hi": "खतरे का लक्षण"
+   },
+   "tier": "SAFETY",
+   "ruleId": "R1",
+   "source": "SAFETY; NEEDS_PHYSIO_SIGNOFF",
+   "voice": [
+    "fever",
+    "temperature",
+    "bukhar",
+    "bukhaar",
+    "बुखार"
+   ]
+  },
+  {
+   "id": "chestPainBreathless",
+   "label": {
+    "en": "Chest pain or breathlessness",
+    "hi": "सीने में दर्द या सांस फूलना"
+   },
+   "ruleLabel": {
+    "en": "Red-flag symptom",
+    "hi": "खतरे का लक्षण"
+   },
+   "tier": "SAFETY",
+   "ruleId": "R1",
+   "source": "SAFETY; NEEDS_PHYSIO_SIGNOFF",
+   "voice": [
+    "chest",
+    "breathless",
+    "breathing",
+    "short of breath",
+    "seene",
+    "सीने",
+    "सांस",
+    "saans"
+   ]
+  },
+  {
+   "id": "numbness",
+   "label": {
+    "en": "New numbness or tingling in the arm or hand",
+    "hi": "बांह या हाथ में नई सुन्नता या झनझनाहट"
+   },
+   "ruleLabel": {
+    "en": "New numbness or tingling in the arm or hand",
+    "hi": "बांह या हाथ में नई सुन्नता या झनझनाहट"
+   },
+   "tier": "REVIEW",
+   "ruleId": "A8",
+   "source": "SAFETY; NEEDS_PHYSIO_SIGNOFF",
+   "voice": [
+    "numb",
+    "tingl",
+    "sunn",
+    "सुन्न",
+    "झनझनाहट"
+   ]
+  },
+  {
+   "id": "weaknessBladderBowel",
+   "label": {
+    "en": "New weakness, or loss of bladder or bowel control",
+    "hi": "नई कमज़ोरी, या पेशाब या शौच पर काबू न रहना"
+   },
+   "ruleLabel": {
+    "en": "Red-flag symptom",
+    "hi": "खतरे का लक्षण"
+   },
+   "tier": "SAFETY",
+   "ruleId": "R1",
+   "source": "SAFETY; NEEDS_PHYSIO_SIGNOFF",
+   "voice": [
+    "bladder",
+    "bowel",
+    "weakness",
+    "कमज़ोरी"
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "id": "A1",
+   "label": {
+    "en": "Pain rising",
+    "hi": "दर्द बढ़ रहा है"
+   },
+   "tier": "REVIEW",
+   "source": "DEFAULT",
+   "type": "trend",
+   "measure": "pain",
+   "direction": "up",
+   "delta": 2,
+   "window": 3,
+   "deltaSource": "DEFAULT"
+  },
+  {
+   "id": "A3",
+   "label": {
+    "en": "Missed sessions",
+    "hi": "कसरत छूट रही है"
+   },
+   "tier": "REVIEW",
+   "source": "DEFAULT",
+   "type": "streak",
+   "metric": "missedSessions",
+   "count": 2,
+   "orAdherenceBelowPct": 60,
+   "countSource": "DEFAULT"
+  },
+  {
+   "id": "A4",
+   "label": {
+    "en": "Same hard movement repeatedly",
+    "hi": "वही हरकत बार-बार मुश्किल"
+   },
+   "tier": "REVIEW",
+   "source": "DEFAULT",
+   "type": "streak",
+   "metric": "repeatedHardMovement",
+   "count": 3,
+   "windowDays": 7,
+   "countSource": "DEFAULT"
+  },
+  {
+   "id": "S1",
+   "label": {
+    "en": "No check-in for several days",
+    "hi": "कई दिन से कोई चेक-इन नहीं"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "silence",
+   "hours": 72,
+   "hoursSource": "NEEDS_PHYSIO_SIGNOFF"
+  }
+ ],
+ "questionnaires": [],
+ "suggestedActions": {
+  "R1": [
+   "call-patient"
+  ],
+  "A1": [
+   "call-patient",
+   "reassess-bring-visit-forward"
+  ],
+  "A3": [
+   "call-patient"
+  ],
+  "A4": [
+   "regress-exercise",
+   "call-patient"
+  ],
+  "S1": [
+   "call-patient"
+  ]
+ },
+ "responseHours": {
+  "SAFETY": {
+   "hours": 2,
+   "source": "PLACEHOLDER; NEEDS_PHYSIO_SIGNOFF"
+  },
+  "URGENT": {
+   "hours": 24,
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  "REVIEW": {
+   "hours": 72,
+   "source": "NEEDS_PHYSIO_SIGNOFF"
+  }
+ },
+ "adherenceWindowDays": 7,
+ "checkIn": {
+  "voiceExample": {
+   "en": "Say e.g. \"pain 4, did all my exercises, no fever\"",
+   "hi": "ऐसे बोलें: \"दर्द 4, सारी कसरतें कीं, बुखार नहीं\""
+  },
+  "dailyMeasures": [
+   "pain"
+  ],
+  "skipReasons": [
+   "pain",
+   "fear",
+   "time",
+   "access",
+   "understand"
+  ]
+ },
+ "followUpProposal": {
+  "teleReviewWithinHours": 48,
+  "checkInEveryDays": 1,
+  "forDays": 7,
+  "source": "NEEDS_PHYSIO_SIGNOFF"
+ }
+}

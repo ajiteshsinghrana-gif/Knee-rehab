@@ -33,6 +33,7 @@ import { pendingForms } from '../forms/model';
 import { optInWeeklyMeasures } from '../checkin';
 import { doseLine } from '../exercises/dose';
 import { scheduleSuggestion } from '../engine/schedule';
+import { missedCheckIns } from '../reminders';
 import { validHours } from '../engine/hours';
 import { ruleHitRates } from '../engine/feedback';
 
@@ -405,6 +406,18 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
               {(() => { const h = hardest(p, r.asOf); return h ? <><span className="ev-big">{exerciseName(h.id, 'en')}</span><span className="ev-v">reported on {h.n} of the last 14 days</span></> : <span className="ev-v">None reported</span>; })()}
             </div>
           </div>
+          {(() => {
+            const m = missedCheckIns(p, pack, st.today);
+            if (!m.missed) return null;
+            const s1 = r.triggers.some((t) => t.ruleId === 'S1');
+            return (
+              <p className="missednote" data-testid="missed-note">
+                <b>Missed check-ins: {m.missed}</b> (last check-in {m.lastDate}{m.every > 1 ? `, due every ${m.every} days` : ''}).{' '}
+                {m.steps.map((x) => `WhatsApp reminder to the ${x.kind} on ${x.date}`).join('; ')} (simulated, nothing was sent).{' '}
+                {s1 ? 'The physio is now flagged (S1).' : 'If the silence continues, rule S1 flags it for you.'}
+              </p>
+            );
+          })()}
           {(caregiverN > 0 || p.caregiverMode) && <p className="tiny" data-testid="caregiver-note">{caregiverN} of the last 7 check-ins were answered by a caregiver, not the patient. Answers a carer gives for the patient are a second-hand report.</p>}
           </div>
           <div className="ov-col">
