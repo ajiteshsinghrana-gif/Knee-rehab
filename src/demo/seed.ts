@@ -61,8 +61,22 @@ export function makeRavi(last = DEMO_TODAY_LAST): Patient {
 /** Ravi is doing well, so his physio has him checking in every 3 days; the R5 proposal then visibly tightens this to daily. */
 function ravisPlan(): ReturnType<typeof planDefaults> {
   const d = planDefaults();
-  return { ...d, plan: { ...d.plan, followUp: { checkInEveryDays: 3, reviewEveryDays: 7, nextReviewDate: null, until: null } } };
+  return { ...d, plan: { ...d.plan, followUp: { checkInEveryDays: 3, reviewEveryDays: 7, nextReviewDate: null, until: null }, ...RAVI_DOSES } };
 }
+
+/** The demo physio's own doses (fix phase 3). Ravi and Sana have the same surgery and phase but different plans. */
+const SET_AT = '2026-11-10T10:00:00.000Z';
+const dose = (sets: number | null, reps: number | null, perDay: number | null, holdSec: number | null = null) => ({ sets, reps, holdSec, perDay, at: SET_AT, by: 'Demo physio' });
+const note = (text: string) => ({ text, at: SET_AT, by: 'Demo physio' });
+const RAVI_DOSES = {
+  doses: { squats: dose(3, 10, 1), lunges: dose(2, 8, 1), 'step-ups': dose(3, 10, 1), bridging: dose(3, 12, 2), 'calf-raises': dose(3, 15, 2) },
+  exerciseNotes: { squats: note('Bend only to about 60 degrees for now. Keep your knee over your toes.'), lunges: note('Short steps. Hold a chair if you feel unsteady.') },
+};
+const SANA_DOSES = {
+  doses: { squats: dose(4, 15, 2), lunges: dose(3, 12, 2), 'step-ups': dose(4, 12, 2), bridging: dose(4, 15, 1, 5), 'calf-raises': dose(4, 20, 2), balance: dose(3, null, 2, 45) },
+  exerciseNotes: { squats: note('Go down to 90 degrees. Add a 2 kg backpack when 15 feel easy.'), balance: note('Try it on a cushion this week.') },
+  added: ['swimming'], removed: ['walking'],
+};
 
 // ---------------- generic ACL builder for the supporting patients ----------------
 const RP = ['gentle-rom', 'none', 'walking', 'none', 'step-ups', 'none', 'squats'];
@@ -71,6 +85,7 @@ function zf(o: {
   pain: (i: number) => number; ex?: (i: number) => Ex; skip?: (i: number) => string | undefined;
   lastOverride?: { pain?: number; swelling?: string; warnings?: Record<string, boolean> };
   weekly: [number, Record<string, Value>][]; tsk?: [number, number][];
+  plan?: Partial<Patient['plan']>;
 }): Patient {
   const pack = getPack('acl-reconstruction');
   const t0 = addDays(o.last, -o.days);
@@ -88,7 +103,7 @@ function zf(o: {
   });
   return {
     id: o.id, name: o.name, age: o.age, packId: pack.id, language: 'en', anchorDate: t0, currentPhase: o.phase, phaseStartDate: addDays(t0, o.phaseStartDay),
-    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(),
+    sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...planDefaults(), ...(o.plan ? { plan: { ...planDefaults().plan, ...o.plan } } : {}),
     periodic: [
       ...o.weekly.map(([d, v]) => ({ date: addDays(t0, d), values: v })),
       ...(o.tsk ?? []).map(([d, v]) => ({ date: addDays(t0, d), values: { tsk11: v } })),
@@ -100,13 +115,15 @@ const W = (ext: number, flex: number, circ: number, lag: boolean, extra: Record<
 });
 
 // ---------------- Total knee replacement and rotator cuff demo patients ----------------
+/** Kamla's pain sits around 5 most days: her usual pain is 5, so an ordinary day is not flagged (rule A8 compares with her own usual). */
+const KAMLA_PAIN = [5, 5, 6, 5, 5, 4, 5];
 function makeKamla(last: string): Patient {
   const pack = getPack('total-knee-replacement');
   const days = 35;
   const t0 = addDays(last, -days);
   // Kamla's daughter answers on her phone (Phase 5.3): every check-in is recorded as given by a caregiver.
   const daily = Array.from({ length: days }, (_, n) => ({ ...dailyEntry(pack, {
-    date: addDays(t0, n + 1), pain: Math.max(2, 5 - Math.floor(n / 9)), swelling: n % 6 === 5 ? 'same' : 'less', ex: n % 9 === 8 ? 'some' : 'all', per: 2,
+    date: addDays(t0, n + 1), pain: KAMLA_PAIN[n % KAMLA_PAIN.length], swelling: n % 6 === 5 ? 'same' : 'less', ex: n % 9 === 8 ? 'some' : 'all', per: 2,
     hard: ['heel-slides', 'none', 'quad-set', 'none', 'walking-aid', 'none', 'straight-leg-raise'][n % 7],
   }), answeredBy: 'caregiver' as const }));
   return {
@@ -152,7 +169,7 @@ export function makeAllPatients(last = DEMO_TODAY_LAST): Patient[] {
       weekly: [[7, W(3, 65, 3, true)], [14, W(2, 95, 2, true)], [21, W(1, 112, 1.5, false)]], tsk: [[20, 14]],
     }),
     zf({
-      id: 'sana', name: 'Sana', age: 28, last, days: 63, phase: 'p2', phaseStartDay: 28, pain: (i) => (i < 20 ? 3 : 1),
+      id: 'sana', name: 'Sana', age: 28, last, days: 63, phase: 'p2', phaseStartDay: 28, pain: (i) => (i < 20 ? 3 : 1), plan: SANA_DOSES,
       weekly: [
         [7, W(3, 72, 3, true)], [14, W(1.5, 100, 2, false)], [28, W(0, 128, 1, false)], [56, W(0, 138, 0.5, false)],
         [63, W(0, 140, 0, false, {

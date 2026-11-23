@@ -63,6 +63,7 @@ export function pendingProposal(p: Patient, pack: ProtocolPack, tri: { tier: str
 export type PlanAction =
   | { type: 'regress-exercise'; exerciseId: string; note?: string; patientNote?: string }
   | { type: 'set-weekly-item'; measure: string; on: boolean; note?: string }
+  | { type: 'set-dose'; exerciseId: string; sets: number | null; reps: number | null; holdSec?: number | null; perDay: number | null; patientNote?: string; note?: string }
   | { type: 'restore-exercise'; exerciseId: string; note?: string }
   | { type: 'set-exercises'; add?: string[]; remove?: string[]; note?: string; notify?: boolean }
   | { type: 'move-phase'; toPhase: string; note: string }
@@ -224,6 +225,24 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
       audit = entry(a.type, `Phase moved by the physio: ${p.currentPhase} to ${a.toPhase} (${direction})${overrode ? ', protocol overridden' : ''}`, { phase: p.currentPhase }, { phase: a.toPhase, direction, overrodeProtocol: overrode, unmetCriteria: unmet, holdWasOn: !!plan.hold }, a.note.trim());
       break;
     }
+    case 'set-dose': {
+      // The physio's own dose and note for one exercise, for this patient only. The library dose is left as it is.
+      if (!currentExercises(p, pack).includes(a.exerciseId)) throw new Error('That exercise is not in the current plan');
+      const ok = (n: number | null | undefined, max: number) => n === null || n === undefined || (Number.isInteger(n) && n >= 1 && n <= max);
+      if (!ok(a.sets, 20) || !ok(a.reps, 200) || !ok(a.holdSec ?? null, 600) || !ok(a.perDay, 12)) throw new Error('Use whole numbers: sets 1-20, reps 1-200, hold 1-600 s, times a day 1-12');
+      if (a.sets === null && a.reps === null && (a.holdSec ?? null) === null && a.perDay === null && !a.patientNote?.trim()) throw new Error('Enter a dose or a note first');
+      const prev = plan.doses?.[a.exerciseId];
+      const dose = { sets: a.sets, reps: a.reps, holdSec: a.holdSec ?? null, perDay: a.perDay, at, by: who };
+      plan.doses = { ...(plan.doses ?? {}), [a.exerciseId]: dose };
+      if (a.patientNote !== undefined) {
+        const t = a.patientNote.trim();
+        const { [a.exerciseId]: _old, ...rest } = plan.exerciseNotes ?? {};
+        plan.exerciseNotes = t ? { ...rest, [a.exerciseId]: { text: t.slice(0, 300), at, by: who } } : rest;
+      }
+      changes.push({ kind: 'dose', exercise: a.exerciseId });
+      audit = entry(a.type, `Dose for ${a.exerciseId} set: ${a.sets ?? '-'} sets x ${a.reps ?? '-'} reps${a.holdSec ? `, hold ${a.holdSec} s` : ''}${a.perDay ? `, ${a.perDay}x a day` : ''}`, prev ?? null, dose, a.note);
+      break;
+    }
     case 'set-weekly-item': {
       // The physio switches an optional weekly self-test item (e.g. eyes-closed balance) on or off for this patient.
       const cur = p.weeklyOptIn ?? [];
@@ -281,7 +300,7 @@ export function applyAction(p: Patient, pack: ProtocolPack, a: PlanAction, ctx: 
 }
 
 /** Plan changes the physio can make on his own, apart from the suggested actions (Phase 5.4). */
-export const MANUAL_TYPES = ['set-exercises', 'regress-exercise', 'restore-exercise', 'hold-progression', 'release-hold', 'change-follow-up', 'move-phase', 'add-instruction', 'remove-instruction'] as const;
+export const MANUAL_TYPES = ['set-dose', 'set-exercises', 'regress-exercise', 'restore-exercise', 'hold-progression', 'release-hold', 'change-follow-up', 'move-phase', 'add-instruction', 'remove-instruction'] as const;
 
 /**
  * A physio-initiated change. A written reason is always required (safety measure), the change is

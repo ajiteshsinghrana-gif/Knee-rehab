@@ -52,7 +52,7 @@ export function LineChart(p: { title: string; note?: string; xLabel: string; yLa
 }
 
 /** A small trend line for the evidence strip: no axes, a dashed line at the threshold, the last value marked. */
-export function Sparkline(p: { points: Pt[]; xMin: number; xMax: number; yMin: number; yMax: number; threshold?: number; label: string; change?: string }): ReactNode {
+export function Sparkline(p: { points: Pt[]; xMin: number; xMax: number; yMin: number; yMax: number; threshold?: number; usual?: number; label: string; change?: string }): ReactNode {
   const W = 168, H = 72;
   const X = scale(p.xMin, p.xMax, 4, W - 4), Y = scale(p.yMin, p.yMax, H - 6, 6);
   const last = p.points[p.points.length - 1];
@@ -62,6 +62,7 @@ export function Sparkline(p: { points: Pt[]; xMin: number; xMax: number; yMin: n
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${p.label}: ${p.points.length ? p.points.map((q) => q.y).join(', ') : 'no answers'}${p.threshold !== undefined ? `. Urgent at ${p.threshold}` : ''}`}>
         <line x1={0} x2={W} y1={H - 1} y2={H - 1} stroke="#eef2f3" />
         {showRef && <><line x1={0} x2={W} y1={Y(p.threshold!)} y2={Y(p.threshold!)} stroke="#c62828" strokeDasharray="3 3" strokeWidth="1" /><text x={W - 2} y={Y(p.threshold!) - 3} textAnchor="end" fontSize="10" fill="#c62828">urgent {p.threshold}</text></>}
+        {p.usual !== undefined && <line x1={0} x2={W} y1={Y(p.usual)} y2={Y(p.usual)} stroke="#6b7a80" strokeDasharray="2 3" strokeWidth="1"><title>usual pain {p.usual}</title></line>}
         {p.points.length > 1 && <path d={p.points.map((q, i) => `${i ? 'L' : 'M'}${X(q.x).toFixed(1)},${Y(q.y).toFixed(1)}`).join(' ')} fill="none" stroke="#0a6b6b" strokeWidth="2" strokeLinejoin="round" />}
         {p.points.map((q, i) => <circle key={i} cx={X(q.x)} cy={Y(q.y)} r={i === p.points.length - 1 ? 3.5 : 2} fill="#0a6b6b" />)}
       </svg>

@@ -229,6 +229,17 @@ export interface SilenceRule extends RuleBase {
 export interface PrecautionBreachRule extends RuleBase {
   type: 'precautionBreach';
 }
+/** Personal baseline (fix phase 3): the last `consecutive` values are each at least `delta` above the patient's usual value
+ * (median of the `baselineWindow` check-ins before them; needs at least `minBaseline`). */
+export interface AboveUsualRule extends RuleBase {
+  type: 'aboveUsual';
+  measure: string;
+  delta: number;
+  consecutive: number;
+  baselineWindow: number;
+  minBaseline: number;
+  deltaSource: SourceTag;
+}
 export interface CombinationRule extends RuleBase {
   type: 'combination';
   ofTier: 'REVIEW';
@@ -238,6 +249,7 @@ export interface CombinationRule extends RuleBase {
 }
 export type Rule =
   | ThresholdRule
+  | AboveUsualRule
   | TrendRule
   | StreakRule
   | BelowCurveRule
@@ -460,7 +472,10 @@ export interface Plan {
   instructions?: CustomInstruction[];
   /** A short note for the patient about one exercise, keyed by exercise id (shown to the patient, e.g. when an easier version is swapped in). */
   exerciseNotes?: Record<string, { text: string; at: string; by: string }>;
+  /** The physio's own dose for an exercise for this patient (fix phase 3); wins over the library dose. */
+  doses?: Record<string, ExerciseDose>;
 }
+export interface ExerciseDose { sets: number | null; reps: number | null; holdSec: number | null; perDay: number | null; at: string; by: string }
 export interface CustomInstruction { id: string; text: string; at: string; }
 export interface AuditEntry {
   id: string;
@@ -483,7 +498,8 @@ export type NoticeChange =
   | { kind: 'phase'; phaseId: string }
   | { kind: 'exercises'; added: string[]; removed: string[] }
   | { kind: 'instruction'; text: string }
-  | { kind: 'instructionRemoved'; text: string };
+  | { kind: 'instructionRemoved'; text: string }
+  | { kind: 'dose'; exercise: string };
 export interface Notice {
   id: string;
   at: string;

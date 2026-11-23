@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyAction, currentExercises, currentFollowUp, pendingProposal } from '../src/engine/plan';
+import { applyAction, applyManual, currentExercises, currentFollowUp, pendingProposal } from '../src/engine/plan';
 import { effectivePack, listOverridable } from '../src/engine/overrides';
 import { evaluateGate } from '../src/engine/gates';
 import { suggestedActions } from '../src/engine/actions';
@@ -196,5 +196,19 @@ describe('README lists library placeholders (rule 3)', () => {
     const items = collectLibrarySignoffs(LIBRARY).filter((x) => x.needsSignoff);
     expect(items.length).toBeGreaterThan(0);
     for (const i of items) expect(readme.includes(i.where)).toBe(true);
+  });
+});
+
+describe('per-exercise dose (fix phase 3)', () => {
+  it('the physio sets a dose and a note for one exercise; it is logged and the patient is told', () => {
+    const out = applyManual(p2(), pack, { type: 'set-dose', exerciseId: 'squats', sets: 3, reps: 12, perDay: 2, patientNote: 'Stop at 90 degrees.' }, 'Ready for more volume', ctx);
+    expect(out.plan.doses?.squats).toMatchObject({ sets: 3, reps: 12, perDay: 2, by: 'Demo physio' });
+    expect(out.plan.exerciseNotes?.squats?.text).toBe('Stop at 90 degrees.');
+    expect(out.audit.at(-1)).toMatchObject({ action: 'set-dose', note: 'Ready for more volume', manual: true });
+    expect(out.notices.at(-1)?.changes[0]).toEqual({ kind: 'dose', exercise: 'squats' });
+  });
+  it('needs a reason and sensible numbers', () => {
+    expect(() => applyManual(p2(), pack, { type: 'set-dose', exerciseId: 'squats', sets: 3, reps: 12, perDay: 2 }, '', ctx)).toThrow(/reason/);
+    expect(() => applyManual(p2(), pack, { type: 'set-dose', exerciseId: 'squats', sets: 0, reps: 12, perDay: 2 }, 'x', ctx)).toThrow(/whole numbers/);
   });
 });

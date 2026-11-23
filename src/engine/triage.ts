@@ -152,11 +152,47 @@ function silence(r: Extract<Rule, { type: 'silence' }>, p: Patient, nowMs?: numb
   const last = p.daily[p.daily.length - 1];
   const lastMs = last ? last.recordedAt ?? toMs(last.date) + 86_400_000 - 1 : toMs(careStart(p));
   const hours = (nowMs - lastMs) / 3_600_000;
-  if (hours < r.hours) return null;
+  // Respects the patient's schedule: someone checking in every 3 days is not silent until 2 extra days have passed.
+  const every = checkInEvery(p, new Date(nowMs).toISOString().slice(0, 10));
+  if (hours < r.hours + (every - 1) * 24) return null;
   const days = Math.floor(hours / 24);
   const t = trig(r, `No check-in for ${days} day${days === 1 ? '' : 's'} (${Math.floor(hours)} h)`, last?.date ?? careStart(p));
   // The label states how long, in both languages (Phase 4.3)
   return { ...t, label: { en: `No check-in for ${days} day${days === 1 ? '' : 's'}`, hi: `${days} दिन से कोई चेक-इन नहीं` } };
+}
+
+/** Median of a list of numbers. */
+const median = (xs: number[]): number => { const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+
+/**
+ * The patient's usual value of a measure as of day d: the median of the `window` check-ins before the last `skipLast`
+ * (needs at least `min`). Returns null when there is not enough history yet.
+ */
+export function usualValue(p: Patient, measure: string, d: string, o: { window?: number; min?: number; skipLast?: number } = {}): { usual: number; latest: number; n: number } | null {
+  const w = o.window ?? 7, min = o.min ?? 5, skip = o.skipLast ?? 2;
+  const vals = p.daily.filter((e) => e.date <= d && e.values[measure] !== undefined && e.values[measure] !== null).map((e) => Number(e.values[measure]));
+  if (!vals.length) return null;
+  const prev = vals.slice(Math.max(0, vals.length - skip - w), vals.length - skip);
+  if (prev.length < min) return null;
+  return { usual: median(prev), latest: vals[vals.length - 1], n: prev.length };
+}
+
+function aboveUsual(r: Extract<Rule, { type: 'aboveUsual' }>, p: Patient, d: string): Trigger | null {
+  if (!entryOn(p, d)) return null;
+  const vals = p.daily.filter((e) => e.date <= d && e.values[r.measure] !== undefined && e.values[r.measure] !== null).map((e) => Number(e.values[r.measure]));
+  const u = usualValue(p, r.measure, d, { window: r.baselineWindow, min: r.minBaseline, skipLast: r.consecutive });
+  if (!u || vals.length < r.consecutive) return null;
+  const last = vals.slice(-r.consecutive);
+  if (!last.every((v) => v >= u.usual + r.delta)) return null;
+  return trig(r, `${r.measure} ${last.join(', ')} on the last ${r.consecutive} check-ins; usual ${u.usual} (median of the ${u.n} before)`, d);
+}
+
+/** Check-in interval in days from the patient's current follow-up (a temporary change reverts after its end date). */
+function checkInEvery(p: Patient, today: string): number {
+  const f = p.plan?.followUp;
+  if (!f) return 1;
+  if (f.until && today > f.until && f.revertTo) return f.revertTo.checkInEveryDays;
+  return f.checkInEveryDays;
 }
 
 function precautionBreach(r: Extract<Rule, { type: 'precautionBreach' }>, p: Patient, pack: ProtocolPack, d: string): Trigger | null {
@@ -196,6 +232,7 @@ function evaluateBase(full: Patient, pack: ProtocolPack, d: string, nowMs?: numb
       case 'gateOverdue': t = gateOverdue(r, p, pack, d); break;
       case 'silence': t = silence(r, p, nowMs); break;
       case 'precautionBreach': t = precautionBreach(r, p, pack, d); break;
+      case 'aboveUsual': t = aboveUsual(r, p, d); break;
       case 'combination': break;
     }
     if (t) out.push({ t, counts: true });

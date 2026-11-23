@@ -626,3 +626,16 @@ label.check input { margin-top: 3px; flex: none; }
 .twobtns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
 .twobtns .btn { min-height: 48px; white-space: normal; text-align: center; line-height: 1.25; padding: var(--s1) var(--s2); }
 main.home { gap: var(--s3); padding-top: var(--s3); }
+
+/* ---------- fix phase 3: personalisation ---------- */
+.dose { display: block; font-size: 13px; }
+.dose.own { font-weight: 600; color: var(--ink); }
+.dosenote, .doseby { display: block; font-size: 12px; color: var(--muted); }
+.extable .linkbtn { font-size: 12px; padding: 0; }
+.doseeditor { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3); background: var(--hover); border-radius: var(--radius); }
+.doseeditor h4 { margin: 0; }
+.dosegrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s2); }
+.dosegrid label { display: flex; flex-direction: column; gap: var(--s1); font-size: 12px; font-weight: 600; color: var(--muted); }
+.dosegrid input { width: 100%; }
+.proposal.schedule { border-left-color: var(--teal); }
+@media (max-width: 720px) { .dosegrid { grid-template-columns: 1fr 1fr; } }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { triage, compareWorklist, stageFor } from '../src/engine/triage';
 import { evaluateGate } from '../src/engine/gates';
+import { listOverridable } from '../src/engine/overrides';
 import { suggestedActions } from '../src/engine/actions';
 import { addDays, toMs } from '../src/engine/dates';
 import { DEMO_STEPS, demoStepPatient, makeAllPatients, makeRavi } from '../src/demo/seed';
@@ -158,7 +159,8 @@ describe('R5: combination of review-tier rules', () => {
     expect(r5.combinedFrom).toContain('A3');
   });
   it('one review rule alone stays REVIEW', () => {
-    const r = tri(mk(10, (d) => ({ pain: d === 8 ? 3 : d === 9 ? 4 : d === 10 ? 5 : 2 })));
+    // 2 -> 3 -> 4 fires A1 only; the last two (3, 4) are not both 2 above usual pain 2, so A8 stays quiet.
+    const r = tri(mk(10, (d) => ({ pain: d === 9 ? 3 : d === 10 ? 4 : 2 })));
     expect(r.tier).toBe('REVIEW');
     expect(ids(r)).not.toContain('R5');
   });
@@ -321,5 +323,38 @@ describe('generic rule types in other packs', () => {
     const imran = makeAllPatients().find((x) => x.id === 'imran')!;
     imran.daily[imran.daily.length - 1].warnings.chestPainBreathless = true;
     expect(triage(imran, rc).tier).toBe('SAFETY');
+  });
+});
+
+describe('A8: pain above the patient\'s usual (fix phase 3)', () => {
+  it('fires when the last 2 check-ins are both at least 2 above usual pain (median of the 7 before)', () => {
+    const r = tri(mk(10, (d) => ({ pain: d >= 9 ? 5 : 3 })));
+    expect(ids(r)).toContain('A8');
+    expect(r.triggers.find((t) => t.ruleId === 'A8')!.evidence).toContain('usual 3');
+  });
+  it('one high day is not enough, and it needs at least 5 earlier check-ins', () => {
+    expect(ids(tri(mk(10, (d) => ({ pain: d === 10 ? 6 : 3 }))))).not.toContain('A8');
+    expect(ids(tri(mk(6, (d) => ({ pain: d >= 5 ? 6 : 3 }))))).not.toContain('A8'); // only 4 earlier check-ins
+  });
+  it('is judged against the patient\'s own usual: steady pain of 5 is not flagged', () => {
+    expect(ids(tri(mk(12, () => ({ pain: 5 }))))).not.toContain('A8');
+  });
+  it('its margin can be changed for one patient under per-patient thresholds', () => {
+    const t = listOverridable(pack).find((x) => x.target === 'rule:A8:delta');
+    expect(t?.base).toBe(2);
+  });
+});
+
+describe('S1 respects the check-in schedule (fix phase 3)', () => {
+  const p = mk(10, () => ({}));
+  const last = p.daily.at(-1)!.date;
+  const at = (h: number) => toMs(last) + 86_400_000 - 1 + h * 3_600_000;
+  const every3 = { ...p, plan: { ...p.plan, followUp: { checkInEveryDays: 3, reviewEveryDays: 7, nextReviewDate: null, until: null } } };
+  it('daily: silent for 72 h or more is S1', () => {
+    expect(ids(tri(p, { nowMs: at(73) }))).toContain('S1');
+  });
+  it('every 3 days: allowed 2 extra days, so 73 h is fine and 121 h is S1', () => {
+    expect(ids(tri(every3, { nowMs: at(73) }))).not.toContain('S1');
+    expect(ids(tri(every3, { nowMs: at(121) }))).toContain('S1');
   });
 });

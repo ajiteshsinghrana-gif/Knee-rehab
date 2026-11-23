@@ -403,6 +403,22 @@
    "deltaSource": "NEEDS_PHYSIO_SIGNOFF"
   },
   {
+   "id": "A8",
+   "label": {
+    "en": "Pain above usual",
+    "hi": "दर्द सामान्य से ज़्यादा"
+   },
+   "tier": "REVIEW",
+   "source": "NEEDS_PHYSIO_SIGNOFF",
+   "type": "aboveUsual",
+   "measure": "pain",
+   "delta": 2,
+   "consecutive": 2,
+   "baselineWindow": 7,
+   "minBaseline": 5,
+   "deltaSource": "NEEDS_PHYSIO_SIGNOFF"
+  },
+  {
    "id": "A3",
    "label": {
     "en": "Missed sessions",

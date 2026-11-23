@@ -205,6 +205,11 @@ export function validatePack(p: ProtocolPack): string[] {
         if (!hasSource(r.hoursSource)) err(`rule ${r.id} has a threshold without a source tag`);
         if (!(r.hours > 0)) err(`rule ${r.id} silence hours must be > 0`);
         break;
+      case 'aboveUsual':
+        needM(r.measure, `rule ${r.id}`);
+        if (!hasSource(r.deltaSource)) err(`rule ${r.id} has a threshold without a source tag`);
+        if (!(r.consecutive >= 1) || !(r.baselineWindow >= r.minBaseline) || !(r.minBaseline >= 2)) err(`rule ${r.id} needs consecutive >= 1 and baselineWindow >= minBaseline >= 2`);
+        break;
       case 'precautionBreach':
         if (!(p.precautions ?? []).length) err(`rule ${r.id} (precautionBreach) needs precautions[]`);
         break;

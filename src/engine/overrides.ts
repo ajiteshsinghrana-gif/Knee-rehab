@@ -17,6 +17,7 @@ export function listOverridable(pack: ProtocolPack, p?: Patient): Overridable[] 
   for (const r of pack.rules) {
     if (r.type === 'threshold') r.stages.forEach((s, i) => add(`rule:${r.id}:stage:${i}`, stageLabel(r, i), s.value));
     else if (r.type === 'trend') { add(`rule:${r.id}:delta`, `${r.id} ${r.label.en}: change over ${r.window} check-ins`, r.delta); }
+    else if (r.type === 'aboveUsual') { add(`rule:${r.id}:delta`, `${r.id} ${r.label.en}: points above usual`, r.delta); }
     else if (r.type === 'streak') {
       add(`rule:${r.id}:count`, `${r.id} ${r.label.en}: count`, r.count);
       if (r.orAdherenceBelowPct !== undefined) add(`rule:${r.id}:adherence`, `${r.id} ${r.label.en}: adherence below %`, r.orAdherenceBelowPct);

@@ -88,3 +88,25 @@ describe('demo fast-forward in the app (calendar stays put)', () => {
     expect(prop.after.forDays).toBe(7);
   });
 });
+
+describe('personalisation in the demo (fix phase 3)', () => {
+  const nowMs = Date.parse('2026-11-15T09:00:00Z');
+  it('Sana is offered fewer check-ins; nobody else is', async () => {
+    const { scheduleSuggestion } = await import('../src/engine/schedule');
+    const all = makeAllPatients();
+    const got = Object.fromEntries(all.map((p) => { const pk = getPack(p.packId); return [p.id, scheduleSuggestion(p, pk, triage(p, pk, { nowMs }), '2026-11-15', nowMs)?.kind ?? null]; }));
+    expect(got).toEqual({ ravi: null, meera: null, arjun: null, sana: 'reduce', kamla: null, imran: null });
+  });
+  it('Kamla\'s usual pain is about 5 and an ordinary day is not flagged as pain above usual', async () => {
+    const { usualValue } = await import('../src/engine/triage');
+    const k = by('kamla');
+    expect(usualValue(k, 'pain', k.daily.at(-1)!.date)!.usual).toBe(5);
+    expect(tier('kamla').triggers.map((t) => t.ruleId)).not.toContain('A8');
+  });
+  it('Ravi and Sana have the same surgery and phase but different personal doses', () => {
+    const r = by('ravi'), s = by('sana');
+    expect(r.packId).toBe(s.packId);
+    expect(r.currentPhase).toBe(s.currentPhase);
+    expect(r.plan.doses?.squats).not.toEqual(s.plan.doses?.squats);
+  });
+});

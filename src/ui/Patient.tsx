@@ -19,6 +19,7 @@ import { currentExercises } from '../engine/plan';
 import { exerciseName, getExercise } from '../exercises/library';
 import { DemoButton } from './Demo';
 import { demoFor } from '../exercises/demos';
+import { doseLine } from '../exercises/dose';
 import { AngleTool } from './AngleTool';
 import { noticeText } from '../notices';
 import { GuidedSession } from './GuidedSession';
@@ -168,7 +169,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
             return (
               <li key={id} className="exitem">
                 <span className="exthumb"><ExPicture src={ex?.picture} size={40} /></span>
-                <span className="extext"><b>{exerciseName(id, lang)}</b>{ex && <small>{L(ex.dose.text, lang)}</small>}<SwapInfo patient={patient} id={id} lang={lang} /></span>
+                <span className="extext"><b>{exerciseName(id, lang)}</b><small>{doseLine(patient, id, lang)}</small><DoseBy patient={patient} id={id} lang={lang} /><SwapInfo patient={patient} id={id} lang={lang} /></span>
                 <DemoButton patient={patient} exerciseId={id} lang={lang} compact />
               </li>
             );
@@ -196,6 +197,21 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
       </section>
       <p className="disclaimer">{T('noticeLong')}</p>
     </main>
+  );
+}
+
+/** "Set by your physio on 10/11/2026" under a personal dose; also shows a note that is not about a swap. */
+function DoseBy({ patient, id, lang }: { patient: Patient; id: string; lang: Lang }) {
+  const d = patient.plan.doses?.[id];
+  const swapped = Object.values(patient.plan.swaps).includes(id);
+  const n = !swapped ? patient.plan.exerciseNotes?.[id] : undefined; // a swapped exercise shows its note in SwapInfo
+  if (!d && !n) return null;
+  const [y, m, dd] = (d ?? n)!.at.slice(0, 10).split('-');
+  return (
+    <span className="swapinfo">
+      {n && <span className="swap-note"><b>{t(lang, 'physioNote')}:</b> {n.text} <ReadAloud key={lang + n.text} text={`${t(lang, 'physioNote')}. ${n.text}`} lang={lang} /></span>}
+      <span className="swap-novideo">{t(lang, 'setByPhysio', { date: `${dd}/${m}/${y}` })}</span>
+    </span>
   );
 }
 
@@ -452,7 +468,7 @@ function CheckIn({ patient, pack, lang, onDone, onBack, problem }: { patient: Pa
                 <div className="excard" key={id} data-ex={id}>
                   <div className="exhead">
                     <ExPicture src={ex?.picture} size={48} />
-                    <div><b>{exerciseName(id, lang)}</b>{ex && <small>{T('exDose')}: {L(ex.dose.text, lang)}</small>}<SwapInfo patient={patient} id={id} lang={lang} /></div>
+                    <div><b>{exerciseName(id, lang)}</b>{ex && <small>{T('exDose')}: {doseLine(patient, id, lang)}</small>}<SwapInfo patient={patient} id={id} lang={lang} /></div>
                   </div>
                   <DemoButton patient={patient} exerciseId={id} lang={lang} />
                   <div className="yn">

@@ -11,7 +11,7 @@ import type { Patient, ProtocolPack, Tier, Trigger, TriageResult } from '../type
 import { L } from '../i18n';
 import { getPack } from '../engine/packs';
 import { addDays, diffDays } from '../engine/dates';
-import { compareWorklist, stageFor, triage, weeksInPhase, weeksSince } from '../engine/triage';
+import { compareWorklist, stageFor, triage, usualValue, weeksInPhase, weeksSince } from '../engine/triage';
 import { evaluateGate } from '../engine/gates';
 import { ACTION_LABELS, suggestedActions } from '../engine/actions';
 import { collectSignoffs } from '../engine/signoff';
@@ -31,6 +31,8 @@ import { SessionsCard } from './SessionsCard';
 import { FormReview } from './FormReview';
 import { pendingForms } from '../forms/model';
 import { optInWeeklyMeasures } from '../checkin';
+import { doseLine } from '../exercises/dose';
+import { scheduleSuggestion } from '../engine/schedule';
 
 const TIER_LABEL: Record<Tier, string> = { SAFETY: 'SAFETY', URGENT: 'URGENT', REVIEW: 'REVIEW', ON_PLAN: 'ON PLAN' };
 const srcClass = (s: string) => s.split(/[;( ]/)[0].replace(/[^A-Z_]/g, '');
@@ -373,11 +375,17 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
               {(() => {
                 const pts = p.daily.filter((d) => d.date > addDays(r.asOf, -14) && d.date <= r.asOf && d.values.pain !== undefined).map((d) => ({ x: diffDays(d.date, r.asOf), y: Number(d.values.pain) }));
                 const vals = pts.map((q) => q.y);
-                const ys = vals.concat(painRef && vals.length && painRef.value <= Math.max(...vals) + 1 ? [painRef.value] : []); // the urgent line joins the scale only when it is close
+                const u = usualValue(p, 'pain', r.asOf);
+                const ys = vals.concat(painRef && vals.length && painRef.value <= Math.max(...vals) + 1 ? [painRef.value] : []).concat(u ? [u.usual] : []); // the urgent line joins the scale only when it is close
                 // Scale to the data (and the urgent line) so a 3-point rise is clearly visible, not squashed into 0 to 10.
                 const lo = ys.length ? Math.max(0, Math.min(...ys) - 1) : 0;
                 const hi = ys.length ? Math.min(10, Math.max(Math.max(...ys) + 1, lo + 5)) : 10;
-                return <Sparkline points={pts} xMin={-13} xMax={0} yMin={lo} yMax={hi} threshold={painRef?.value} label="Pain, 0 to 10, over the last 14 days" change={painChange(pts)} />;
+                return (
+                  <>
+                    <Sparkline points={pts} xMin={-13} xMax={0} yMin={lo} yMax={hi} threshold={painRef?.value} usual={u?.usual} label="Pain, 0 to 10, over the last 14 days" change={painChange(pts)} />
+                    <span className="ev-v" data-testid="usual-pain">{u ? <>Usual pain: <b>{u.usual}</b> · Today: <b>{u.latest}</b></> : 'Usual pain: needs 5 more check-ins'}</span>
+                  </>
+                );
               })()}
             </div>
             <div className="ev">
@@ -395,6 +403,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
           {(caregiverN > 0 || p.caregiverMode) && <p className="tiny" data-testid="caregiver-note">{caregiverN} of the last 7 check-ins were answered by a caregiver, not the patient. Answers a carer gives for the patient are a second-hand report.</p>}
           </div>
           <div className="ov-col">
+          <ScheduleCard patient={p} pack={pack} r={r} now={now} onApply={apply} />
           <ProposalCard patient={p} pack={pack} r={r} now={now} />
 
           <div className="card">
@@ -452,7 +461,10 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             <div className="card">
               <LineChart title="Pain, last 6 weeks" xLabel={`weeks ${pack.anchorLabel.en}`} yLabel="0-10" yMin={0} yMax={10}
                 series={[{ name: 'Pain', color: '#0a6b6b', points: pain, dots: true }]}
-                refs={painRef ? [{ y: painRef.value, label: `urgent at ${painRef.value}`, color: '#c62828' }] : []} />
+                refs={[
+                  ...(painRef ? [{ y: painRef.value, label: `urgent at ${painRef.value}`, color: '#c62828' }] : []),
+                  ...(() => { const u = usualValue(p, 'pain', r.asOf); return u ? [{ y: u.usual, label: `usual ${u.usual}`, color: '#6b7a80' }] : []; })(),
+                ]} />
             </div>
             {curves.map((c) => {
               const m = pack.measures.find((x) => x.id === c.measure)!;
@@ -551,6 +563,28 @@ function painChange(pts: { x: number; y: number }[]): string {
   const days = last.x - first.x;
   if (first.y === last.y) return `Steady at ${last.y} for ${days} day${days === 1 ? '' : 's'}`;
   return `${first.y} → ${last.y} in ${days} day${days === 1 ? '' : 's'}`;
+}
+
+/** An app suggestion to change how often the patient checks in. Nothing changes until the physio approves; both answers are logged. */
+function ScheduleCard({ patient: p, pack, r, now, onApply }: { patient: Patient; pack: ProtocolPack; r: TriageResult; now: number; onApply: ApplyFn }) {
+  const st = getState();
+  const sug = scheduleSuggestion(p, pack, r, st.today, now);
+  const [note, setNote] = useState('');
+  if (!sug) return null;
+  const fu = currentFollowUp(p, pack, st.today);
+  const title = sug.kind === 'reduce' ? `Reduce check-ins to every ${sug.to} days` : 'Return to daily check-ins';
+  const why = `${sug.why}.${note.trim() ? ` ${note.trim()}` : ''}`;
+  return (
+    <div className="card proposal schedule" data-testid="schedule-suggestion">
+      <h3>Suggestion: {title} <small>Nothing changes until you approve</small></h3>
+      <p className="tiny">{sug.why}. Now: {everyDays(sug.from)}. Proposed: {everyDays(sug.to)}. The patient is told if you approve.</p>
+      <div className="btnrow proprow">
+        <input aria-label="Note" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+        <button className="btn" onClick={() => onApply({ type: 'change-follow-up', checkInEveryDays: sug.to, nextReviewDate: fu.nextReviewDate, until: null, flagKey: sug.key, proposalStatus: 'approved', note: `App suggestion approved: ${why}` })}>Approve</button>
+        <button className="btn" onClick={() => onApply({ type: 'reject-proposal', flagKey: sug.key, note: `App suggestion declined: ${why}` })}>Decline</button>
+      </div>
+    </div>
+  );
 }
 
 /** Optional weekly self-test items (off by default) the physio can switch on for this patient. Each switch is logged. */
@@ -810,7 +844,7 @@ function PlanCard({ patient: p, pack, now, onApply, err, onAdjust }: { patient: 
   const exs = currentExercises(p, pack);
   const fu = currentFollowUp(p, pack, st.today);
   const swapped = Object.entries(p.plan.swaps);
-  void now;
+  const [editing, setEditing] = useState<string | null>(null);
   return (
     <div className="card plan" data-testid="plan">
       <div className="cardhead"><h3>Current plan</h3>{onAdjust && <button className="btn" onClick={onAdjust}>Adjust the treatment</button>}</div>
@@ -826,12 +860,26 @@ function PlanCard({ patient: p, pack, now, onApply, err, onAdjust }: { patient: 
           return (
             <tr key={id}>
               <td>{exerciseName(id, 'en')}{orig && <><br /><small>Easier version of {exerciseName(orig, 'en')}</small> <button className="linkbtn" onClick={() => onApply({ type: 'restore-exercise', exerciseId: id })}>Restore</button></>}</td>
-              <td><small>{ex ? L(ex.dose.text, 'en') : '—'}</small></td>
+              <td>
+                {(() => {
+                  const d = p.plan.doses?.[id];
+                  const n = p.plan.exerciseNotes?.[id];
+                  return (
+                    <>
+                      <span className={d ? 'dose own' : 'dose'}>{d ? doseLine(p, id, 'en') : <small>{ex ? L(ex.dose.text, 'en') : '—'}</small>}</span>
+                      {n && <small className="dosenote">Note for the patient: “{n.text}”</small>}
+                      {(d || n) && <small className="doseby">Set by {(d ?? n)!.by} on {(d ?? n)!.at.slice(0, 10)}</small>}
+                      {p.status !== 'completed' && editing !== id && <button className="linkbtn" onClick={() => setEditing(id)}>{d ? 'Edit dose' : 'Set dose'}</button>}
+                    </>
+                  );
+                })()}
+              </td>
               <td>{getDemo(id) ? <span className="demobadge" title="Patients can watch a demonstration of this exercise">Video</span> : <span className="demobadge none" title="No demonstration attached yet. Add one under More, Exercise videos.">No video</span>}</td>
             </tr>
           );
         })}
       </tbody></table>
+      {editing && <DoseEditor key={editing} patient={p} pack={pack} now={now} exerciseId={editing} onClose={() => setEditing(null)} />}
       {err && <p className="err" role="alert">{err}</p>}
       {(p.plan.instructions ?? []).length > 0 && (
         <>
@@ -839,6 +887,48 @@ function PlanCard({ patient: p, pack, now, onApply, err, onAdjust }: { patient: 
           <ul className="planlist">{(p.plan.instructions ?? []).map((x) => <li key={x.id}>{x.text}</li>)}</ul>
         </>
       )}
+    </div>
+  );
+}
+
+/** The physio's own dose and note for one exercise, for this patient. A reason is required and goes in the audit log. */
+function DoseEditor({ patient: p, pack, now, exerciseId, onClose }: { patient: Patient; pack: ProtocolPack; now: number; exerciseId: string; onClose: () => void }) {
+  const d = p.plan.doses?.[exerciseId];
+  const num = (v: number | null | undefined) => (v === null || v === undefined ? '' : String(v));
+  const [sets, setSets] = useState(num(d?.sets ?? getExercise(exerciseId)?.dose.sets));
+  const [reps, setReps] = useState(num(d?.reps ?? getExercise(exerciseId)?.dose.reps));
+  const [hold, setHold] = useState(num(d?.holdSec ?? getExercise(exerciseId)?.dose.holdSec));
+  const [perDay, setPerDay] = useState(num(d?.perDay));
+  const [forPatient, setForPatient] = useState(p.plan.exerciseNotes?.[exerciseId]?.text ?? '');
+  const [reason, setReason] = useState('');
+  const [err, setErr] = useState('');
+  const n = (v: string) => (v.trim() === '' ? null : Number(v));
+  const save = () => {
+    try {
+      updatePatient(p.id, (q) => applyManual(q, pack, { type: 'set-dose', exerciseId, sets: n(sets), reps: n(reps), holdSec: n(hold), perDay: n(perDay), patientNote: forPatient }, reason, { nowMs: now, today: getState().today }));
+      onClose();
+    } catch (e) { setErr((e as Error).message); }
+  };
+  return (
+    <div className="doseeditor" data-testid="dose-editor">
+      <h4>Dose for {exerciseName(exerciseId, 'en')}</h4>
+      <div className="dosegrid">
+        <label>Sets<input type="number" min={1} max={20} value={sets} onChange={(e) => setSets(e.target.value)} /></label>
+        <label>Reps<input type="number" min={1} max={200} value={reps} onChange={(e) => setReps(e.target.value)} /></label>
+        <label>Hold (s)<input type="number" min={1} max={600} value={hold} onChange={(e) => setHold(e.target.value)} /></label>
+        <label>Times a day<input type="number" min={1} max={12} value={perDay} onChange={(e) => setPerDay(e.target.value)} /></label>
+      </div>
+      <label className="menufield" style={{ padding: 0 }}>Note for the patient (optional; they see it with this exercise)
+        <input maxLength={300} value={forPatient} onChange={(e) => setForPatient(e.target.value)} placeholder="e.g. Keep your knee over your toes." />
+      </label>
+      <label className="menufield" style={{ padding: 0 }}>Reason for this change (required; saved in the audit log, not shown to the patient)
+        <input value={reason} onChange={(e) => setReason(e.target.value)} />
+      </label>
+      {err && <p className="err" role="alert">{err}</p>}
+      <div className="btnrow">
+        <button className="btn primary" disabled={!reason.trim()} onClick={save}>Save and tell the patient</button>
+        <button className="btn" onClick={onClose}>Cancel</button>
+      </div>
     </div>
   );
 }

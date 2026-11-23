@@ -29,7 +29,9 @@ export interface SState {
 /** The exercises for today, with their dose from the library. A missing dose means one set, counted by one tap. */
 export function planSteps(patient: Patient, pack: ProtocolPack): Step[] {
   return currentExercises(patient, pack).map((id) => {
-    const d = getExercise(id)?.dose;
+    // The physio's own dose for this patient wins over the library dose (fix phase 3).
+    const own = patient.plan.doses?.[id];
+    const d = own ?? getExercise(id)?.dose;
     return { exerciseId: id, sets: Math.max(1, d?.sets ?? 1), reps: d?.reps ?? null, holdSec: d?.holdSec ?? null };
   });
 }

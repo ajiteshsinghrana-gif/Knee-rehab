@@ -28,6 +28,7 @@ export const BN_CONTENT: Record<string, string> = {
  "High pain": "তীব্র ব্যথা",
  "Several amber signals together": "একসঙ্গে কয়েকটি সতর্ক সংকেত",
  "Pain rising": "ব্যথা বাড়ছে",
+ "Pain above usual": "স্বাভাবিকের চেয়ে বেশি ব্যথা",
  "Missed sessions": "ব্যায়াম বাদ যাচ্ছে",
  "Phase taking longer than expected": "ধাপ প্রত্যাশার চেয়ে বেশি সময় নিচ্ছে",
  "Restricted movement in a restricted phase": "নিষিদ্ধ নড়াচড়া নিষেধের ধাপে",
