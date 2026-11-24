@@ -38,6 +38,7 @@ const turn = (a: number, b: number) => { let d = a - b; while (d > 180) d -= 360
 const bend = (a: Pt, v: Pt, b: Pt): number | null => { const x = angleAt(a, v, b); return x === null ? null : 180 - x; };
 
 interface Measure { ok: boolean; signal: number; faults: Record<string, number | null> }
+interface Cand { mh: Pt; lA: Pt; rA: Pt; leg: number; trunk: number }
 interface Base { n: number; trunk: number; hipY: number; hipX: number; leg: number; ankles: [Pt, Pt] | null; ear: [number, number] | null }
 
 export class FormAnalyzer {
@@ -50,6 +51,7 @@ export class FormAnalyzer {
   private t0: number | null = null;
   private tLast = 0;
   private hist: { s: number; t: number }[] = [];
+  private cand: Cand[] = [];
   private reps = 0;
   private inRep = false;
   private peak = 0;
@@ -184,11 +186,20 @@ export class FormAnalyzer {
     const trunk = ms ? Math.atan2(ms.x - mh.x, -(ms.y - mh.y)) * RAD : 0;
     const b = this.base;
     if (b.n < FORM_CHECK.baselineFrames) {
-      // Learn the standing position (the patient starts upright).
-      const n = b.n;
-      b.hipY = (b.hipY * n + mh.y) / (n + 1); b.hipX = (b.hipX * n + mh.x) / (n + 1); b.leg = (b.leg * n + leg) / (n + 1); b.trunk = (b.trunk * n + trunk) / (n + 1);
-      b.ankles = b.ankles ? [{ x: (b.ankles[0].x * n + lA.x) / (n + 1), y: (b.ankles[0].y * n + lA.y) / (n + 1) }, { x: (b.ankles[1].x * n + rA.x) / (n + 1), y: (b.ankles[1].y * n + rA.y) / (n + 1) }] : [lA, rA];
-      b.n++;
+      // Learn the standing position, but only once the person has stopped moving (they may still be stepping back from the phone).
+      const N = FORM_CHECK.baselineFrames;
+      this.cand.push({ mh, lA, rA, leg, trunk });
+      if (this.cand.length > N) this.cand.shift();
+      if (this.cand.length === N) {
+        const span = (f: (c: Cand) => number) => Math.max(...this.cand.map(f)) - Math.min(...this.cand.map(f));
+        const still = span((c) => c.mh.x) < 0.03 * leg && span((c) => c.mh.y) < 0.03 * leg && span((c) => c.lA.x) < 0.04 * leg && span((c) => c.rA.x) < 0.04 * leg && span((c) => c.lA.y) < 0.04 * leg && span((c) => c.rA.y) < 0.04 * leg;
+        if (still) {
+          const avg = (f: (c: Cand) => number) => this.cand.reduce((a, c) => a + f(c), 0) / N;
+          b.hipX = avg((c) => c.mh.x); b.hipY = avg((c) => c.mh.y); b.leg = avg((c) => c.leg); b.trunk = avg((c) => c.trunk);
+          b.ankles = [{ x: avg((c) => c.lA.x), y: avg((c) => c.lA.y) }, { x: avg((c) => c.rA.x), y: avg((c) => c.rA.y) }];
+          b.n = N;
+        }
+      }
       return { ok: true, signal: 0, faults: {} };
     }
     const signal = ((mh.y - b.hipY) / b.leg) * 100;

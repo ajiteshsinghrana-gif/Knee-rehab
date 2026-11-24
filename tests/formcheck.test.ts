@@ -124,6 +124,16 @@ describe('camera form check: counting and measuring', () => {
     const bad = run('squat', (v) => squat(v / 100, { kneeIn: v > 6 ? 0.35 : 0 }), 25);
     expect(bad.sum.faults.find((x) => x.id === 'squat-knee-in')?.kind).toBe('posture');
   });
+  it('does not take a moving person as the standing position: stepping back first causes no balance fault', () => {
+    const a = new FormAnalyzer('squat');
+    let t = 0;
+    for (let i = 0; i < 14; i++) { const f = squat(0).map((p) => ({ ...p, x: p.x + i * 0.012 })); a.push(f, (t += DT), 1); } // still walking
+    for (let i = 0; i < 12; i++) a.push(squat(0).map((p) => ({ ...p, x: p.x + 0.17 })), (t += DT), 1); // now standing still
+    for (let r = 0; r < 4; r++) { for (let i = 0; i <= 40; i++) a.push(squat((25 * Math.sin((Math.PI * i) / 40)) / 100).map((p) => ({ ...p, x: p.x + 0.17 })), (t += DT), 1); for (let i = 0; i < 4; i++) a.push(squat(0).map((p) => ({ ...p, x: p.x + 0.17 })), (t += DT), 1); }
+    const sum = a.finish();
+    expect(sum.reps).toBe(4);
+    expect(ids(sum)).not.toContain('squat-balance');
+  });
   it('measures a sideways lean in the squat', () => {
     const { sum } = run('squat', (v) => squat(v / 100, { lean: v > 6 ? 18 : 0 }), 25);
     expect(ids(sum)).toContain('squat-lean');

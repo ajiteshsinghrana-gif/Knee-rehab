@@ -54,6 +54,8 @@ export const FORM_CHECK = {
   smoothing: 0.6,
   /** Frames at rest used to learn the starting position. */
   baselineFrames: 8,
+  /** Seconds to get into position after tapping start, before anything is measured. */
+  getReadySec: 5,
   /** Fewer usable frames than this share, or fewer than minFrames in total, means "could not see enough": nothing is flagged. */
   minUsable: 0.7,
   minTotalFrames: 20,

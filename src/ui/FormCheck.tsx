@@ -38,6 +38,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
   const [reps, setReps] = useState(0);
   const [unseen, setUnseen] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [getReady, setGetReady] = useState<number | null>(null);
   const [noticed, setNoticed] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [clip, setClip] = useState<Blob | null>(null);
@@ -140,6 +141,19 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
 
   const beginSet = () => {
     if (!kind || !ready) return;
+    setStage('live');
+    setGetReady(FORM_CHECK.getReadySec);
+  };
+  // Count down so the patient can step back and get into position before anything is measured.
+  useEffect(() => {
+    if (getReady === null) return;
+    if (getReady <= 0) { setGetReady(null); startSet(); return; }
+    const id = setTimeout(() => setGetReady((n) => (n === null ? null : n - 1)), 1000);
+    return () => clearTimeout(id);
+  }, [getReady]);
+
+  const startSet = () => {
+    if (!kind) return;
     const lim = limitFor(patient, ex);
     analyzer.current = new FormAnalyzer(kind, lim ? { max: lim.max, min: lim.min } : undefined);
     setReps(0); setUnseen(false); setPaused(false); setNoticed('');
@@ -155,7 +169,6 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     }
     startedAt.current = performance.now();
     live.current = true;
-    setStage('live');
   };
 
   const stopRecording = (): Promise<Blob | null> => new Promise((resolve) => {
@@ -253,7 +266,8 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
         </div>
         {err && <p className="err" role="alert">{err}</p>}
         {!err && !ready && <p>{F('fcLoading')}</p>}
-        {stage === 'live' && <p className="gs-count" aria-live="polite">{F('fcReps', { n: reps })}</p>}
+        {stage === 'live' && getReady !== null && <p className="gs-count" role="timer" aria-live="polite">{F('fcGetReady', { n: getReady })}</p>}
+        {stage === 'live' && getReady === null && <p className="gs-count" aria-live="polite">{F('fcReps', { n: reps })}</p>}
         {stage === 'live' && unseen && <p className="hint" role="status">{F('fcUnseen')}</p>}
         {stage === 'live' && noticed && <p className="gs-msg" role="status">{noticed}</p>}
         {paused && <div className="red" role="alert" data-testid="fc-pause"><strong>{F('fcPause')}</strong></div>}
@@ -265,7 +279,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
             <button className="link" onClick={() => { stopCamera(); setStage('intro'); }}>← {F('fcTitle')}</button>
           </>
         )}
-        {stage === 'live' && <button className="big primary" onClick={() => void finish()}>{F('fcFinish')}</button>}
+        {stage === 'live' && <button className="big primary" onClick={() => (getReady !== null ? (setGetReady(null), setStage('camera')) : void finish())}>{getReady !== null ? F('fcCancel') : F('fcFinish')}</button>}
       </main>
     );
   }
