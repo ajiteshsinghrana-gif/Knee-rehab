@@ -412,11 +412,11 @@ describe('safety and wording', () => {
     expect(formKindFor('straight-leg-raise')).toBe('slr');
     expect(formKindFor('mini-squats')).toBe('squat');
     expect(formKindFor('shoulder-abduction')).toBe('shoulder-abduction');
-    expect(formKindFor('walking-aid')).toBeNull();
+    expect(formKindFor('gait-drills')).toBeNull();
   });
   it('newCheckLog refuses an exercise the camera cannot measure', () => {
     const summary = new FormAnalyzer('slr').finish();
-    expect(() => newCheckLog({ id: 'x1', date: today, startedAt: 0, endedAt: 1, exerciseId: 'walking-aid', summary, by: 'patient' })).toThrow();
+    expect(() => newCheckLog({ id: 'x1', date: today, startedAt: 0, endedAt: 1, exerciseId: 'gait-drills', summary, by: 'patient' })).toThrow();
   });
 });
 
