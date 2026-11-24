@@ -276,7 +276,8 @@ export class FormAnalyzer {
     switch (this.kind) {
       case 'slr': return this.mSlr(f);
       case 'squat': return this.legs(f, 'squat', 1, true);
-      case 'squat-side': return this.mSquatSide(f);
+      case 'squat-side': return this.mLegSide(f, 'squat-side');
+      case 'lunge-side': return this.mLegSide(f, 'lunge-side');
       case 'sit-to-stand': return this.legs(f, 'sit', -1, true);
       case 'lunge': return this.legs(f, 'lunge', 1, false);
       case 'step-up': return this.legs(f, 'step', -1, false);
@@ -384,8 +385,8 @@ export class FormAnalyzer {
   }
 
   /** Side view, lying or sitting: the knee bends and straightens (heel slides, gentle knee movement). */
-  /** Side view, standing: the leg nearest the camera. The signal is how far the knee bends (the depth of the squat); the trunk tipping forward is judged against how upright it started. */
-  private mSquatSide(f: Landmark[]): Measure {
+  /** Side view, standing (squat, lunge): the leg nearest the camera. The signal is how far the knee bends (the depth); the trunk tipping forward is judged against how upright it started. */
+  private mLegSide(f: Landmark[], kind: 'squat-side' | 'lunge-side'): Measure {
     const sets = { l: [LM.lShoulder, LM.lHip, LM.lKnee, LM.lAnkle], r: [LM.rShoulder, LM.rHip, LM.rKnee, LM.rAnkle] } as const;
     const k = this.nearSide(f, sets);
     const [sh, hip, kn, an] = sets[k];
@@ -395,9 +396,9 @@ export class FormAnalyzer {
     if (flex === null) return { ok: false, signal: 0, faults: {} };
     // Degrees the shoulder is away from straight above the hip, whichever way the person faces.
     const lean = Math.atan2(Math.abs(S.x - H.x), H.y - S.y) * RAD;
-    if (flex < KINDS['squat-side'].repDown && this.base.n < FORM_CHECK.baselineFrames) { this.base.trunk = (this.base.trunk * this.base.n + lean) / (this.base.n + 1); this.base.n++; }
+    if (flex < KINDS[kind].repDown && this.base.n < FORM_CHECK.baselineFrames) { this.base.trunk = (this.base.trunk * this.base.n + lean) / (this.base.n + 1); this.base.n++; }
     const hasBase = this.base.n >= FORM_CHECK.baselineFrames;
-    return { ok: true, signal: flex, faults: { 'squat-side-lean': hasBase && flex > 10 ? Math.max(0, lean - this.base.trunk) : null } };
+    return { ok: true, signal: flex, faults: { [`${kind.split('-')[0]}-side-lean`]: hasBase && flex > 10 ? Math.max(0, lean - this.base.trunk) : null } };
   }
 
   private mKneeFlex(f: Landmark[]): Measure {
