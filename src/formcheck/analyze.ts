@@ -185,7 +185,8 @@ export class FormAnalyzer {
     if (this.recordTrace && this.total % 4 === 0 && this.traceOut.length < 600) this.traceOut.push([Math.round(((tMs - (this.t0 ?? tMs)) / 1000) * 10) / 10, Math.round(s * 10) / 10]);
     if (moving) {
       for (const f of cfg.faults) this.hold(f.id, m.faults[f.id] ?? null, f.minFrames ?? cfg.minFrames);
-      for (const f of cfg.faults) this.watch(f.id, f.kind, f.limit, f.unit, m.faults[f.id] ?? null, rep, tMs, f.minFrames ?? cfg.minFrames, ev);
+      // Only gross faults are pointed out: a wider limit, and it has to last longer (FORM_CHECK.gross).
+      for (const f of cfg.faults) this.watch(f.id, f.kind, f.limit * FORM_CHECK.gross.limitFactor, f.unit, m.faults[f.id] ?? null, rep, tMs, Math.ceil((f.minFrames ?? cfg.minFrames) * FORM_CHECK.gross.framesFactor), ev);
       if (this.limit?.max !== undefined) this.watch(LIMIT_FAULTS.max.id, LIMIT_FAULTS.max.kind, this.limit.max, cfg.signal, s, rep, tMs, cfg.minFrames, ev);
     } else {
       this.bufs.clear();

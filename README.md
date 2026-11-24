@@ -591,6 +591,11 @@ Every exercise shows a looping animated demo instead of the still picture on the
 
 The camera opens, the app says how to stand (too close, too dark, turn sideways, show your hand), and the camera view gets a green frame and an "In position" tag when the whole body is seen (amber "Get in position" otherwise). Held for about 1.3 s, the 5 second count-down starts by itself, then reps are counted. Stepping out of position for about 1.3 s during the count-down returns to setup; Cancel stops the auto-start until the patient steps out and back in. The Start button still works as a manual start once in position. Frame counts are `SETUP.autoFrames` / `SETUP.lostFrames`. Not tried on a real camera.
 
+### Instructions and "only gross faults" (2026-11-25)
+
+- Every camera-checked exercise has a plain **starting position** and **movement** in English, Hindi and Bengali (`src/formcheck/howto.ts`), shown before the camera opens, on the camera set-up screen and during the count-down. Four numbered steps explain the flow: camera on, get into position, the frame turns **green**, then the 5 second count-down, and **reps only count after it reaches 0**.
+- The patient is told what to change when something is clearly off (live cue, then the result list). Small differences are not pointed out: every fault limit is multiplied by `FORM_CHECK.gross.limitFactor` (1.5) and must last `framesFactor` (2) times as long; the pace flags only fire for reps under 0.35x or over 3x the tempo. The physio's own per-patient limits are not softened. All are placeholders (NEEDS_PHYSIO_SIGNOFF). Wording is a draft; Hindi and Bengali need a native reader.
+
 ### Camera check safety round (2026-11-24)
 
 - **On by default (changed 2026-11-24, second round).** Every demo and new patient has the camera check on. The physio can turn it off per patient with the switch at the **top of the Plan tab**; the switch is in the audit log and travels to the patient's phone. The phone cannot change it itself.
