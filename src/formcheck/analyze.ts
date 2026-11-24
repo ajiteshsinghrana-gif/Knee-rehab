@@ -82,7 +82,8 @@ export class FormAnalyzer {
   private run = new Map<string, number>();
   private found = new Map<string, { kind: FormFaultKind; reps: Set<number>; peak: number; unit: FormFault['unit']; firstSec: number }>();
   private pausedIds = new Set<string>();
-  private lastPauseMs = -1e9;
+  /** When each red flag was last announced: the same one at most every 5 s, different ones do not silence each other. */
+  private lastPauseMs = new Map<string, number>();
   private maxRun = 0;
   private holdT0 = 0;
   private steps: { len: number; lead: number; t: number }[] = [];
@@ -857,16 +858,16 @@ export class FormAnalyzer {
   private record(id: string, kind: FormFaultKind, rep: number, value: number, unit: FormFault['unit'], tMs: number, ev: FormEvent[]) {
     if (this.opts.countOnly && !id.startsWith('pace-')) {
       // No form tips here. A stumble still stops the set (safety), without being listed as a form fault.
-      if (FORM_CHECK.pauseEnabled && kind === 'stability' && this.recentUsable >= 0.8 && tMs - this.lastPauseMs > 5000) { this.lastPauseMs = tMs; this.pausedIds.add(id); ev.push({ type: 'pause', id, kind }); }
+      if (FORM_CHECK.pauseEnabled && kind === 'stability' && this.recentUsable >= 0.8 && tMs - (this.lastPauseMs.get(id) ?? -1e9) > 5000) { this.lastPauseMs.set(id, tMs); this.pausedIds.add(id); ev.push({ type: 'pause', id, kind }); }
       return;
     }
     let f = this.found.get(id);
     if (!f) { f = { kind, reps: new Set(), peak: value, unit, firstSec: ((tMs - (this.t0 ?? tMs)) / 1000) }; this.found.set(id, f); }
     f.peak = Math.max(f.peak, value);
     if (!f.reps.has(rep)) { f.reps.add(rep); ev.push({ type: 'fault', id, kind, rep }); }
-    // A pause is asked only when the camera has been seeing the body well, and not more than once every 5 seconds.
-    if (FORM_CHECK.pauseEnabled && FORM_CHECK.pauseOn.includes(kind) && this.recentUsable >= 0.8 && tMs - this.lastPauseMs > 5000) {
-      this.lastPauseMs = tMs;
+    // A red flag is raised only when the camera has been seeing the body well. It never stops the set: the screen names it and the check carries on.
+    if (FORM_CHECK.pauseEnabled && FORM_CHECK.pauseOn.includes(kind) && this.recentUsable >= 0.8 && tMs - (this.lastPauseMs.get(id) ?? -1e9) > 5000) {
+      this.lastPauseMs.set(id, tMs);
       this.pausedIds.add(id);
       ev.push({ type: 'pause', id, kind });
     }
