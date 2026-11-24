@@ -17,9 +17,10 @@ import { CONSENT_TEXT, FORM_CONFIG, consentText, reviewHours, validClip } from '
 import { newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { clipCloudReady, patientUploadClip } from '../sync/engine';
 import { FormAnalyzer, type FormEvent, type FormSummary } from '../formcheck/analyze';
-import { BONES, FORM_CHECK, HAND, HAND_BONES, HAND_KINDS, KINDS, SETUP, VARIANTS, checkMode, formKindFor, type FormKind } from '../formcheck/config';
+import { ANGLES, BONES, FORM_CHECK, HAND, HAND_BONES, HAND_KINDS, KINDS, SETUP, VARIANTS, checkMode, formKindFor, isFrontView, type FormKind } from '../formcheck/config';
 import { assess, attachClip, cameraOn, carerOf, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, requestForClip, setAfterAnswers, withdrawConsent, type Assessment } from '../formcheck/model';
 import { loadPose, type Pose } from '../formcheck/pose';
+import { ZOOM, clampZoom, cropFor, toFullFrame } from '../formcheck/zoom';
 import { lumaOf, setupHint, type SetupHint } from '../formcheck/setup';
 import { COUNT_KEYS, VIEW_KEY, fcs } from '../formcheck/strings';
 import { hasPhone, telHref } from '../contact';
@@ -72,6 +73,23 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
   const [cue, setCue] = useState('');
   /** Red flags hit in the last few seconds, each named. The set and the camera keep running while they show. */
   const [flags, setFlags] = useState<{ id: string; text: string }[]>([]);
+  /** Zoom: the camera's own where it has one (hardware), otherwise a digital crop. Locked once the set starts. */
+  const [zoom, setZoom] = useState(1);
+  const [hwZoom, setHwZoom] = useState<{ min: number; max: number; step: number } | null>(null);
+  /** The ultra-wide lens of this camera (a separate camera on some phones and iPads), when the browser names one. It is the 0.5x. */
+  const [wideId, setWideId] = useState<string | null>(null);
+  const [wide, setWide] = useState(false);
+  const [noWide, setNoWide] = useState(false);
+  const digitalRef = useRef(1);
+  const cropCanvas = useRef<HTMLCanvasElement | null>(null);
+  const changeZoom = (raw: number) => {
+    if (phaseRef.current === 'live') return;
+    if (hwZoom) {
+      const z = Math.min(hwZoom.max, Math.max(hwZoom.min, raw));
+      setZoom(z);
+      void stream.current?.getVideoTracks()[0]?.applyConstraints({ advanced: [{ zoom: z } as unknown as MediaTrackConstraintSet] }).catch(() => { /* the camera refused */ });
+    } else { const z = clampZoom(raw); setZoom(z); digitalRef.current = z; }
+  };
   const flagTimers = useRef(new Map<string, number>());
   const showFlag = (id: string, text: string) => {
     setFlags((cur) => [...cur.filter((f) => f.id !== id), { id, text }]);
@@ -192,8 +210,19 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
       const now = performance.now();
       if (now - lastT.current >= 66) { // about 15 frames a second
         lastT.current = now;
-        const frame = p.detect(v, now);
-        draw(frame);
+        // Digital zoom: the model is given only the middle part of the picture, and the skeleton is drawn back in the whole picture.
+        let src: HTMLVideoElement | HTMLCanvasElement = v;
+        let crop: ReturnType<typeof cropFor> | null = null;
+        if (digitalRef.current > 1.01) {
+          crop = cropFor(digitalRef.current);
+          const cc = cropCanvas.current ?? (cropCanvas.current = document.createElement('canvas'));
+          const sw = Math.round(v.videoWidth * crop.w), sh = Math.round(v.videoHeight * crop.h);
+          if (cc.width !== sw || cc.height !== sh) { cc.width = sw; cc.height = sh; }
+          cc.getContext('2d')?.drawImage(v, v.videoWidth * crop.x, v.videoHeight * crop.y, sw, sh, 0, 0, sw, sh);
+          src = cc;
+        }
+        const frame = p.detect(src, now);
+        draw(frame && crop ? toFullFrame(frame, crop) : frame);
         if (phaseRef.current === 'setup') {
           const f = fps.current;
           if (!f.t0 || document.hidden) { f.t0 = now; f.n = 0; }
@@ -218,12 +247,27 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
     raf.current = requestAnimationFrame(loop);
   };
 
-  async function openCamera(face: 'user' | 'environment') {
+  async function openCamera(face: 'user' | 'environment', deviceId?: string) {
     setErr(''); setReady(false); okRunRef.current = 0; setOkRun(0); fps.current = { t0: 0, n: 0, warned: false };
     stopCamera();
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: face, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+      const s = await navigator.mediaDevices.getUserMedia({ video: { ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: face }), width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
       stream.current = s;
+      let hw: { min: number; max: number; step: number } | null = null;
+      try {
+        const z = (s.getVideoTracks()[0]?.getCapabilities?.() as { zoom?: { min: number; max: number; step?: number } } | undefined)?.zoom;
+        if (z && z.max > z.min) hw = { min: z.min, max: z.max, step: z.step && z.step > 0 ? z.step : 0.1 };
+      } catch { /* this browser cannot say */ }
+      // Start at 1x even where the camera can go lower (the 0.5x is a choice, not the default).
+      setHwZoom(hw); setZoom(hw ? Math.min(hw.max, Math.max(1, hw.min)) : 1); digitalRef.current = 1; setNoWide(false);
+      if (!deviceId) {
+        // Camera names are only given once the camera is allowed, which is now.
+        try {
+          const want = face === 'user' ? /front/i : /back|rear/i;
+          const w = (await navigator.mediaDevices.enumerateDevices()).find((d) => d.kind === 'videoinput' && /ultra.?wide/i.test(d.label) && (want.test(d.label) || !/front|back|rear/i.test(d.label)));
+          setWideId(w?.deviceId ?? null);
+        } catch { setWideId(null); }
+      }
       if (video.current) { video.current.srcObject = s; await video.current.play(); }
     } catch { setErr(F('fcNoCamera')); return; }
     try {
@@ -234,7 +278,15 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
     setReady(true);
     raf.current = requestAnimationFrame(loop);
   }
-  const swap = async () => { const f = facing === 'user' ? 'environment' : 'user'; setFacing(f); await openCamera(f); };
+  const swap = async () => { const f = facing === 'user' ? 'environment' : 'user'; setFacing(f); setWide(false); await openCamera(f); };
+  /** 0.5x: the camera's own zoom if it goes that low, else the ultra-wide lens if the browser names one. A crop can never show more than the camera sees, so there is no digital 0.5x. */
+  const goWide = async (on: boolean) => {
+    if (phaseRef.current === 'live') return;
+    if (hwZoom && hwZoom.min <= 0.5 + 1e-6) { setWide(on); changeZoom(on ? 0.5 : 1); return; }
+    if (on && wideId) { setWide(true); await openCamera(facing, wideId); setZoom(0.5); return; }
+    if (!on && wide) { setWide(false); await openCamera(facing); return; }
+    if (on) setNoWide(true);
+  };
 
   // Count down so the patient can get into position before anything is measured.
   useEffect(() => {
@@ -294,9 +346,24 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
   return (
     <main data-testid="formcheck-live" data-stage={phase === 'setup' ? 'camera' : 'live'}>
       <div className="fc-stage" style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 12, overflow: 'hidden' }}>
-        <video ref={video} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-label={F('fcTitle')} />
-        <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-hidden="true" />
+        <div style={{ position: 'absolute', inset: 0, transform: !hwZoom && zoom > 1 ? `scale(${zoom})` : undefined, transformOrigin: 'center' }}>
+          <video ref={video} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-label={F('fcTitle')} />
+          <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-hidden="true" />
+        </div>
       </div>
+      {phase !== 'live' && ready && (
+        <div className="field" data-testid="fc-zoom-box">
+          <label><b>{F('fcZoom')} {zoom.toFixed(1)}×</b>
+            <input type="range" data-testid="fc-zoom" disabled={wide && !hwZoom} min={hwZoom ? hwZoom.min : ZOOM.min} max={hwZoom ? hwZoom.max : ZOOM.max} step={hwZoom ? hwZoom.step : ZOOM.step} value={zoom} onChange={(e) => { setWide(false); changeZoom(Number(e.target.value)); }} />
+          </label>
+          <div className="yn">
+            <button type="button" className={wide ? 'sel' : ''} aria-pressed={wide} data-testid="fc-zoom-wide" onClick={() => void goWide(true)}>0.5×</button>
+            <button type="button" className={!wide && zoom === 1 ? 'sel' : ''} aria-pressed={!wide && zoom === 1} data-testid="fc-zoom-one" onClick={() => { void goWide(false); if (!wide) changeZoom(1); }}>1×</button>
+          </div>
+          {noWide && <p className="hint" role="status" data-testid="fc-zoom-nowide">{F('fcZoomWide')}</p>}
+          {!hwZoom && zoom > 1 && <p className="tiny">{F('fcZoomDigital')}</p>}
+        </div>
+      )}
       {err && <p className="err" role="alert">{err}</p>}
       {err && onTooSlow && <button className="big primary" data-testid="fc-video-instead" onClick={onTooSlow}>{F('fcModeVideo')}</button>}
       {!err && !ready && <p>{F('fcLoading')}</p>}
@@ -349,7 +416,15 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
   const mode = checkMode(ex);
   const variants = mode === 'form' ? VARIANTS[ex] : undefined;
   const [variant, setVariant] = useState(0);
-  const kind = variants ? variants[Math.min(variant, variants.length - 1)].kind : formKindFor(ex);
+  const baseKind = variants ? variants[Math.min(variant, variants.length - 1)].kind : formKindFor(ex);
+  /** Some exercises can be checked from more than one angle (the squat and the lunge: front and side). Every extra angle is optional. */
+  const angles: FormKind[] = mode === 'form' && baseKind ? ANGLES[baseKind] ?? [baseKind] : baseKind ? [baseKind] : [];
+  const [pick, setPick] = useState(0);
+  /** An angle chosen after a set (the other one), and the sets already done for this exercise this time. */
+  const [extra, setExtra] = useState<FormKind | null>(null);
+  const [earlier, setEarlier] = useState<{ kind: FormKind; log: FormCheckLog }[]>([]);
+  const kind = extra ?? angles[Math.min(pick, angles.length - 1)] ?? baseKind;
+  const angleName = (k: FormKind) => F(isFrontView(k) ? 'fcAngleFront' : 'fcAngleSide');
   const [stage, setStage] = useState<Stage>('intro');
   const [agreed, setAgreed] = useState(hasConsent(patient));
   const [err, setErr] = useState('');
@@ -389,7 +464,8 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
     // The video stays in memory only so the patient can choose to send it. Nothing is uploaded unless they watch it and tick consent.
     setClip(o.clip ? { blob: o.clip, sec: o.clipSec, setSec: o.summary.seconds } : null);
     setClipAgree(false); setClipState('idle'); setPain(null); setFlag(null);
-    setStage(o.stop === 'stumble' ? 'stumble' : 'after');
+    // The second angle follows straight on from the first: the after-set questions were already asked.
+    setStage(o.stop === 'stumble' ? 'stumble' : earlier.length > 0 ? 'result' : 'after');
   };
 
   const saveAfter = () => {
@@ -423,12 +499,12 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
     } catch (e) { setErr((e as Error).message); setClipState('idle'); }
   };
 
-  const reset = () => { setStage('intro'); setResult(null); setClip(null); setClipAgree(false); setClipState('idle'); setErr(''); };
+  const reset = () => { setExtra(null); setEarlier([]); setStage('intro'); setResult(null); setClip(null); setClipAgree(false); setClipState('idle'); setErr(''); };
   const hours = reviewHours(pack);
   const consent = consentText(lang);
 
   if (stage === 'set' && kind) {
-    return <CameraSet key={kind} kind={kind} lang={lang} countOnly={mode === 'count'} limit={mode === 'form' && kind !== 'balance-line' && !KINDS[kind].noLimit ? limitFor(patient, ex) : undefined}
+    return <CameraSet key={kind} kind={kind} lang={lang} countOnly={mode === 'count'} limit={mode === 'form' && kind === baseKind && kind !== 'balance-line' && !KINDS[kind].noLimit ? limitFor(patient, ex) : undefined}
       tempo={mode === 'form' ? limitFor(patient, ex)?.tempo : undefined} onDone={onDone} onCancel={() => setStage('intro')} onTooSlow={() => onVideo(ex)} />;
   }
 
@@ -465,6 +541,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
     const { log, a } = result;
     const lines: string[] = [];
     lines.push(log.repsCounted > 0 ? F(COUNT_KEYS[log.kind]?.done ?? 'fcRepsDone', { n: log.repsCounted }) : F('fcNoReps'));
+    if (log.peaks?.length) lines.push(F('fcDepth', { n: Math.round(Math.max(...log.peaks)) }));
     if (log.cadence) lines.push(F(COUNT_KEYS[log.kind]?.rate ?? 'fcCadence', { n: log.cadence }));
     if (log.holds?.length) lines.push(F('fcHolds', { list: log.holds.join(', ') }));
     if (log.repSecs?.length && log.tempo) lines.push(F('fcPaceLine', { sec: median(log.repSecs), tempo: log.tempo }));
@@ -478,6 +555,18 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
       <main data-testid="formcheck-result">
         <h2>{F('fcResult')} <Speak text={[...lines, verdict].join(' ')} lang={lang} /></h2>
         <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
+        {earlier.map((e) => {
+          const tally = new Map<string, number>();
+          for (const f of e.log.faults) { const c = F(`fault-${f.id}`); tally.set(c, (tally.get(c) ?? 0) + f.reps.length); }
+          return (
+            <div className="card" key={e.log.id} data-testid="fc-earlier">
+              <b>{angleName(e.kind)}</b>
+              <p>{e.log.repsCounted > 0 ? F('fcRepsDone', { n: e.log.repsCounted }) : F('fcNoReps')}</p>
+              {e.log.reliable ? (tally.size ? <ul className="exlist">{[...tally.keys()].map((c) => <li key={c}>{c}</li>)}</ul> : <p>{F('fcNone')}</p>) : <p className="hint">{F('fcUnreliable')}</p>}
+            </div>
+          );
+        })}
+        {earlier.length > 0 && <h3>{angleName(kind!)}</h3>}
         {result.stop === 'limit' && <p className="red" role="alert"><strong>{F('fcPause')}</strong></p>}
         {lines.map((x) => <p key={x}>{x}</p>)}
         {count && <p className="hint" data-testid="fc-no-tips">{F('fcNoTips')}</p>}
@@ -506,6 +595,18 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
         {clipState === 'device' && <p className="okline">{F('fcClipLocal')}</p>}
         {clipState === 'deleted' && <p className="tiny">{F('fcDiscarded')}</p>}
         {err && <p className="err" role="alert">{err}</p>}
+        {(() => {
+          const done = [...earlier.map((e) => e.kind), kind];
+          const rest = angles.filter((k) => !done.includes(k));
+          return rest.length > 0 ? (
+            <div className="card" data-testid="fc-second-angle-box">
+              <p className="tiny">{F('fcSecondAngleWhy')}</p>
+              {rest.map((k) => (
+                <button key={k} className="big secondary" data-testid="fc-second-angle" onClick={() => { setEarlier([...earlier, { kind: kind!, log }]); setExtra(k); setResult(null); setClip(null); setClipState('idle'); setStage('set'); }}>{F('fcAlsoCheck', { angle: angleName(k) })}</button>
+              ))}
+            </div>
+          ) : null;
+        })()}
         <button className="big primary" onClick={reset}>{F('fcAgain')}</button>
         <button className="big secondary" onClick={onBack}>{F('fcHome')}</button>
       </main>
@@ -520,13 +621,18 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
       <p className="tiny">{F('fcNoEmergency')}</p>
       {options.length > 1 ? (
         <label className="field"><b>{F('fcPickEx')}</b>
-          <select value={ex} data-testid="fc-exercise" onChange={(e) => { setEx(e.target.value); setVariant(0); }}>{options.map((id) => <option key={id} value={id}>{exerciseName(id, lang)}</option>)}</select>
+          <select value={ex} data-testid="fc-exercise" onChange={(e) => { setEx(e.target.value); setVariant(0); setPick(0); }}>{options.map((id) => <option key={id} value={id}>{exerciseName(id, lang)}</option>)}</select>
         </label>
       ) : null}
       <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
       {variants && (
         <label className="field"><b>{F('fcPickVar')}</b>
           <select value={variant} onChange={(e) => setVariant(Number(e.target.value))} data-testid="fc-variant">{variants.map((v, i) => <option key={v.kind} value={i}>{F(v.labelKey)}</option>)}</select>
+        </label>
+      )}
+      {mode === 'form' && angles.length > 1 && (
+        <label className="field"><b>{F('fcPickAngle')}</b>
+          <select value={pick} onChange={(e) => setPick(Number(e.target.value))} data-testid="fc-angle">{angles.map((k, i) => <option key={k} value={i}>{angleName(k)}</option>)}</select>
         </label>
       )}
       {mode !== 'form' && <p className="hint" data-testid="fc-no-tips">{F('fcNoTips')}{mode === 'video' ? ` ${F('fcCantCount')}` : ''}</p>}

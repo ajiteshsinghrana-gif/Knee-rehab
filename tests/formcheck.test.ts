@@ -1,3 +1,4 @@
+import { ZOOM, clampZoom, cropFor, toFullFrame } from '../src/formcheck/zoom';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { makeAllPatients, DEMO_TODAY_LAST } from '../src/demo/seed';
@@ -6,7 +7,7 @@ import { triage } from '../src/engine/triage';
 import { addDays } from '../src/engine/dates';
 import { getExercise } from '../src/exercises/library';
 import { FormAnalyzer, type Frame, type FormEvent } from '../src/formcheck/analyze';
-import { DEFAULT_TEMPO, FORM_CHECK, HAND, HAND_KINDS, KINDS, KIND_EXERCISES, LM, SET_FAULTS, VARIANTS, checkMode, formKindFor, paceApplies, type FormKind } from '../src/formcheck/config';
+import { ANGLES, DEFAULT_TEMPO, FORM_CHECK, HAND, HAND_KINDS, KINDS, KIND_EXERCISES, LM, SET_FAULTS, VARIANTS, checkMode, formKindFor, paceApplies, type FormKind } from '../src/formcheck/config';
 import { FAULT_PHYSIO, FC_STRINGS } from '../src/formcheck/strings';
 import { requestForClip } from '../src/formcheck/model';
 import { PILOT_MIN, countPct, counts, faultsFor, judge, loadPilot, newPilotRecord, putParticipant, repAgreement, savePilot, suggest, summarise, toCsv, upsert, type PilotParticipant, type PilotRecord, type PilotStore } from '../src/formcheck/pilot';
@@ -92,6 +93,88 @@ function run(kind: FormKind, make: (v: number, i: number) => Frame, peak: number
   return { a, events, sum: a.finish() };
 }
 const ids = (s: ReturnType<FormAnalyzer['finish']>) => s.faults.map((f) => f.id);
+
+/** Side view, standing: left leg nearest the camera, knee bent by `flex` degrees, trunk tipped forward by `lean` degrees. */
+function squatSide(flex: number, lean = 0): Frame {
+  const f = blank();
+  const A = { x: 0.5, y: 0.9 }, h = rad(flex / 2);
+  const K = { x: A.x + 0.2 * Math.sin(h), y: A.y - 0.2 * Math.cos(h) };
+  const H = { x: K.x - 0.2 * Math.sin(h), y: K.y - 0.2 * Math.cos(h) };
+  const S = { x: H.x + 0.25 * Math.sin(rad(lean)), y: H.y - 0.25 * Math.cos(rad(lean)) };
+  f[LM.lShoulder] = { ...S, v: 1 }; f[LM.lHip] = { ...H, v: 1 }; f[LM.lKnee] = { ...K, v: 1 }; f[LM.lAnkle] = { ...A, v: 1 };
+  for (const i of [LM.rShoulder, LM.rHip, LM.rKnee, LM.rAnkle]) f[i] = { x: 0.5, y: 0.5, v: 0 };
+  return f;
+}
+
+describe('camera check: second angle, depth and zoom', () => {
+  it('the squat can be checked from a second angle; the side view has no exercise of its own', () => {
+    expect(ANGLES.squat).toEqual(['squat', 'squat-side']);
+    expect(ANGLES.lunge).toEqual(['lunge', 'lunge-side']);
+    for (const k of ['squat-side', 'lunge-side'] as const) expect(KIND_EXERCISES[k]).toEqual([]);
+    // The usual angle comes first, every other angle is a kind of its own, and no angle list names an exercise twice.
+    for (const [base, list] of Object.entries(ANGLES)) { expect(list![0]).toBe(base); expect(new Set(list).size).toBe(list!.length); }
+    expect(KINDS['squat-side'].view).toBe('sideStand');
+    expect(KINDS['squat-side'].signal).toBe('deg');
+  });
+  it('the side view measures the depth: the deepest knee bend of every rep', () => {
+    const { sum } = run('squat-side', (v) => squatSide(v, 8), 70);
+    expect(sum.reps).toBe(5);
+    expect(sum.faults).toEqual([]);
+    expect(sum.peaks).toHaveLength(5);
+    for (const d of sum.peaks!) { expect(d).toBeGreaterThan(62); expect(d).toBeLessThan(72); }
+    // A shallower squat reads shallower.
+    const shallow = run('squat-side', (v) => squatSide(v, 8), 40).sum.peaks!;
+    expect(Math.max(...shallow)).toBeLessThan(Math.min(...sum.peaks!));
+  });
+  it('the side view flags the trunk tipping far forward, judged from how upright it started', () => {
+    const { sum } = run('squat-side', (v) => squatSide(v, 5 + v * 0.9), 70);
+    expect(ids(sum)).toContain('squat-side-lean');
+    expect(ids(run('squat-side', (v) => squatSide(v, 5 + v * 0.2), 70).sum)).not.toContain('squat-side-lean');
+  });
+  it('the lunge from the side measures depth and the trunk tipping forward, with its own wording', () => {
+    const { sum } = run('lunge-side', (v) => squatSide(v, 8), 80);
+    expect(sum.reps).toBe(5);
+    expect(sum.faults).toEqual([]);
+    expect(Math.min(...sum.peaks!)).toBeGreaterThan(70);
+    expect(ids(run('lunge-side', (v) => squatSide(v, 5 + v * 0.9), 80).sum)).toContain('lunge-side-lean');
+    expect(FC_STRINGS.en['fault-lunge-side-lean']).toBeTruthy();
+    expect(FAULT_PHYSIO['lunge-side-lean']).toBeTruthy();
+  });
+  it('depth is kept only for the kinds that ask for it', () => {
+    expect(run('squat', (v) => squat(v / 100), 25).sum.peaks).toBeUndefined();
+  });
+  it('digital zoom keeps the middle of the picture and maps body points back to the whole picture', () => {
+    expect(cropFor(1)).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(cropFor(2)).toEqual({ x: 0.25, y: 0.25, w: 0.5, h: 0.5 });
+    const f: Frame = [{ x: 0, y: 0, v: 1 }, { x: 1, y: 1, v: 0.7 }, { x: 0.5, y: 0.5, v: 1 }];
+    expect(toFullFrame(f, cropFor(2))).toEqual([{ x: 0.25, y: 0.25, v: 1 }, { x: 0.75, y: 0.75, v: 0.7 }, { x: 0.5, y: 0.5, v: 1 }]);
+    expect(clampZoom(0.2)).toBe(ZOOM.min);
+    expect(clampZoom(9)).toBe(ZOOM.max);
+    expect(clampZoom(Number.NaN)).toBe(1);
+  });
+  it('the screen locks zoom once the set starts and does not offer the second angle to other exercises', () => {
+    const ui = readFileSync('src/ui/FormCheck.tsx', 'utf8');
+    expect(ui).toMatch(/if \(phaseRef\.current === 'live'\) return;/);
+    expect(ui).toMatch(/phase !== 'live' && ready/);
+    expect(Object.keys(ANGLES)).toEqual(['squat', 'lunge']);
+  });
+  it('every extra angle is optional: the patient can pick the start angle, is only offered the others, and can finish without them', () => {
+    const ui = readFileSync('src/ui/FormCheck.tsx', 'utf8');
+    expect(ui).toMatch(/data-testid="fc-angle"/);          // pick the angle to start with
+    expect(ui).toMatch(/fcAlsoCheck/);                      // the others are offered, never forced
+    expect(ui).toMatch(/onClick=\{reset\}/);                // the result screen always has its own way out
+    expect(ui).not.toMatch(/setStage\('set'\)[^;]*required/i);
+  });
+  it('0.5x: the camera zoom is used where it goes that low, else the ultra-wide lens; a digital crop is never offered as zoom out; the default stays 1x', () => {
+    const ui = readFileSync('src/ui/FormCheck.tsx', 'utf8');
+    expect(ui).toMatch(/hwZoom\.min <= 0\.5/);
+    expect(ui).toMatch(/ultra\.\?wide/);
+    expect(ui).toMatch(/Math\.max\(1, hw\.min\)/);
+    expect(ui).toMatch(/fc-zoom-wide/);
+    expect(ZOOM.min).toBe(1);                               // the crop only ever zooms in
+    expect(FC_STRINGS.en.fcZoomWide).toMatch(/cannot zoom out/);
+  });
+});
 
 describe('camera form check: counting and measuring', () => {
   it('counts straight leg raises and flags nothing for clean ones', () => {

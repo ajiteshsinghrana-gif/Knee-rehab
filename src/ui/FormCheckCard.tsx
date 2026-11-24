@@ -14,6 +14,7 @@ const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); retu
 /** Pace, pain and the red-flag answer of one check, in one line for the physio. */
 const extras = (c: FormCheckLog): string[] => [
   ...(c.mode === 'count' ? ['count only (no form rules for this exercise, nothing judged)'] : []),
+  ...(c.peaks?.length ? [`deepest knee bend per rep: ${c.peaks.join(', ')}° (side view; from one phone camera, not a goniometer)`] : []),
   ...(c.repSecs?.length && c.tempo ? [`reps took ${Math.min(...c.repSecs)}–${Math.max(...c.repSecs)} s (median ${median(c.repSecs)} s; tempo ${c.tempo} s)`] : []),
   ...(c.after ? [`pain after the set ${c.after.pain ?? 'not given'}/10`, c.after.redFlag ? 'said YES to dizziness, chest pain or breathlessness (sent to the warning signs)' : 'no dizziness, chest pain or breathlessness'] : []),
 ];
