@@ -1,0 +1,68 @@
+/* Marketplace tab. Uses the app's tokens (redesign.css): 4/8/16/24/32 spacing, one teal accent, colour only for meaning. */
+.mp { max-width: 960px; margin: 0 auto; padding: var(--s3); display: flex; flex-direction: column; gap: var(--s3); }
+.mp-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
+.mp-lang { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-s); color: var(--muted); }
+.mp select, .mp input:not([type=checkbox]), .mp textarea { min-height: var(--ctl-h); border: 1px solid var(--line); border-radius: var(--radius); padding: 0 var(--s2); background: var(--surface); font: inherit; color: var(--ink); max-width: 100%; }
+.mp textarea { padding: var(--s2); min-height: 72px; }
+.mp-flow { display: flex; flex-direction: column; gap: var(--s3); }
+.mp-flow.card h2 { margin-top: var(--s2); }
+.mp-stepline { display: flex; align-items: center; gap: var(--s3); margin: 0; font-size: var(--fs-s); color: var(--muted); }
+.mp-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--hover); overflow: hidden; }
+.mp-bar i { display: block; height: 100%; background: var(--teal); }
+.mp-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s2); }
+.mp-choices.small { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.mp-choice, .mp-slots button, .mp-scale button, .mp-ynbtns button { min-height: 44px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: var(--s2) var(--s3); text-align: left; display: flex; align-items: center; gap: var(--s2); }
+.mp-choice:hover, .mp-slots button:hover, .mp-scale button:hover { background: var(--hover); }
+.mp-choice.on, .mp-slots button.on, .mp-scale button.on, .mp-ynbtns button.on { border-color: var(--teal); background: var(--teal-soft); box-shadow: 0 0 0 1px var(--teal) inset; font-weight: 600; }
+.mp-scale { display: grid; grid-template-columns: repeat(11, 1fr); gap: var(--s1); }
+.mp-scale button { justify-content: center; padding: var(--s2) 0; text-align: center; }
+.mp-scalelabels { display: flex; justify-content: space-between; margin: 0; }
+.mp-yn { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; padding: var(--s2) 0; border-top: 1px solid var(--line); }
+.mp-ynbtns { display: flex; gap: var(--s2); }
+.mp-ynbtns button { min-width: 64px; justify-content: center; }
+.mp-flags { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.mp-flags li { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s2) var(--s3); background: var(--surface); }
+.mp-flags label, .mp-check { display: flex; gap: var(--s2); align-items: flex-start; cursor: pointer; }
+.mp-flags input, .mp-check input[type=checkbox] { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--teal); }
+.mp-res { border-left: 8px solid var(--line); }
+.mp-res.low { border-left-color: var(--onplan); }
+.mp-res.physio { border-left-color: var(--teal); }
+.mp-res.soon { border-left-color: var(--review); background: #fff8ec; }
+.mp-res.now { border-left-color: var(--urgent); background: #fdecec; }
+.mp-res.now h2, .mp-res.soon h2 { color: var(--urgent); }
+.mp-res.soon h2 { color: var(--review); }
+.mp-why { margin: var(--s2) 0 0; padding-left: var(--s4); }
+.mp-nobook { margin: 0; padding: var(--s2) var(--s3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.mp-call { display: inline-flex; align-items: center; text-decoration: none; width: fit-content; }
+.mp-list { display: flex; flex-direction: column; gap: var(--s3); }
+.mp-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s3); }
+.mp-filters label, .mp-field { display: flex; flex-direction: column; gap: var(--s1); font-size: var(--fs-s); color: var(--muted); }
+.mp-physio header { display: flex; justify-content: space-between; gap: var(--s3); align-items: flex-start; flex-wrap: wrap; }
+.mp-physio h3 { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.mp-badge { font-size: var(--fs-s); font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 0 var(--s2); color: var(--muted); }
+.mp-badge.ok { color: var(--onplan); border-color: var(--onplan); }
+.mp-fee { text-align: right; display: flex; flex-direction: column; }
+.mp-bio { margin: 0; color: var(--ink); }
+.mp-reasons { margin: 0; padding-left: var(--s4); color: var(--muted); font-size: var(--fs-s); }
+.mp-next { margin: 0; }
+.mp-book { border-top: 1px solid var(--line); padding-top: var(--s3); display: flex; flex-direction: column; gap: var(--s3); }
+.mp-slots { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.mp-slots button { padding: var(--s1) var(--s3); min-height: 40px; }
+.mp-err { color: var(--urgent); margin: 0; font-weight: 600; }
+.mp-note { margin: 0; padding: var(--s2) var(--s3); background: var(--teal-soft); border-radius: var(--radius); }
+.mp-done { border-left: 8px solid var(--onplan); }
+.mp-portal, .mp-admin { display: flex; flex-direction: column; gap: var(--s3); }
+.mp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s3); margin: var(--s3) 0; }
+.mp-stats > div { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s2) var(--s3); background: var(--bg); }
+.mp-stats b { font-size: 1.4rem; }
+.mp-bookings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s3); }
+.mp-bookings > li { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s3); display: flex; flex-direction: column; gap: var(--s2); }
+.mp-sum ul { margin: var(--s2) 0 0; padding-left: var(--s4); }
+.mp-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--s3); margin-top: var(--s3); }
+.mp-form fieldset { border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; gap: var(--s2); }
+.mp-form .btnrow, .mp-form .mp-note, .mp-form label:has(textarea) { grid-column: 1 / -1; }
+@media (max-width: 600px) { .mp { padding: var(--s2); } .mp-scale { grid-template-columns: repeat(6, 1fr); } .mp-fee { text-align: left; } }
+.mp-res summary { cursor: pointer; font-weight: 600; }
+.mp-res summary::before { content: '▸ '; }
+.mp-res details[open] summary::before { content: '▾ '; }
+.mp-res.now .mp-call { background: var(--urgent); border-color: var(--urgent); }

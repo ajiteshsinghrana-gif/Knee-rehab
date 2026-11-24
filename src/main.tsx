@@ -10,6 +10,7 @@ import { getMode, modeFromHash, setMode } from './mode';
 import './ui/base.css';
 import './ui/extra.css';
 import './ui/redesign.css';
+import './ui/marketplace.css';
 
 // A phone that opens an invite or sign-in link becomes a patient device (Phase 6.3): no physio dashboard, no demo controls.
 /** Reads the address for device/mode switches. Returns true when something changed (the page then reloads so everything starts clean). */

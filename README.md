@@ -665,3 +665,21 @@ The camera opens, the app says how to stand (too close, too dark, turn sideways,
     - Run a set and check the phone shows nothing during it.
     - Enter your verdict, then check the flags appear and the results show counts beside every percentage.
 12. **Hindi and Bengali:** switch language and read the cues aloud. A native reader should check the wording.
+
+
+## Marketplace tab (screening-first physiotherapy marketplace)
+
+A third view next to Patient phone and Physio dashboard (demo), and next to WhatsApp (live). Open it with `#marketplace` in the demo. It has three sub-views:
+
+- **Find a physio (patient):** a 4-step quick check (area, duration and daily limits, pain 0 to 10, surgery and past episodes, then warning signs for that area), a result in one of three groups, and ranked verified physios to book. English and Hindi (Bengali falls back to the app's wording).
+- **Physio portal:** upcoming enquiries with the screening summary, mark completed / no-show / cancel, earnings, Basic or Pro plan, and **Move to RehabPath follow-up** (enrols the patient in the General protocol on the Physio dashboard; the physio does it, nothing is automatic).
+- **Admin and revenue:** commission and subscription revenue, a verification queue (a new physio is always pending and is never shown to patients until verified), a register form and the roster.
+
+### Safety rules for screening (same stance as triage)
+1. Rules only, no LLM and no network (a test checks this). Tiers come from `src/marketplace/screening-pack.json`, and every rule gives its reason in plain words.
+2. Three groups: **Low risk**, **Physio assessment**, **Red flag**. A red flag is either *emergency now* (call 112) or *see a doctor within 24 hours*. It never shows physios and **booking is refused in code** (`bookSlot` re-screens from the answers), not just hidden on screen.
+3. The app does not diagnose or prescribe. Every rule has a source tag, and the whole pack is marked `NEEDS_PHYSIO_SIGNOFF`: the warning signs, the pain and duration cut-offs (`DEFAULT`) and the guidance text need a clinician's review before real use.
+4. Matching is plain scoring with a reason for every point (specialty, area, language, next free slot, rating). A Pro plan adds at most one point, shown as "Featured", so it can break a tie but never outrank a clearly better match.
+5. Commission is fixed only when a visit is marked completed. **The commission rates and the Pro price are placeholders** (`NEEDS_BUSINESS_REVIEW` in `src/marketplace/fees.ts`).
+
+Data: stored on the device under its own key per mode (`rehabpath-marketplace-demo-v1`, `rehabpath-marketplace-live-v1`). The demo starts with 10 made-up Delhi physios (2 pending verification); the live clinic starts empty. Not synced yet, and payments are not switched on.
