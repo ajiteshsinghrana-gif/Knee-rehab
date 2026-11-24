@@ -50,8 +50,17 @@ export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: {
       if (sec !== null && sec > FORM_CONFIG.maxClipSec + 0.5) { setErr(F('fTooLong')); setFile(null); return; }
       setDur(sec); setFile(f);
     };
-    v.onloadedmetadata = () => accept(Number.isFinite(v.duration) ? v.duration : null);
-    v.onerror = () => accept(null);
+    let settled = false;
+    const once = (sec: number | null) => { if (!settled) { settled = true; accept(sec); } };
+    v.onloadedmetadata = () => {
+      if (Number.isFinite(v.duration)) { once(v.duration); return; }
+      // Some recorded WebM files report no length until the end is read: seek far ahead to make the browser work it out.
+      v.ondurationchange = () => { if (Number.isFinite(v.duration)) once(v.duration); };
+      v.ontimeupdate = () => once(Number.isFinite(v.duration) ? v.duration : null);
+      try { v.currentTime = 1e101; } catch { once(null); }
+      setTimeout(() => once(Number.isFinite(v.duration) ? v.duration : null), 3000);
+    };
+    v.onerror = () => once(null);
     v.src = u;
   };
   const send = async (withClip = true) => {

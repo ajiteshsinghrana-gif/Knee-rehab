@@ -83,3 +83,11 @@ Patient screen: **Start my exercises**. Tap through one exercise (Rep done, rest
 - **Kamla** (Hindi): all four cards, knee bend with home circles and the clinic square, both legs measured.
 - **Physio, any patient**: **Send progress report** under the name: for the patient or the referring doctor, with your notes; every send is in the audit log. Set **Your name on reports** under ⚙ first (left empty, no name is shown).
 - **History tab, External reports**: attach a PDF or photo and up to three key values; they appear as clinic squares on the charts.
+
+## Optional: camera check (1 min, no live camera needed)
+
+- **Physio, Ravi, History tab, Camera check**: it is **Off for this patient** by default. Press **Switch on**; it appears in the audit log. Under **Limits and pace**, set a tempo (for example 3 s a rep for squats) with a reason.
+- **Patient phone, Ravi**: **Use the camera for an exercise** now shows. Pick **Squats**: **Check my form**. Pick **Gait drills**: **Record a video for my physio** (the camera cannot measure it). On a total knee patient, **Stairs practice** shows **Count my reps**.
+- Say: the phone never says "correct" or "safe"; it counts, times the pace, and gives one plain tip per fault. After each set it asks about pain, dizziness, chest pain and breathlessness, and a yes goes to the warning signs.
+- Reset the demo afterwards so the camera is off again. Only show a live set if you have rehearsed it on that phone.
+

@@ -56,6 +56,7 @@ export interface SetOutcome {
  */
 export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, onDone, onCancel, onTooSlow }: {
   kind: FormKind; lang: Lang; limit?: { max?: number; min?: number }; tempo?: number; countOnly: boolean; blind?: boolean; trace?: boolean;
+  /** The phone is too slow to measure, or the camera or model could not start: offer a video for the physio instead. */
   onDone: (o: SetOutcome) => void; onCancel: () => void; onTooSlow?: () => void;
 }) {
   const F = (k: string, p?: Record<string, string | number>) => fcs(lang, k, p);
@@ -264,6 +265,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
         <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-hidden="true" />
       </div>
       {err && <p className="err" role="alert">{err}</p>}
+      {err && onTooSlow && <button className="big primary" data-testid="fc-video-instead" onClick={onTooSlow}>{F('fcModeVideo')}</button>}
       {!err && !ready && <p>{F('fcLoading')}</p>}
       {phase === 'setup' && ready && (
         <p className={hint === 'fcSetOk' ? 'okline' : 'hint'} role="status" aria-live="polite" data-testid="fc-setup">{F(hint)} {hint !== 'fcSetOk' && <Speak key={hint} text={F(hint)} lang={lang} />}</p>

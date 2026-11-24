@@ -514,7 +514,7 @@ Demo: yellow bar, **WhatsApp** shows a simulated chat of the daily check-in. Liv
 
 ## Camera form check (Phase 8)
 
-**What it is.** On exercises the camera can measure, the patient can open **Check my form with the camera** (patient Home, or inside a guided session before an exercise). The phone watches the set, counts reps and measures what it can: knee straight or bent, trunk turning or leaning, knee falling inward, a foot moving, an elbow bending, a shoulder lifting, a lift that is too fast, and anything past a limit the physio set. Today: **straight leg raise**, **squats and mini squats**, **sit to stand**, **lunges**, **step-ups**, **heel slides and gentle knee bend**, **assisted arm raise and wall slide**, **hip abduction**, **bridging**, **calf raises**, **balance exercises** (the patient picks one foot lifted, or feet in a line heel to toe: it counts and times each hold, flags a hold shorter than 10 seconds (placeholder target), wobbling, leaning and arms held out; other balance work, such as eyes closed or foam, is not judged), **walking** (a fixed phone, side-on, across a 5 metre path: it counts steps, gives steps a minute, and flags uneven step length between the two legs and a leaning trunk; it needs at least 6 steps to judge evenness and is less accurate than the stationary exercises), **pendulum swings** (side-on, bent forward: it counts swings in each direction and flags a very wide or fast swing; it cannot see swings towards or away from the camera, and does not report the swing's direction), **stationary cycling** (side-on to the bike: it counts pedal turns, gives turns a minute, and flags hips bobbing and a leaning trunk), **core exercises** (the patient picks plank or bird-dog: it times each hold and flags sagging or piked hips in a plank, and a tilting back in a bird-dog; other core exercises are not judged), **ankle pumps** (side-on, lying, bare foot in view: it counts pumps and flags toes that do not come up towards the shin and a moving leg; foot points are small and often poorly seen), **hand, wrist and elbow movement** (the patient picks one of three: opening and closing the hand, close up, which uses Google's separate hand model (an extra download, loaded only for this exercise) and counts fists and flags a wandering hand or a very fast close; bending the wrist, side-on with the forearm resting, which flags a moving elbow and a fast bend but does not say whether the wrist went up or down; and bending the elbow, side-on seated, which flags a swinging upper arm and a fast bend), **shoulder blade squeeze** (from behind: it measures the two shoulder points coming closer, and flags rising shoulders, a lean and a very fast squeeze; the squeeze moves those points only a few percent, so this is the least exact check and a small squeeze may not be counted), **band rotation** (facing the phone, elbow at the side: it counts outward turns of the forearm and flags an elbow leaving the side, a lean and a fast turn; turning inwards is not counted; a physio's maximum for the patient, such as after a rotator cuff repair, raises a pause), and **shoulder abduction** (built; the shipped library has no shoulder abduction entry yet, so it shows up once a physio writes an exercise with the id `shoulder-abduction`). Where the phone goes (side lying, side standing, facing you standing, facing you seated) is set per exercise in `src/formcheck/config.ts`.
+**What it is.** On exercises the camera can measure, the patient can open **Use the camera for an exercise** (patient Home, or inside a guided session before an exercise). The phone watches the set, counts reps and measures what it can: knee straight or bent, trunk turning or leaning, knee falling inward, a foot moving, an elbow bending, a shoulder lifting, a lift that is too fast, and anything past a limit the physio set. Today: **straight leg raise**, **squats and mini squats**, **sit to stand**, **lunges**, **step-ups**, **heel slides and gentle knee bend**, **assisted arm raise and wall slide**, **hip abduction**, **bridging**, **calf raises**, **balance exercises** (the patient picks one foot lifted, or feet in a line heel to toe: it counts and times each hold, flags a hold shorter than 10 seconds (placeholder target), wobbling, leaning and arms held out; other balance work, such as eyes closed or foam, is not judged), **walking** (a fixed phone, side-on, across a 5 metre path: it counts steps, gives steps a minute, and flags uneven step length between the two legs and a leaning trunk; it needs at least 6 steps to judge evenness and is less accurate than the stationary exercises), **pendulum swings** (side-on, bent forward: it counts swings in each direction and flags a very wide or fast swing; it cannot see swings towards or away from the camera, and does not report the swing's direction), **stationary cycling** (side-on to the bike: it counts pedal turns, gives turns a minute, and flags hips bobbing and a leaning trunk), **core exercises** (the patient picks plank or bird-dog: it times each hold and flags sagging or piked hips in a plank, and a tilting back in a bird-dog; other core exercises are not judged), **ankle pumps** (side-on, lying, bare foot in view: it counts pumps and flags toes that do not come up towards the shin and a moving leg; foot points are small and often poorly seen), **hand, wrist and elbow movement** (the patient picks one of three: opening and closing the hand, close up, which uses Google's separate hand model (an extra download, loaded only for this exercise) and counts fists and flags a wandering hand or a very fast close; bending the wrist, side-on with the forearm resting, which flags a moving elbow and a fast bend but does not say whether the wrist went up or down; and bending the elbow, side-on seated, which flags a swinging upper arm and a fast bend), **shoulder blade squeeze** (from behind: it measures the two shoulder points coming closer, and flags rising shoulders, a lean and a very fast squeeze; the squeeze moves those points only a few percent, so this is the least exact check and a small squeeze may not be counted), **band rotation** (facing the phone, elbow at the side: it counts outward turns of the forearm and flags an elbow leaving the side, a lean and a fast turn; turning inwards is not counted; a physio's maximum for the patient, such as after a rotator cuff repair, raises a pause), and **shoulder abduction** (built; the shipped library has no shoulder abduction entry yet, so it shows up once a physio writes an exercise with the id `shoulder-abduction`). Where the phone goes (side lying, side standing, facing you standing, facing you seated) is set per exercise in `src/formcheck/config.ts`.
 
 **Not covered, on purpose.** A single phone camera cannot judge these, so they have no camera check: outdoor cycling and swimming (the body is out of view or in water), ice and compression and ice and elevation (no movement to see), quad setting (the thigh tightening cannot be seen; a check on the leg lying still would wrongly suggest the muscle worked), gait drills (a mix of different drills with no single fault to define), and core exercises other than plank and bird-dog. Stairs practice uses the step-up check (one step, facing the phone), and the walking programme and walking with an aid use the walking check on one pass across the picture: it judges that pass, not the whole programme, and an aid can hide part of a leg, in which case the check says it could not see enough. Every threshold for the newly added exercises is a placeholder (`NEEDS_PHYSIO_SIGNOFF`) and has been tested only on computer-generated skeletons, not on people.
 
@@ -525,7 +525,7 @@ Demo: yellow bar, **WhatsApp** shows a simulated chat of the daily check-in. Liv
 | Measure (on the phone) | Pose model finds 33 body points; plain geometry gives joint angles, rep counts, speed. No video leaves the phone here. | `src/formcheck/analyze.ts`, `pose.ts` |
 | Rule F1 | The same measured fault in 3 of the last 5 reliable checks of one exercise raises a review item (REVIEW time from the protocol). | `src/formcheck/model.ts` |
 | Rule F3 | If the body was not visible in at least 70% of frames, nothing is flagged and the patient is asked to try again. | `analyze.ts` |
-| Pause | A lost balance (foot moved, hips swayed) or a limit the physio set was crossed: the phone says "Pause and rest. Check how you feel. Your physio will be told" (also read aloud) and raises a review item at once. | `analyze.ts`, `model.ts` |
+| Stop the set | A stumble (foot moved, hips swayed, a wobble on one leg) stops the set: "Sit down and rest", read aloud, with a button to call the carer (from the record, synced to the phone) and 112. A limit the physio set stops it too. Either raises a review item at once. Pace never stops a set. | `src/ui/FormCheck.tsx`, `config.ts` |
 | Review item | Reuses the form-check video request: it appears in the worklist chip and in "Form-check videos and camera checks", with the measured numbers. Numbers only; the video is a separate, optional choice. | `src/ui/FormCheckCard.tsx`, `FormReview.tsx` |
 | Physio limits | Per patient and exercise: "do not go past" and "at least reach", each with a required reason, in the audit log. They travel to the patient's phone. Without a limit, only the default faults are checked. | `FormCheckCard.tsx`, `setFormLimit` |
 | Record | Every set is kept (last 60) so the physio can look whenever needed, for example when progress is slow despite good adherence. | `Patient.formChecks` |
@@ -536,7 +536,76 @@ Demo: yellow bar, **WhatsApp** shows a simulated chat of the daily check-in. Liv
 
 **Not tested for real.** The measuring logic, rules, sync and wording are tested with synthetic body points (`tests/formcheck.test.ts`). The camera, the pose model and the video recording have **not** been run on a real phone or iPad. Nothing has been compared with a physio's goniometer: angles can be off by several degrees, and lighting, clothing and camera placement matter. The front-camera mirror, Safari video recording and the GPU model on low-end Android need trying. Squat depth is measured as hip drop (share of leg length), because knee bend cannot be read from the front.
 
-**Pilot mode (for finding better thresholds).** On the camera check's start screen (never on a patient's own phone) a physio can switch on **Pilot mode** and type a participant label such as P07. Each set the physio runs on a volunteer is then kept with: how high every fault measure got (even when it stayed under the limit), what the phone flagged, the limits in force, a thin trace of the movement, and the physio's rating: each flag marked real or false alarm, faults the phone missed, and the physio's own rep count. No video and no names. It stays in this browser, apart from patient data, and is never synced; the physio can export a spreadsheet (.csv) or everything (.json), or clear it. Once there are enough rated sets (at least 10, with at least 3 real faults and 3 that were not), it suggests the limit that best separates real faults from the rest, and shows how the current limit and the suggested one would each have done. Faults judged per hold, step or pump (a short hold, uneven steps, short pumps) are counted but get no suggested limit. A suggestion is only a suggestion: a physio signs off any change to `src/formcheck/config.ts`, and pilot mode never changes a threshold, a plan or a tier. Use it only with volunteers who agreed to take part; a small pilot can mislead, and more people and more sets make it safer.
+**Pilot mode (for finding better thresholds).** A physio screen, **Pilot** in the top bar, shown only when a physio is signed in: never on a patient screen, never in the open demo, and it never writes to a patient record. Add participants with a code (P07), say whether each is a healthy volunteer performing deliberate faults or a real patient, and put each in the tuning group or the test group. During a set the phone shows nothing; afterwards the observer ticks the faults they saw and types the reps they counted, and only then are the phone's flags shown (the verdict is then locked). Limits are suggested from the tuning group only; accuracy is reported on the test group only; figures from the tuning group are labelled as same-data. Every percentage is shown with its counts ("8 of 10 (80%)"). Kept in that browser only, exported as CSV or JSON. Code: `src/formcheck/pilot.ts`, `src/ui/Pilot.tsx`.
 
 **Model files and offline use.** By default the first use downloads the lite pose model from the public CDN (jsDelivr) and Google's model storage, so it needs internet. To work offline, add these to `public/mediapipe/` and rebuild: `vision_bundle.mjs` and the `wasm/` folder from the npm package `@mediapipe/tasks-vision`, `pose_landmarker_lite.task`, and `hand_landmarker.task` (for the hand, wrist and elbow check). The build copies them to `docs/mediapipe/` and the service worker keeps them after the first use. Check Google's and the CDN's terms before a paid pilot.
 
+
+
+### Camera check safety round (2026-11-24)
+
+- **Off by default.** The physio switches the camera on per patient (History tab, **Camera check**, Switch on). The switch is in the audit log and travels to the patient's phone; the phone cannot switch itself on. No demo patient has it on.
+- **What each exercise gets** (`checkMode` in `src/formcheck/config.ts`):
+  - **Check my form**: only exercises with form rules of their own, each rule with a test (a test checks that every fault has one).
+  - **Count my reps**: stairs practice, walking programme and walking with an aid. They borrow another exercise's check, so they get no form flags, no pace flags and no stop.
+  - **Record a video for my physio**: everything the camera cannot measure (quad setting, ice, outdoor cycling, swimming, gait drills).
+- **Wording.** The patient never sees "correct", "good form" or "safe" (a test checks all three languages). They see:
+  - rep counts and pace cues;
+  - one plain cue per fault ("Try to keep your knee straight.");
+  - "I can't see you clearly";
+  - when nothing is flagged: "Nothing was flagged. This does not mean your form is correct. Your physio decides."
+- **Pace.** Each rep is timed and compared with a tempo in seconds per rep. Too fast is under half the tempo; too slow is over 2.5 times it. The physio can set the tempo per patient and exercise, with a reason. The defaults are placeholders (`DEFAULT_TEMPO`). The old speed flags (degrees a second) are gone. There is no pace for holds, walking, cycling or the pendulum.
+- **After each set.**
+  - The patient is asked pain 0 to 10, then "Do you feel dizzy, or do you have chest pain or breathlessness?"
+  - A yes opens the existing warning-sign questions ("I have a problem"), with a line saying why. That is the red-flag pathway; the camera itself never sets a tier.
+  - Both answers are kept on the check for the physio.
+  - Dizziness is not one of the protocol warning signs, so it is not added as a rule.
+- **Setup check.** Live prompts before a set: too dark, step back, turn sideways, turn to face the phone, hold your hand up. **Start my set** stays off until the needed body points are all in the picture.
+- **Phone too slow.** If the phone measures fewer than 7 frames a second, or the camera or model cannot start, the screen offers a video for the physio instead.
+- **Video.** Clips are capped at 30 seconds (the camera stops recording at 30 s; a chosen file over 30 s is refused). The patient watches the clip before sending and ticks consent for each clip. The consent says "Make sure no one else is in the picture". The physio's reply has read-aloud. Clips past their delete date are now removed whenever the app opens, not only when a video screen is opened. There is still no server-side clean-up job.
+
+**What to test on real phones** (none of this has run on a real phone yet). Use a mid-range Android phone (Chrome) and an iPhone (Safari, and again as a Home Screen app).
+
+1. **Patient flow, on a patient's own link:**
+   - The camera button is missing until you switch the camera on in the physio record, and appears after a sync.
+   - Allow the camera when asked. On iPhone, check the prompt appears and that "Don't allow" leads to the error and the **Record a video** button.
+2. **Model download:**
+   - The first use needs internet and should take under about 20 s on 4G.
+   - Note the time on each phone.
+   - Then turn on airplane mode and try again: expect the "could not load" message unless the model files were added under `public/mediapipe/`.
+3. **Setup prompts:**
+   - Stand too close: "Step back".
+   - Turn the lights off: "too dark".
+   - Face the phone for straight leg raise: "Turn sideways".
+   - Stand side-on for squats: "Turn to face the phone".
+   - **Start my set** must stay greyed until the prompt says "I can see you".
+4. **Speed:**
+   - Watch whether the "too slow" switch to video happens.
+   - On the Android, also try with battery saver on.
+   - It should not happen on a normal mid-range phone. If it does, tell me the phone model.
+5. **A real set of squats (5 reps), straight leg raise (5) and sit to stand (5):**
+   - Compare the rep count with your own count.
+   - Do 3 deliberately fast reps: expect "Try to go a little slower."
+   - Do one set with a knee falling in: expect the knee cue.
+6. **Front and back camera:**
+   - Use the other camera.
+   - Check that the skeleton lines up with the body on both cameras, and that the front camera is mirrored.
+7. **Stumble:**
+   - In a squat, step one foot out sideways.
+   - Expect "Sit down and rest", read aloud, a vibration on Android (iPhone does not vibrate from a web page), and the **Call** buttons.
+   - Check the carer's name and number show if you entered them in the patient's details.
+8. **After the set:**
+   - The pain and dizziness questions appear.
+   - Answer Yes and check you land on the warning signs with the explanation line.
+   - Answer the chest pain sign: expect the emergency banner and, after the check-in, a SAFETY tier on the physio side.
+9. **Video:**
+   - Do a set longer than 30 s: the preview shows only the first 30 s.
+   - Play the preview before sending; send without ticking consent should be impossible.
+   - On iPhone, check the clip plays both in the preview and on the physio side (Safari records MP4; Android Chrome records WebM).
+   - Record a 40 s clip with the phone's own camera through **Record a video for my physio**: it must be refused.
+10. **Count only:** on a total knee patient, open **Stairs practice**. You should see **Count my reps**, and no cues at the end.
+11. **Pilot (signed-in physio on a laptop or tablet):**
+    - Add P01 (volunteer, tuning) and P02 (patient, test).
+    - Run a set and check the phone shows nothing during it.
+    - Enter your verdict, then check the flags appear and the results show counts beside every percentage.
+12. **Hindi and Bengali:** switch language and read the cues aloud. A native reader should check the wording.
