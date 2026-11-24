@@ -12,9 +12,9 @@ import { withAuditNote, type Ctx } from '../engine/plan';
 
 export const FORM_CONFIG = {
   /** A clip is deleted this many days after it was sent, if nobody has replied. */
-  clipKeepDays: 30,
+  clipKeepDays: 14,
   /** After the physio replies, the clip is deleted this many days later. */
-  afterReplyDays: 7,
+  afterReplyDays: 3,
   maxBytes: 25 * 1024 * 1024,
   /** Longest video a patient can send, in seconds (camera check safety round). */
   maxClipSec: 30,

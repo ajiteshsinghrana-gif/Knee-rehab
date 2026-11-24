@@ -273,10 +273,11 @@ describe('raising a review item', () => {
     expect(unsure.requestId).toBeNull();
     expect(unsure.patient.formChecks).toHaveLength(1);
   });
-  it('the patient can attach the clip afterwards; it follows the normal 30 day rule', () => {
+  it('the patient can attach the clip afterwards; it follows the normal 14 day rule', () => {
     const r = recordCheck(base, check(1, [fault('squat-balance', 'stability', [2])], { paused: true }), at(1));
     const p = attachClip(r.patient, r.requestId!, { where: 'device', ref: 'vabc', mime: 'video/webm', size: 1000, durationSec: null }, at(1));
-    expect(p.formRequests!.find((x) => x.id === r.requestId)!.clip!.deleteAfter).toBe(addDays(addDays(today, 1), 30));
+    expect(p.formRequests!.find((x) => x.id === r.requestId)!.clip!.deleteAfter).toBe(addDays(addDays(today, 1), 14));
+    expect([FORM_CONFIG.clipKeepDays, FORM_CONFIG.afterReplyDays]).toEqual([14, 3]);
   });
   it('a second flagged set can still send its own video while the first item is unanswered', () => {
     let p: Patient = base;
