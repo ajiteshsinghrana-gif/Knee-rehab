@@ -70,6 +70,15 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
   const [unseen, setUnseen] = useState(false);
   const [getReady, setGetReady] = useState<number | null>(null);
   const [cue, setCue] = useState('');
+  /** Red flags hit in the last few seconds, each named. The set and the camera keep running while they show. */
+  const [flags, setFlags] = useState<{ id: string; text: string }[]>([]);
+  const flagTimers = useRef(new Map<string, number>());
+  const showFlag = (id: string, text: string) => {
+    setFlags((cur) => [...cur.filter((f) => f.id !== id), { id, text }]);
+    window.clearTimeout(flagTimers.current.get(id));
+    flagTimers.current.set(id, window.setTimeout(() => setFlags((cur) => cur.filter((f) => f.id !== id)), 7000));
+  };
+  const clearFlags = () => { flagTimers.current.forEach((t) => window.clearTimeout(t)); flagTimers.current.clear(); setFlags([]); };
 
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -168,8 +177,11 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
       else if (e.type === 'fault' && !blind) {
         pushCue(F(`fault-${e.id}`));
       } else if (e.type === 'pause') {
-        void end(e.kind === 'stability' ? 'stumble' : 'limit');
-        return;
+        // A red flag: say exactly what was hit, and keep the set and the camera check running. The physio is still told when the set ends.
+        const text = `${F('fcRedFlag')} ${F(`fault-${e.id}`)}`;
+        showFlag(e.id, text);
+        try { navigator.vibrate?.(300); } catch { /* not supported */ }
+        if (speakSupported(lang)) speak(text, lang);
       }
     }
   };
@@ -235,7 +247,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
   const startSet = () => {
     analyzer.current = new FormAnalyzer(kind, countOnly ? undefined : limit, { countOnly, tempoSec: tempo });
     analyzer.current.recordTrace = !!trace;
-    setReps(0); setUnseen(false); clearCues();
+    setReps(0); setUnseen(false); clearCues(); clearFlags();
     chunks.current = []; recMime.current = ''; recStop.current = null;
     if (stream.current && typeof MediaRecorder !== 'undefined') {
       try {
@@ -266,7 +278,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
   async function end(stop: SetOutcome['stop']) {
     if (!live.current || !analyzer.current) return;
     live.current = false;
-    clearCues();
+    clearCues(); clearFlags();
     const summary = analyzer.current.finish();
     if (stop === 'stumble') {
       try { navigator.vibrate?.(300); } catch { /* not supported */ }
@@ -296,6 +308,12 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
         ? <p className="gs-count" aria-live="polite">Recording. The phone's results are shown after you enter yours.</p>
         : <p className="gs-count" aria-live="polite">{F(COUNT_KEYS[kind]?.live || 'fcReps', { n: reps })}</p>)}
       {phase === 'live' && unseen && <p className="hint" role="status">{F('fcUnseen')}</p>}
+      {phase === 'live' && flags.length > 0 && (
+        <div className="red" role="alert" data-testid="fc-redflag">
+          {flags.map((f) => <p key={f.id}><strong style={{ fontSize: '1.15em' }}>{f.text}</strong></p>)}
+          <small>{F('fcRedFlagKeep')}</small>
+        </div>
+      )}
       {phase === 'live' && cue && <p className="fc-cue" role="status" aria-live="assertive" data-testid="fc-cue">{cue}</p>}
       {phase === 'setup' && (
         <>

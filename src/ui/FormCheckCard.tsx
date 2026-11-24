@@ -25,7 +25,7 @@ export function AutoSummary({ patient, r }: { patient: Patient; r: FormRequest }
   const c = (patient.formChecks ?? []).find((x) => x.id === r.auto!.checkId);
   return (
     <div className="reviewed" data-testid="auto-summary">
-      <b>Raised by the camera check</b> ({r.auto.reason === 'PAUSE' ? 'the phone stopped the set: a stumble or your limit' : `rule F1: the same fault in ${FORM_CHECK.f1.checks} of the last ${FORM_CHECK.f1.window} checks`}).
+      <b>Raised by the camera check</b> ({r.auto.reason === 'PAUSE' ? 'a red flag during the set (a stumble or your limit); the set was not stopped' : `rule F1: the same fault in ${FORM_CHECK.f1.checks} of the last ${FORM_CHECK.f1.window} checks`}).
       {c ? (
         <ul>
           <li>{c.repsCounted} {c.holds?.length ? 'holds' : COUNT_KEYS[c.kind]?.word ?? 'reps'} counted · camera saw the body in {Math.round(c.usable * 100)}% of frames</li>
@@ -91,7 +91,7 @@ function One({ c, p }: { c: FormCheckLog; p: Patient }) {
         {!c.reliable && ' · could not see enough (nothing flagged)'}
         {c.reliable && c.faults.length === 0 && ' · nothing measured above the limits'}
         {c.reliable && c.faults.length > 0 && ` · ${c.faults.length} fault${c.faults.length === 1 ? '' : 's'} measured`}
-        {c.paused && <b className="err"> · set stopped (stumble or your limit)</b>}
+        {c.paused && <b className="err"> · red flag during the set (stumble or your limit)</b>}
         {c.after?.redFlag && <b className="err"> · red-flag yes after the set</b>}
         {f1.length > 0 && <b> · F1</b>}
       </summary>

@@ -149,6 +149,16 @@ describe('camera form check: counting and measuring', () => {
     expect(events.some((e) => e.type === 'pause')).toBe(true);
     expect(sum.paused).toBe(true);
   });
+  it('a red flag names the fault, comes back for a later rep, and never stops the analyser: counting goes on', () => {
+    const { sum, events } = run('squat', (v) => squat(v / 100, { footShift: v > 6 ? 0.25 : 0 }), 25);
+    const flags = events.filter((e) => e.type === 'pause');
+    expect(flags[0]).toMatchObject({ type: 'pause', id: 'squat-balance', kind: 'stability' });
+    expect(flags.length).toBeGreaterThan(1);
+    const at = events.findIndex((e) => e.type === 'pause');
+    expect(events.slice(at + 1).some((e) => e.type === 'rep')).toBe(true);
+    expect(sum.reps).toBe(5);
+    expect(sum.paused).toBe(true);
+  });
   it('counts shoulder abduction and measures a bent elbow', () => {
     const clean = run('shoulder-abduction', (v) => abd(v), 80);
     expect(clean.sum.reps).toBe(5);
@@ -1272,12 +1282,16 @@ describe('camera check: after the set', () => {
     expect(ui).toMatch(/screen === 'problemcam' && <CheckIn [^>]*problem fromCamera/);
     for (const id of ['total-knee-replacement', 'acl-reconstruction', 'rotator-cuff-repair', 'general']) expect(getPack(id).warningSigns.some((w) => w.id === 'chestPainBreathless' && w.tier === 'SAFETY')).toBe(true);
   });
-  it('a stumble stops the set; a physio limit stops it too; pace never does', () => {
+  it('a stumble or a physio limit shows a named red flag and does not stop the set; pace never raises one', () => {
     expect(FORM_CHECK.pauseOn).toEqual(['stability', 'precaution']);
     const ui = readFileSync('src/ui/FormCheck.tsx', 'utf8');
-    expect(ui).toMatch(/e\.kind === 'stability' \? 'stumble' : 'limit'/);
-    expect(ui).toMatch(/fc-call-carer/);
+    // The pause event shows a banner naming the fault and carries on: it must not end the set.
+    const branch = ui.slice(ui.indexOf("e.type === 'pause'"), ui.indexOf("const loop"));
+    expect(branch).toMatch(/showFlag\(/);
+    expect(branch).not.toMatch(/\bend\(/);
+    expect(ui).toMatch(/fc-redflag/);
   });
+
 });
 
 describe('camera check: wording and video', () => {
