@@ -9,6 +9,7 @@ import { FormAnalyzer, type Frame, type FormEvent } from '../src/formcheck/analy
 import { FORM_CHECK, HAND, HAND_KINDS, KINDS, KIND_EXERCISES, LM, SET_FAULTS, VARIANTS, formKindFor, type FormKind } from '../src/formcheck/config';
 import { FAULT_PHYSIO, FC_STRINGS } from '../src/formcheck/strings';
 import { requestForClip } from '../src/formcheck/model';
+import { PILOT_MIN, loadPilot, newPilotRecord, rate, savePilot, suggest, summarise, toCsv, upsert, type PilotRecord, type PilotStore } from '../src/formcheck/pilot';
 import { assess, attachClip, f1Faults, giveConsent, hasConsent, newCheckLog, pendingChecks, recordCheck, setFormLimit, withdrawConsent } from '../src/formcheck/model';
 import { isPending, replyToForm } from '../src/forms/model';
 import { applyDown, applyUp, downSlice, upSlice } from '../src/sync/slices';
@@ -994,5 +995,99 @@ describe('camera form check: band rotation', () => {
     const r = run('band-rot', (v) => rotF(v), 80, { limit: { max: 60 } });
     expect(r.sum.faults.find((x) => x.id === 'limit-max')?.kind).toBe('precaution');
     expect(r.sum.paused).toBe(true);
+  });
+});
+
+// ---------- pilot mode ----------
+const memStore = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); } } as unknown as Storage; };
+/** A rated set of the hand check where the wrist-wander measure held at `level`, flagged against the limit of 80. */
+const pilotSet = (n: number, level: number, verdict: 'real' | 'none', o: { reliable?: boolean } = {}): PilotRecord => {
+  const flagged = level > 80;
+  const rec = newPilotRecord({
+    id: `s${n}`, at: '2026-11-24T10:00:00Z', participant: 'P01', kind: 'hand-fist', exerciseId: 'hand-wrist-elbow',
+    summary: { reps: 5, faults: flagged ? [{ id: 'fist-wrist-moves', kind: 'compensation', reps: [1, 2], peak: level, unit: 'pct', firstSec: 3 }] : [], usable: 0.95, reliable: o.reliable ?? true, paused: false, seconds: 20, held: { 'fist-wrist-moves': level } },
+  });
+  return rate(rec, { marks: flagged ? { 'fist-wrist-moves': verdict === 'real' ? 'real' : 'false' } : {}, missed: !flagged && verdict === 'real' ? ['fist-wrist-moves'] : [], observerReps: 5, note: '' });
+};
+describe('camera form check: pilot mode', () => {
+  it('the analyzer reports how high each fault measure got, flagged or not, and a trace only when asked', () => {
+    const wander = run('hand-fist', (v) => fist(v, { shift: 1.2 }), 70);
+    expect(wander.sum.held!['fist-wrist-moves'] > 80).toBe(true);
+    const steady = run('hand-fist', (v) => fist(v), 70);
+    expect(steady.sum.held!['fist-wrist-moves'] < 80).toBe(true);
+    expect(steady.sum.trace).toBeUndefined();
+    const a = new FormAnalyzer('hand-fist'); a.recordTrace = true;
+    let t = 0; for (let i = 0; i < 60; i++) a.push(fist(i % 20 < 10 ? 0 : 70), (t += DT), 1);
+    expect(a.finish().trace!.length > 5).toBe(true);
+  });
+  it('suggests a lower limit when real faults sit below the current one, and says how it would have done', () => {
+    const recs: PilotRecord[] = [];
+    [55, 60, 65, 70].forEach((l, i) => recs.push(pilotSet(i, l, 'real')));
+    [5, 10, 15, 20, 25, 30, 35, 40, 12, 22].forEach((l, i) => recs.push(pilotSet(10 + i, l, 'none')));
+    const s = suggest(recs, 'hand-fist', 'fist-wrist-moves');
+    expect(s.enough).toBe(true);
+    expect(s.limit! > 40 && s.limit! < 55).toBe(true);
+    expect(s.recall).toBe(1);
+    expect(s.precision).toBe(1);
+    expect(s.currentRecall).toBe(0);
+  });
+  it('keeps the limit where it is useful when the current one already separates real faults from the rest', () => {
+    const recs: PilotRecord[] = [];
+    [90, 100, 120, 95].forEach((l, i) => recs.push(pilotSet(i, l, 'real')));
+    [5, 10, 15, 20, 25, 30, 35, 40, 12, 22].forEach((l, i) => recs.push(pilotSet(10 + i, l, 'none')));
+    const s = suggest(recs, 'hand-fist', 'fist-wrist-moves');
+    expect(s.limit! > 40 && s.limit! < 90).toBe(true);
+    expect(s.currentRecall).toBe(1);
+    expect(s.currentPrecision).toBe(1);
+  });
+  it('a flag marked as a false alarm counts against the limit, and a flag nobody rated is left out', () => {
+    const recs: PilotRecord[] = [];
+    for (let i = 0; i < 4; i++) recs.push(pilotSet(i, 100 + i, 'real'));
+    for (let i = 0; i < 4; i++) recs.push(pilotSet(10 + i, 85 + i, 'none')); // flagged, but a false alarm
+    for (let i = 0; i < 4; i++) recs.push(pilotSet(20 + i, 10 * i, 'none'));
+    const s = suggest(recs, 'hand-fist', 'fist-wrist-moves');
+    expect(s.enough).toBe(true);
+    expect(s.limit! > 88 && s.limit! < 100).toBe(true);
+    const unrated = { ...recs[0], marks: {} };
+    expect(suggest([unrated, ...recs.slice(1)], 'hand-fist', 'fist-wrist-moves').positives).toBe(3);
+  });
+  it('gives no suggestion from too few rated sets, and ignores sets the camera could not see', () => {
+    const few = [pilotSet(1, 100, 'real'), pilotSet(2, 10, 'none'), pilotSet(3, 20, 'none')];
+    expect(suggest(few, 'hand-fist', 'fist-wrist-moves').enough).toBe(false);
+    const recs: PilotRecord[] = [];
+    for (let i = 0; i < 6; i++) recs.push(pilotSet(i, 100, 'real', { reliable: false }));
+    for (let i = 0; i < 6; i++) recs.push(pilotSet(10 + i, 10, 'none'));
+    expect(suggest(recs, 'hand-fist', 'fist-wrist-moves').positives).toBe(0);
+    expect(PILOT_MIN.total).toBe(10);
+  });
+  it('rating keeps only verdicts for faults the phone flagged, and misses only for faults it did not', () => {
+    const base = pilotSet(1, 100, 'real');
+    const r = rate(base, { marks: { 'fist-wrist-moves': 'false', 'fist-fast': 'real' }, missed: ['fist-wrist-moves', 'fist-fast', 'not-a-fault'], observerReps: 4, note: 'x' });
+    expect(r.marks).toEqual({ 'fist-wrist-moves': 'false' });
+    expect(r.missed).toEqual(['fist-fast']);
+    expect(r.observerReps).toBe(4);
+  });
+  it('summarises per fault and exports one spreadsheet row per set per fault', () => {
+    const recs = [pilotSet(1, 100, 'real'), pilotSet(2, 90, 'none'), pilotSet(3, 20, 'real')];
+    const st = summarise(recs).find((x) => x.id === 'fist-wrist-moves')!;
+    expect([st.sets, st.real, st.falseAlarm, st.missed]).toEqual([3, 1, 1, 1]);
+    const lines = toCsv(recs).split('\n');
+    expect(lines.length).toBe(1 + recs.length * KINDS['hand-fist'].faults.length);
+    expect(lines[0].startsWith('participant,')).toBe(true);
+    expect(lines.join('\n')).not.toContain('video');
+  });
+  it('is off by default, survives a reload, and drops damaged records', () => {
+    const st = memStore();
+    expect(loadPilot(st).on).toBe(false);
+    const s: PilotStore = upsert({ on: true, participant: 'P03', records: [] }, pilotSet(1, 50, 'none'));
+    savePilot(s, st);
+    const back = loadPilot(st);
+    expect(back.on).toBe(true);
+    expect(back.participant).toBe('P03');
+    expect(back.records.length).toBe(1);
+    st.setItem('rehabpath-pilot', '{"on":true,"records":[{"id":"a","kind":"nonsense"},5,null]}');
+    expect(loadPilot(st).records).toEqual([]);
+    st.setItem('rehabpath-pilot', 'not json');
+    expect(loadPilot(st).on).toBe(false);
   });
 });

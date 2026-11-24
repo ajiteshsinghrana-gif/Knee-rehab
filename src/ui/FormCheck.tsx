@@ -15,6 +15,9 @@ import { FormAnalyzer, type FormEvent } from '../formcheck/analyze';
 import { BONES, FORM_CHECK, HAND, HAND_BONES, HAND_KINDS, KINDS, VARIANTS, formKindFor } from '../formcheck/config';
 import { assess, attachClip, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, requestForClip, withdrawConsent, type Assessment } from '../formcheck/model';
 import { loadPose, type Pose } from '../formcheck/pose';
+import { loadPilot, newPilotRecord, savePilot, upsert, type PilotRecord } from '../formcheck/pilot';
+import { PilotRating, PilotSetup } from './Pilot';
+import { isPatientDevice } from '../device';
 import { COUNT_KEYS, VIEW_KEY, fcs } from '../formcheck/strings';
 
 type Stage = 'intro' | 'camera' | 'live' | 'result';
@@ -45,6 +48,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
   const [result, setResult] = useState<Result | null>(null);
   const [clip, setClip] = useState<Blob | null>(null);
   const [clipAgree, setClipAgree] = useState(false);
+  const [pilotRec, setPilotRec] = useState<PilotRecord | null>(null);
   const [clipState, setClipState] = useState<'idle' | 'sending' | 'cloud' | 'device' | 'deleted'>('idle');
 
   const video = useRef<HTMLVideoElement>(null);
@@ -168,6 +172,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     // A physio limit is for the main movement of the exercise; the heel-to-toe variant has no such number.
     const lim = kind === 'balance-line' || (kind && KINDS[kind].noLimit) ? undefined : limitFor(patient, ex);
     analyzer.current = new FormAnalyzer(kind, lim ? { max: lim.max, min: lim.min } : undefined);
+    analyzer.current.recordTrace = !isPatientDevice() && loadPilot().on;
     setReps(0); setUnseen(false); setPaused(false); setNoticed('');
     chunks.current = []; recMime.current = '';
     if (stream.current && typeof MediaRecorder !== 'undefined') {
@@ -207,6 +212,13 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     setResult({ log: out.patient.formChecks?.find((x) => x.id === log.id) ?? log, a: assess(cur, log), requestId: out.requestId });
     // The video stays in memory only so the patient can choose to send it. Nothing is uploaded unless they tick the consent box.
     setClip(blob ?? null);
+    // Pilot mode (a physio testing on volunteers, never on a patient's own phone): keep the measurements and ask for a rating.
+    const pilot = !isPatientDevice() ? loadPilot() : null;
+    if (pilot?.on) {
+      const rec = newPilotRecord({ id: log.id, at: iso, participant: pilot.participant, kind, exerciseId: ex, summary });
+      savePilot(upsert(pilot, rec));
+      setPilotRec(rec);
+    } else setPilotRec(null);
     setStage('result');
   };
 
@@ -234,7 +246,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     } catch (e) { setErr((e as Error).message); setClipState('idle'); }
   };
 
-  const reset = () => { setStage('intro'); setResult(null); setClip(null); setClipAgree(false); setClipState('idle'); setReps(0); setReady(false); setErr(''); };
+  const reset = () => { setStage('intro'); setResult(null); setPilotRec(null); setClip(null); setClipAgree(false); setClipState('idle'); setReps(0); setReady(false); setErr(''); };
   const hours = reviewHours(pack);
   const consent = consentText(lang);
 
@@ -257,6 +269,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
             <ul className="exlist">{log.faults.map((f) => <li key={f.id}>{F('fcLine', { what: F(`fault-${f.id}`), n: f.reps.length, total: Math.max(log.repsCounted, f.reps.length) })}</li>)}</ul>
           </div>
         ) : <p>{F('fcNone')}</p>}
+        {pilotRec && <PilotRating record={pilotRec} onSaved={setPilotRec} />}
         {(a.raise || log.paused) && <p className="okline" data-testid="fc-told">{F('fcTold', { hours })}</p>}
         {a.raise && !clip && clipState === 'idle' && <p className="tiny">{F('fcToldNoClip')}</p>}
         {clip && clipState !== 'deleted' && (
@@ -331,6 +344,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
           <label className="caregivertoggle"><input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} data-testid="fc-consent-check" /><span><b>{F('fcConsentAgree')}</b></span></label>
         </div>
       ) : <button className="link" onClick={() => { setAgreed(false); updatePatient(patient.id, withdrawConsent); }}>{F('fcWithdraw')}</button>}
+      {!isPatientDevice() && <PilotSetup />}
       {err && <p className="err" role="alert">{err}</p>}
       <button className="big primary" data-testid="fc-start" disabled={!kind || (!hasConsent(patient) && !agreed)} onClick={() => void start()}>{F('fcStart')}</button>
     </main>

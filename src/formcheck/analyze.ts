@@ -32,6 +32,10 @@ export interface FormSummary {
   holds?: number[];
   /** Walking only: steps a minute. */
   cadence?: number;
+  /** For each per-frame fault: the highest level it stayed above for as many frames in a row as the fault needs. A fault is flagged when this is over its limit. Used by pilot mode to find better limits. */
+  held?: Record<string, number>;
+  /** Pilot mode only: the main movement number about 4 times a second, as [seconds, value]. */
+  trace?: [number, number][];
 }
 
 const RAD = 180 / Math.PI;
@@ -81,6 +85,11 @@ export class FormAnalyzer {
   private cFrames = 0;
   private holds: number[] = [];
   private closed = false;
+  private bufs = new Map<string, number[]>();
+  private heldMax = new Map<string, number>();
+  private traceOut: [number, number][] = [];
+  /** Pilot mode: keep a thin trace of the main movement number. */
+  recordTrace = false;
 
   constructor(readonly kind: FormKind, private limit?: Pick<FormLimit, 'max' | 'min'>) {}
 
@@ -132,10 +141,13 @@ export class FormAnalyzer {
     }
     const moving = this.inRep || s > cfg.repDown;
     const rep = this.reps + 1;
+    if (this.recordTrace && this.total % 4 === 0 && this.traceOut.length < 600) this.traceOut.push([Math.round(((tMs - (this.t0 ?? tMs)) / 1000) * 10) / 10, Math.round(s * 10) / 10]);
     if (moving) {
+      for (const f of cfg.faults) this.hold(f.id, m.faults[f.id] ?? null, f.minFrames ?? cfg.minFrames);
       for (const f of cfg.faults) this.watch(f.id, f.kind, f.limit, f.unit, m.faults[f.id] ?? null, rep, tMs, f.minFrames ?? cfg.minFrames, ev);
       if (this.limit?.max !== undefined) this.watch(LIMIT_FAULTS.max.id, LIMIT_FAULTS.max.kind, this.limit.max, cfg.signal, s, rep, tMs, cfg.minFrames, ev);
     } else {
+      this.bufs.clear();
       for (const f of cfg.faults) this.run.set(f.id, 0);
       this.run.set(LIMIT_FAULTS.max.id, 0);
     }
@@ -193,6 +205,8 @@ export class FormAnalyzer {
       seconds: this.t0 === null ? 0 : Math.round(((this.tLast - this.t0) / 1000) * 10) / 10,
       ...(this.isBalance && this.holds.length ? { holds: this.holds.slice(0, 30) } : {}),
       ...(this.isRate && this.cadence() !== null ? { cadence: this.cadence()! } : {}),
+      ...(this.heldMax.size ? { held: Object.fromEntries([...this.heldMax.entries()].map(([k, v]) => [k, Math.round(v * 10) / 10])) } : {}),
+      ...(this.recordTrace ? { trace: this.traceOut } : {}),
     };
   }
 
@@ -784,6 +798,15 @@ export class FormAnalyzer {
     const a = this.hist[0];
     if (this.hist.length < 3 || t <= a.t) return null;
     return (Math.abs(sig - a.s) / (t - a.t)) * 1000;
+  }
+
+  /** Tracks the level a fault measure stayed above for `n` frames in a row, whether or not it crossed the limit. */
+  private hold(id: string, v: number | null, n: number) {
+    if (v === null || !Number.isFinite(v)) { this.bufs.set(id, []); return; }
+    const b = this.bufs.get(id) ?? [];
+    b.push(v); if (b.length > n) b.shift();
+    this.bufs.set(id, b);
+    if (b.length === n) this.heldMax.set(id, Math.max(this.heldMax.get(id) ?? -Infinity, Math.min(...b)));
   }
 
   private watch(id: string, kind: FormFaultKind, limit: number, unit: FormFault['unit'], v: number | null, rep: number, tMs: number, minFrames: number, ev: FormEvent[]) {
