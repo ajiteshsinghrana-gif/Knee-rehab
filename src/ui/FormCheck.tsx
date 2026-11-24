@@ -13,7 +13,7 @@ import { newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { clipCloudReady, patientUploadClip } from '../sync/engine';
 import { FormAnalyzer, type FormEvent } from '../formcheck/analyze';
 import { BONES, FORM_CHECK, KINDS, formKindFor } from '../formcheck/config';
-import { assess, attachClip, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, withdrawConsent, type Assessment } from '../formcheck/model';
+import { assess, attachClip, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, requestForClip, withdrawConsent, type Assessment } from '../formcheck/model';
 import { loadPose, type Pose } from '../formcheck/pose';
 import { fcs } from '../formcheck/strings';
 
@@ -194,19 +194,27 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     updatePatient(patient.id, (q) => recordCheck(q, log, iso).patient);
     setResult({ log: out.patient.formChecks?.find((x) => x.id === log.id) ?? log, a: assess(cur, log), requestId: out.requestId });
     // The video is kept in memory only to offer it for a flagged set. Otherwise it is dropped here.
-    setClip(out.requestId && blob ? blob : null);
+    setClip(blob && assess(cur, log).raise ? blob : null);
     setStage('result');
   };
 
   const sendClip = async () => {
-    if (!clip || !result?.requestId) return;
+    if (!clip || !result) return;
     setClipState('sending'); setErr('');
     try {
       const mime = (clip.type || 'video/webm').split(';')[0];
       const bad = validClip(mime, clip.size);
       if (bad) { setErr(bad === 'size' ? fcs(lang, 'fcClipSize') : fcs(lang, 'fcClipType')); setClipState('idle'); return; }
-      const id = result.requestId;
       const iso = new Date(clockMs(getState())).toISOString();
+      // No new item was raised for this set (the physio has one open): the video gets its own item.
+      let id = result.requestId ?? '';
+      if (!id) {
+        const cur = getState().patients.find((x) => x.id === patient.id) ?? patient;
+        const made = requestForClip(cur, result.log, result.a, iso);
+        id = made.requestId;
+        if (!id) { setClipState('idle'); return; }
+        updatePatient(patient.id, (q) => requestForClip(q, result.log, result.a, iso).patient);
+      }
       const path = clipCloudReady(patient) ? await patientUploadClip(patient, id, clip, mime) : null;
       if (path) { updatePatient(patient.id, (p) => attachClip(p, id, { where: 'cloud', ref: path, mime, size: clip.size, durationSec: null }, iso)); setClipState('cloud'); }
       else { const lid = newLocalId(); await saveLocalVideo(lid, clip); updatePatient(patient.id, (p) => attachClip(p, id, { where: 'device', ref: lid, mime, size: clip.size, durationSec: null }, iso)); setClipState('device'); }
@@ -237,7 +245,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
         ) : <p>{F('fcNone')}</p>}
         {(a.raise || log.paused) && <p className="okline" data-testid="fc-told">{F('fcTold', { hours })}</p>}
         {a.raise && !clip && clipState === 'idle' && <p className="tiny">{F('fcToldNoClip')}</p>}
-        {clip && result.requestId && clipState !== 'deleted' && (
+        {clip && clipState !== 'deleted' && (
           <div className="card" data-testid="fc-clip">
             <ul className="exlist">{consent.points.map((x) => <li key={x}>{x}</li>)}</ul>
             <small className="tiny">{CONSENT_TEXT[lang].draft}</small>

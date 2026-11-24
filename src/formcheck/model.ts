@@ -57,6 +57,9 @@ export function assess(p: Patient, log: FormCheckLog): Assessment {
 }
 
 const dateOf = (iso: string) => iso.slice(0, 10);
+/** The faults behind a raise: the repeated ones for F1, the stability or limit ones for a pause. */
+export const faultIdsFor = (log: FormCheckLog, a: Assessment): string[] => (a.raise === 'F1' ? a.f1 : log.faults.filter((f) => FORM_CHECK.pauseOn.includes(f.kind)).map((f) => f.id)).slice(0, 8);
+
 /** An auto-raised request for this exercise that the physio has not answered yet, from the last few days. */
 const pendingAuto = (p: Patient, exerciseId: string, reason: RaiseReason, atIso: string): boolean =>
   (p.formRequests ?? []).some((r) => r.auto?.reason === reason && r.exerciseId === exerciseId && !r.reply && dateOf(r.at) >= addDays(dateOf(atIso), -FORM_CHECK.dedupeDays));
@@ -74,7 +77,7 @@ export function recordCheck(p: Patient, log: FormCheckLog, atIso: string): { pat
   let kept = log;
   if (a.raise && !pendingAuto(p, log.exerciseId, a.raise, atIso)) {
     requestId = requestIdFor(log.id);
-    const faultIds = a.raise === 'F1' ? a.f1 : log.faults.filter((f) => FORM_CHECK.pauseOn.includes(f.kind)).map((f) => f.id);
+    const faultIds = faultIdsFor(log, a);
     const by = log.answeredBy ?? 'patient';
     const req: FormRequest = { ...newFormRequest({ id: requestId, exerciseId: log.exerciseId, at: atIso, note: '', by, clip: null, via: 'app' }), consent: { by, at: atIso, version: FORM_CHECK.consentVersion }, auto: { checkId: log.id, reason: a.raise, faults: faultIds.slice(0, 8) } };
     next = { ...next, formRequests: [...(next.formRequests ?? []).filter((x) => x.id !== req.id), req] };
@@ -108,4 +111,17 @@ export function setFormLimit(p: Patient, exerciseId: string, v: { max?: number; 
   // An empty object (not undefined) is kept after the last limit is removed, so the removal travels to the patient's phone.
   const next: Patient = { ...p, formLimits: limits };
   return withAuditNote(next, 'form-limit', `Camera form check limit for ${exerciseId}: ${v.max === undefined && v.min === undefined ? 'removed' : `${v.min !== undefined ? `min ${v.min}` : ''}${v.min !== undefined && v.max !== undefined ? ', ' : ''}${v.max !== undefined ? `max ${v.max}` : ''}`}`, before, limits[exerciseId] ?? null, reason.trim().slice(0, 300), ctx);
+}
+
+/**
+ * The physio already has an open camera-check item, so this set raised none. The patient may still choose to send the video of this
+ * set: it gets its own item (the physio sees each video), carrying the same numbers. Returns the id to attach the clip to.
+ */
+export function requestForClip(p: Patient, log: FormCheckLog, a: Assessment, atIso: string): { patient: Patient; requestId: string } {
+  const requestId = requestIdFor(`v${log.id}`);
+  if (!a.raise) return { patient: p, requestId: '' };
+  if ((p.formRequests ?? []).some((r) => r.id === requestId)) return { patient: p, requestId };
+  const by = log.answeredBy ?? 'patient';
+  const req: FormRequest = { ...newFormRequest({ id: requestId, exerciseId: log.exerciseId, at: atIso, note: '', by, clip: null, via: 'app' }), consent: { by, at: atIso, version: FORM_CHECK.consentVersion }, auto: { checkId: log.id, reason: a.raise, faults: faultIdsFor(log, a) } };
+  return { patient: { ...p, formRequests: [...(p.formRequests ?? []), req] }, requestId };
 }

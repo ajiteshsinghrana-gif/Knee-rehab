@@ -8,6 +8,7 @@ import { getExercise } from '../src/exercises/library';
 import { FormAnalyzer, type Frame, type FormEvent } from '../src/formcheck/analyze';
 import { FORM_CHECK, KINDS, KIND_EXERCISES, LM, formKindFor, type FormKind } from '../src/formcheck/config';
 import { FAULT_PHYSIO, FC_STRINGS } from '../src/formcheck/strings';
+import { requestForClip } from '../src/formcheck/model';
 import { assess, attachClip, f1Faults, giveConsent, hasConsent, newCheckLog, pendingChecks, recordCheck, setFormLimit, withdrawConsent } from '../src/formcheck/model';
 import { isPending, replyToForm } from '../src/forms/model';
 import { applyDown, applyUp, downSlice, upSlice } from '../src/sync/slices';
@@ -273,6 +274,21 @@ describe('raising a review item', () => {
     const r = recordCheck(base, check(1, [fault('squat-balance', 'stability', [2])], { paused: true }), at(1));
     const p = attachClip(r.patient, r.requestId!, { where: 'device', ref: 'vabc', mime: 'video/webm', size: 1000, durationSec: null }, at(1));
     expect(p.formRequests!.find((x) => x.id === r.requestId)!.clip!.deleteAfter).toBe(addDays(addDays(today, 1), 30));
+  });
+  it('a second flagged set can still send its own video while the first item is unanswered', () => {
+    let p: Patient = base;
+    for (const n of [1, 2, 3]) p = recordCheck(p, check(n), at(n)).patient;
+    const second = check(4);
+    const r = recordCheck(p, second, at(4));
+    expect(r.requestId).toBeNull();
+    const a = assess(p, second);
+    expect(a.raise).toBe('F1');
+    const v = requestForClip(r.patient, second, a, at(4));
+    expect(v.requestId).toBeTruthy();
+    expect(pendingChecks(v.patient)).toHaveLength(2);
+    const again = requestForClip(v.patient, second, a, at(4));
+    expect(again.patient.formRequests).toHaveLength(v.patient.formRequests!.length); // sending twice does not duplicate
+    expect(requestForClip(base, check(9, []), assess(base, check(9, [])), at(9)).requestId).toBe(''); // nothing to send when nothing was raised
   });
   it('consent is explicit, versioned and can be withdrawn', () => {
     expect(hasConsent(base)).toBe(false);
