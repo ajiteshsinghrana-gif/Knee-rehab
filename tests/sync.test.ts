@@ -146,3 +146,19 @@ describe('live sync (Phase 6.1)', () => {
     expect(makeAllPatients().some((p) => p.syncKey || p.syncRole)).toBe(false);
   });
 });
+
+describe('progress data and clinic readings across the sync (my progress round)', () => {
+  it('the goal, goal progress and clinic readings go down; only home readings go up', async () => {
+    const { downSlice, applyDown, upSlice, applyUp } = await import('../src/sync/slices');
+    const { makeAllPatients } = await import('../src/demo/seed');
+    const k = makeAllPatients().find((p) => p.id === 'kamla')!;
+    const phone = { ...k, details: {}, goalProgress: undefined, periodic: k.periodic.filter((e) => e.where !== 'clinic') };
+    const got = applyDown(phone, JSON.parse(JSON.stringify(downSlice(k))));
+    expect(got.details?.goal).toBe(k.details!.goal);
+    expect(got.goalProgress?.length).toBe(k.goalProgress!.length);
+    expect(got.periodic.filter((e) => e.where === 'clinic').length).toBe(1);
+    expect(upSlice(got).periodic.some((e) => e.where === 'clinic')).toBe(false);
+    const forged = applyUp({ ...k, periodic: [] }, { ...upSlice(k), periodic: [{ date: '2026-11-10', values: { flexionDeg: 10 }, where: 'clinic' }] });
+    expect(forged.periodic.some((e) => e.where === 'clinic')).toBe(false);
+  });
+});

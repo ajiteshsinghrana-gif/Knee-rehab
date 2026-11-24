@@ -48,7 +48,7 @@ export function makeRavi(last = DEMO_TODAY_LAST): Patient {
     id: 'ravi', name: 'Ravi', age: 24, packId: pack.id, language: 'en', anchorDate: t0, currentPhase: 'p2', phaseStartDate: addDays(t0, 28),
     sessionsPrescribedPerDay: 2, daily, reviewed: {}, decisions: [], ...ravisPlan(), sessions: raviSessions(last),
     periodic: [
-      wk(t0, 7, 3, 70, 3, true), wk(t0, 14, 2, 92, 2, true), wk(t0, 21, 1, 112, 1.5, false), wk(t0, 28, 0.5, 126, 1, false),
+      wk(t0, 7, 3, 70, 3, true), wk(t0, 14, 2, 92, 2, true), wk(t0, 21, 1, 112, 1.5, false), wk(t0, 28, 0.5, 126, 1, false, { bridgeLSI: 58 }),
       wk(t0, 35, 0, 134, 0.5, false, {
         bridgeLSI: 70, calfRaiseLSI: 65, sideBridgeLSI: 75, singleLegRiseLSI: 60, bridgeReps: 12, calfRaiseReps: 10, sideBridgeSec: 18,
         singleLegRiseReps: 5, balanceEyesOpenSec: 25, balanceEyesClosedSec: 4, slSquatRating: 'fair',
@@ -150,10 +150,10 @@ function makeKamla(last: string): Patient {
     periodic: [
       // Tracks the expected knee-bend curve, then two home tests in a row (weeks 4 and 5) sit below the band.
       { date: addDays(t0, 7), values: { flexionDeg: 50, extensionDeficitDeg: 12, kneeCircumferenceDiffCm: 3 } },
-      { date: addDays(t0, 14), values: { flexionDeg: 62, extensionDeficitDeg: 10, kneeCircumferenceDiffCm: 3 }, where: 'clinic' as const }, // measured by the physio at her visit
+      { date: addDays(t0, 14), values: { flexionDeg: 62, flexionDegOther: 124, extensionDeficitDeg: 10, kneeCircumferenceDiffCm: 3 }, where: 'clinic' as const }, // measured by the physio at her visit, both legs
       { date: addDays(t0, 21), values: { flexionDeg: 66, extensionDeficitDeg: 9, kneeCircumferenceDiffCm: 2.5 } },
       { date: addDays(t0, 28), values: { flexionDeg: 68, extensionDeficitDeg: 8, kneeCircumferenceDiffCm: 2.5 }, methods: { flexionDeg: 'phone' as const } },
-      { date: addDays(t0, 35), values: { flexionDeg: 68, extensionDeficitDeg: 8, kneeCircumferenceDiffCm: 2.5 } },
+      { date: addDays(t0, 35), values: { flexionDeg: 68, flexionDegOther: 125, extensionDeficitDeg: 8, kneeCircumferenceDiffCm: 2.5 } },
     ],
   };
 }
@@ -187,9 +187,22 @@ function demoVisits(last: string): Record<string, NonNullable<Patient['visits']>
     imran: [v('v-i1', addDays(today, 1), '11:00')],
   };
 }
+/** Goals the demo physio recorded, and how far along the patient is (the physio's own judgement, 0 to 100%). */
+const DEMO_GOALS: Record<string, { goal: string; steps: [number, number][] }> = {
+  ravi: { goal: 'Play football with friends again', steps: [[-28, 15], [-14, 35], [-1, 55]] },
+  kamla: { goal: 'Walk to the temple without a stick', steps: [[-28, 10], [-7, 35]] },
+  sana: { goal: 'Return to netball training', steps: [[-49, 20], [-28, 50], [-7, 85]] },
+};
 export function makeAllPatients(last = DEMO_TODAY_LAST): Patient[] {
   const visits = demoVisits(last);
-  return makeAllPatientsRaw(last).map((p) => ({ ...p, details: { ...(p.details ?? {}), phone: DEMO_PHONE[p.id] }, visits: visits[p.id] }));
+  return makeAllPatientsRaw(last).map((p) => {
+    const g = DEMO_GOALS[p.id];
+    const lastDay = p.daily.at(-1)?.date ?? last;
+    return {
+      ...p, details: { ...(p.details ?? {}), phone: DEMO_PHONE[p.id], ...(g ? { goal: g.goal } : {}) }, visits: visits[p.id],
+      ...(g ? { goalProgress: g.steps.map(([d, pct]) => ({ date: addDays(lastDay, d), pct, at: `${addDays(lastDay, d)}T12:00:00.000Z`, by: 'Demo physio' })) } : {}),
+    };
+  });
 }
 function makeAllPatientsRaw(last: string): Patient[] {
   return [
@@ -208,7 +221,7 @@ function makeAllPatientsRaw(last: string): Patient[] {
     zf({
       id: 'sana', name: 'Sana', age: 28, last, days: 63, phase: 'p2', phaseStartDay: 28, pain: (i) => (i < 20 ? 3 : 1), plan: SANA_DOSES,
       weekly: [
-        [7, W(3, 72, 3, true)], [14, W(1.5, 100, 2, false)], [28, W(0, 128, 1, false)], [56, W(0, 138, 0.5, false)],
+        [7, W(3, 72, 3, true)], [14, W(1.5, 100, 2, false)], [28, W(0, 128, 1, false)], [56, W(0, 138, 0.5, false, { bridgeLSI: 84 })],
         [63, W(0, 140, 0, false, {
           slSquatRating: 'good', bridgeLSI: 97, calfRaiseLSI: 96, sideBridgeLSI: 98, singleLegRiseLSI: 91, bridgeReps: 28, calfRaiseReps: 26,
           sideBridgeSec: 38, singleLegRiseReps: 13, balanceEyesOpenSec: 47, balanceEyesClosedSec: 11,
@@ -247,6 +260,7 @@ function shiftDays(p: Patient, days: number): Patient {
     daily: p.daily.map((e) => ({ ...e, date: d(e.date), ...(e.recordedAt !== undefined ? { recordedAt: e.recordedAt + days * 86_400_000 } : {}) })),
     periodic: p.periodic.map((e) => ({ ...e, date: d(e.date) })),
     ...(p.sessions ? { sessions: p.sessions.map((x) => ({ ...x, date: d(x.date), startedAt: x.startedAt + days * 86_400_000, endedAt: x.endedAt + days * 86_400_000 })) } : {}),
+    ...(p.goalProgress ? { goalProgress: p.goalProgress.map((x) => ({ ...x, date: d(x.date) })) } : {}),
     plan: f ? { ...p.plan, followUp: { ...f, nextReviewDate: f.nextReviewDate && d(f.nextReviewDate), until: f.until && d(f.until) } } : p.plan,
   };
 }

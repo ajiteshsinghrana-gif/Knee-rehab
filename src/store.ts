@@ -45,7 +45,7 @@ export interface AppState {
   /** Real clinic (not the demo): dates and times come from the device clock. */
   live?: boolean;
   /** Backup contact for overdue urgent flags and the clinic's working hours (fix phase 4). Nothing is pre-filled. */
-  clinic?: { backupName?: string; backupPhone?: string; hours?: WorkingHours };
+  clinic?: { backupName?: string; backupPhone?: string; hours?: WorkingHours; physioName?: string };
   /** A signed-in physio's review of a protocol pack, by pack id: their own name, account and the date (fix phase 4). */
   packSignoffs?: Record<string, { name: string; email: string; at: string }>;
   /** The physio's own plan templates ("My template"), saved from a patient and used to start new ones. */

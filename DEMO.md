@@ -76,3 +76,10 @@ Patient screen: **Start my exercises**. Tap through one exercise (Rep done, rest
 - **Progress tab**: Ravi's **Exercise record** (squats stopped because it hurt, step-ups skipped; tap a cell). Kamla's knee-bend chart: hollow circles at home, squares in clinic; **Add a clinic reading**.
 - **+ Add patient**: General (no fixed protocol) with a typed diagnosis, More details, or start from a saved template.
 - **Weekly self-test, knee bend**: **Measure with your phone** (needs a real phone with a motion sensor; lie on your front, phone on the back of the lower leg, two readings averaged).
+
+## Optional: My progress (1 min)
+
+- **Patient phone, Sana**: **My progress** (under Last 7 days). Pain 3 → 1, all exercises done, knee bend 72° → 140°, goal 20% → 85%, operated leg at 97% of the other (was 84%). **Share my progress**: send on WhatsApp or save as PDF.
+- **Kamla** (Hindi): all four cards, knee bend with home circles and the clinic square, both legs measured.
+- **Physio, any patient**: **Send progress report** under the name: for the patient or the referring doctor, with your notes; every send is in the audit log. Set **Your name on reports** under ⚙ first (left empty, no name is shown).
+- **History tab, External reports**: attach a PDF or photo and up to three key values; they appear as clinic squares on the charts.

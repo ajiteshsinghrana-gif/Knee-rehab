@@ -443,6 +443,10 @@ export interface Patient {
   attachments?: { id: string; name: string; mime: string; size: number; at: string }[];
   /** Clinic sessions (physio feedback round): 'at' is the clinic's local date and time, "YYYY-MM-DDTHH:MM". */
   visits?: ClinicVisit[];
+  /** Progress toward the patient's own goal, as the physio judged it (0 to 100%), over time. */
+  goalProgress?: { date: string; pct: number; at: string; by: string }[];
+  /** External reports the physio attached (e.g. a clinic strength test), with up to three key values entered as clinic readings. */
+  reports?: { id: string; title: string; date: string; attachmentId?: string; values: { measure: string; value: number }[]; at: string; by: string }[];
 }
 
 export interface FollowUp {

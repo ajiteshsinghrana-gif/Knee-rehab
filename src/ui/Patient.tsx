@@ -22,6 +22,7 @@ import { demoFor } from '../exercises/demos';
 import { doseLine } from '../exercises/dose';
 import { missedCheckIns } from '../reminders';
 import { Goniometer } from './Goniometer';
+import { MyProgress } from './MyProgress';
 import { patientUploadClip } from '../sync/engine';
 import { newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { nextVisit, nowStamp, visitReminder, visitTime, visitWhen } from '../visits';
@@ -39,7 +40,7 @@ const SKIP_EMOJI: Record<string, string> = { pain: '😣', fear: '😨', time: '
 const EXS = [['all', '✅'], ['some', '🟡'], ['none', '❌']] as const;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-type Screen = 'home' | 'checkin' | 'problem' | 'weekly' | 'monthly' | 'done' | 'session' | 'forms';
+type Screen = 'home' | 'checkin' | 'problem' | 'weekly' | 'monthly' | 'done' | 'session' | 'forms' | 'progress';
 
 export function PatientView({ patient }: { patient: Patient }) {
   const pack = getPack(patient.packId);
@@ -64,6 +65,7 @@ export function PatientView({ patient }: { patient: Patient }) {
       {screen === 'forms' && <FormRequestScreen key={patient.id + (formEx ?? '')} patient={patient} pack={pack} lang={lang} exerciseId={formEx} onBack={() => { setFormEx(null); setScreen('home'); }} />}
       {screen === 'checkin' && <CheckIn key={patient.id} patient={patient} pack={pack} lang={lang} onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
       {screen === 'problem' && <CheckIn key={patient.id + 'p'} patient={patient} pack={pack} lang={lang} problem onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
+      {screen === 'progress' && <MyProgress patient={patient} pack={pack} lang={lang} today={getState().today} physioName={getState().clinic?.physioName} onBack={() => setScreen('home')} />}
       {screen === 'weekly' && <Weekly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
       {screen === 'monthly' && <Monthly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
       {screen === 'done' && <Done patient={patient} pack={pack} lang={lang} onHome={() => setScreen('home')} />}
@@ -193,6 +195,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
             return <span key={d} className={`dot ${cls}`} role="img" aria-label={e ? T(e.exercises === 'all' ? 'dayOk' : e.exercises === 'some' ? 'dayPart' : 'dayMiss') : d === today ? T('dayToday') : before ? T('dayBefore') : T('dayMiss')}>{ch}</span>;
           })}
         </div>
+        <button type="button" className="btn progressbtn" data-testid="my-progress-btn" onClick={() => go('progress')}>{T('myProgress')} ›</button>
       </section>
       {patient.plan.advice && (
         <section className="advicecard" data-testid="advice">

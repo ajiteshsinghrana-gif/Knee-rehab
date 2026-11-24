@@ -25,6 +25,10 @@ export interface DownSlice {
   forms?: Record<string, { reply?: FormReply; clipGone?: string; deleteAfter?: string }>;
   /** Clinic sessions the physio planned or marked (physio feedback round). */
   visits?: ClinicVisit[];
+  /** For the patient's "My progress": their goal, the physio's progress notes toward it, and readings taken in clinic. */
+  goal?: string;
+  goalProgress?: { date: string; pct: number }[];
+  clinicReadings?: PeriodicEntry[];
 }
 
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -136,7 +140,7 @@ const applyForms = (local: FormRequest[] | undefined, raw: unknown): FormRequest
 
 // ---------------- patient -> physio ----------------
 export function upSlice(p: Patient): UpSlice {
-  return { v: 1, daily: p.daily, periodic: p.periodic, language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id), ...(p.sessions?.length ? { sessions: p.sessions.slice(-60) } : {}), ...(p.formRequests?.length ? { forms: p.formRequests.slice(-200).map(formUp) } : {}), ...(p.consent ? { consent: p.consent } : {}), ...(p.erasureRequestedAt ? { erasureRequestedAt: p.erasureRequestedAt } : {}) };
+  return { v: 1, daily: p.daily, periodic: p.periodic.filter((e) => e.where !== 'clinic'), language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id), ...(p.sessions?.length ? { sessions: p.sessions.slice(-60) } : {}), ...(p.formRequests?.length ? { forms: p.formRequests.slice(-200).map(formUp) } : {}), ...(p.consent ? { consent: p.consent } : {}), ...(p.erasureRequestedAt ? { erasureRequestedAt: p.erasureRequestedAt } : {}) };
 }
 const stamp = (e: object): number => (e as { recordedAt?: number }).recordedAt ?? 0;
 /** Same day: the later recording wins; an entry is never lost because the other side has fewer. */
@@ -153,7 +157,8 @@ const periodicKey = (e: PeriodicEntry) => `${e.date}|${Object.keys(e.values).sor
 export function applyUp(p: Patient, raw: unknown): Patient {
   if (!isObj(raw) || raw.v !== 1) return p;
   const inDaily = (Array.isArray(raw.daily) ? raw.daily : []).filter(validDaily).map(cleanDaily);
-  const inPeriodic = (Array.isArray(raw.periodic) ? raw.periodic : []).filter(validPeriodic).map(cleanPeriodic);
+  // A patient's phone only ever sends home readings: anything claiming to be a clinic reading is dropped.
+  const inPeriodic = (Array.isArray(raw.periodic) ? raw.periodic : []).filter(validPeriodic).filter((e) => e.where !== 'clinic').map(cleanPeriodic);
   const daily = mergeBy(p.daily, inDaily, dailyKey).sort((a, b) => a.date.localeCompare(b.date));
   const periodic = mergeBy(p.periodic, inPeriodic, periodicKey).sort((a, b) => a.date.localeCompare(b.date));
   const seen = new Set((Array.isArray(raw.seen) ? raw.seen : []).filter((x): x is string => typeof x === 'string'));
@@ -187,6 +192,9 @@ export function downSlice(p: Patient, clinicDemos?: Record<string, ExerciseDemo>
     ...(clinicDemos ? { demos } : {}),
     ...(formsDown(p) ? { forms: formsDown(p) } : {}),
     ...(p.visits ? { visits: p.visits.map((v) => ({ id: v.id, at: v.at, status: v.status })) } : {}),
+    ...(p.details?.goal ? { goal: p.details.goal } : {}),
+    ...(p.goalProgress?.length ? { goalProgress: p.goalProgress.map((g) => ({ date: g.date, pct: g.pct })) } : {}),
+    ...(p.periodic.some((e) => e.where === 'clinic') ? { clinicReadings: p.periodic.filter((e) => e.where === 'clinic').map(cleanPeriodic) } : {}),
   };
 }
 const validVisit = (v: unknown): v is ClinicVisit => isObj(v) && typeof v.id === 'string' && v.id.length <= 40 && typeof v.at === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v.at)
@@ -216,6 +224,10 @@ export function applyDown(p: Patient, raw: unknown): Patient {
     // An older physio build sends no demos: keep what this phone has. Otherwise take exactly what the physio sent, so a removed video disappears.
     ...(raw.demos !== undefined ? { demos: cleanSyncedDemos(raw.demos) } : {}),
     ...(Array.isArray(raw.visits) ? { visits: raw.visits.filter(validVisit).slice(0, 100).map((v) => ({ id: v.id, at: v.at, status: v.status })) } : {}),
+    ...(typeof raw.goal === 'string' ? { details: { ...(p.details ?? {}), goal: raw.goal.slice(0, 200) } } : {}),
+    ...(Array.isArray(raw.goalProgress) ? { goalProgress: raw.goalProgress.filter((g: unknown) => isObj(g) && isDate(g.date) && Number.isFinite(g.pct)).slice(0, 100).map((g: Record<string, unknown>) => ({ date: g.date as string, pct: Math.max(0, Math.min(100, Number(g.pct))), at: '', by: '' })) } : {}),
+    // Clinic readings come only from the physio: they replace this phone's copy; the patient's own home readings stay as they are.
+    ...(Array.isArray(raw.clinicReadings) ? { periodic: [...p.periodic.filter((e) => e.where !== 'clinic'), ...raw.clinicReadings.filter(validPeriodic).map((e: PeriodicEntry) => ({ ...cleanPeriodic(e), where: 'clinic' as const }))].sort((a, b) => a.date.localeCompare(b.date)) } : {}),
     ...(() => { const ff = applyForms(p.formRequests, raw.forms); return ff ? { formRequests: ff } : {}; })(),
   };
 }

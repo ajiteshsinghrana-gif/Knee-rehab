@@ -39,6 +39,7 @@ import { templateFromPatient } from '../templates';
 import { exerciseRecord, reasonLabel } from '../exerciseRecord';
 import { nextVisit, nowStamp, toMark, visitCounts, visitWhen } from '../visits';
 import { Goniometer } from './Goniometer';
+import { ProgressSheet } from './MyProgress';
 import { DetailsFields } from './DetailsFields';
 import { deleteLocalVideo, loadLocalVideo, newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { validHours } from '../engine/hours';
@@ -329,6 +330,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
         <div className="dh-main">
           <h2>{p.name}{p.age ? `, ${p.age}` : ''}</h2>
           <p className="sub">{conditionLabel(p, pack)} · Week {wk.toFixed(1)} {pack.anchorLabel.en} · {phase.name.en} <small>({weeksInPhase(p, r.asOf).toFixed(1)} wk in phase, as of {r.asOf})</small></p>
+          <ReportButton patient={p} pack={pack} now={now} />
         </div>
         <div className="dh-side">
           {hasPhone(p.details?.phone) && (
@@ -575,6 +577,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
             <h3>Treatment status</h3>
             <p>{p.status === 'completed' ? <>Treatment complete since <b>{p.completedAt?.slice(0, 10)}</b>.</> : 'Active.'} <span className="tiny">Mark complete or erase in Settings.</span></p>
           </div>
+          <ExternalReportsCard patient={p} pack={pack} now={now} />
           <ClinicalNotesCard patient={p} now={now} />
           <AuditCard patient={p} />
           {!pendingVideos && <FormReview patient={p} pack={pack} now={now} />}
@@ -797,6 +800,140 @@ function ExerciseRecordCard({ patient: p, pack }: { patient: Patient; pack: Prot
 /** What the patient is treated for: the typed diagnosis for the General protocol, otherwise the protocol's condition. */
 const conditionLabel = (p: Patient, pack: ProtocolPack): string => (pack.id === 'general' && p.details?.diagnosis ? p.details.diagnosis : pack.condition.en);
 
+/** "Send progress report": the patient's one-page summary plus the physio's notes, for the patient or the referring doctor. Each send is logged. */
+function ReportButton({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
+  const st = getState();
+  const [open, setOpen] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const [to, setTo] = useState<'patient' | 'doctor'>('patient');
+  const [doctor, setDoctor] = useState(p.details?.surgeon ?? '');
+  const [docPhone, setDocPhone] = useState('');
+  const [notes, setNotes] = useState('');
+  const dlg = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (open) dlg.current?.showModal(); }, [open]);
+  const who = to === 'patient' ? `the patient (${p.name})` : `the referring doctor${doctor.trim() ? ` (${doctor.trim()})` : ''}`;
+  const log = (how: 'whatsapp' | 'pdf') => updatePatient(p.id, (q) => withAuditNote(q, 'progress-report', `Progress report ${how === 'whatsapp' ? 'sent on WhatsApp' : 'saved as PDF'} for ${who}`, null, { to, how, notes: notes.trim() ? 'with notes' : 'no notes' }, notes.trim().slice(0, 200) || 'No notes', { nowMs: now, today: st.today }));
+  const phone = to === 'patient' ? p.details?.phone : docPhone;
+  return (
+    <>
+      <button type="button" className="linkbtn reportbtn" data-testid="report-btn" onClick={() => setOpen(true)}>Send progress report</button>
+      {open && (
+        <dialog ref={dlg} className="dialog" aria-label="Send progress report" onClose={() => setOpen(false)}>
+          <div className="dialog-head"><h2>Progress report</h2><button type="button" className="iconbtn" aria-label="Close" onClick={() => dlg.current?.close()}>✕</button></div>
+          <fieldset className="scope"><legend>For</legend>
+            <label className="check"><input type="radio" name="rep-to" checked={to === 'patient'} onChange={() => setTo('patient')} /> The patient ({p.language === 'en' ? 'English' : p.language === 'hi' ? 'Hindi' : 'Bengali'})</label>
+            <label className="check"><input type="radio" name="rep-to" checked={to === 'doctor'} onChange={() => setTo('doctor')} /> The referring doctor (English)</label>
+          </fieldset>
+          {to === 'doctor' && (
+            <>
+              <label className="menufield" style={{ padding: 0 }}>Doctor's name (optional)<input value={doctor} maxLength={80} onChange={(e) => setDoctor(e.target.value)} /></label>
+              <label className="menufield" style={{ padding: 0 }}>Doctor's WhatsApp number (optional)<input type="tel" inputMode="tel" value={docPhone} maxLength={40} onChange={(e) => setDocPhone(e.target.value)} /></label>
+            </>
+          )}
+          <label className="menufield" style={{ padding: 0 }}>Your notes for this report (shown on the page)
+            <textarea rows={4} maxLength={1500} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Good progress. Plan: start running drills in two weeks." />
+          </label>
+          <div className="btnrow"><button className="btn primary" onClick={() => { dlg.current?.close(); setSheet(true); }}>Preview and send</button></div>
+          <p className="tiny">Each WhatsApp send or PDF save is written to the audit log.</p>
+        </dialog>
+      )}
+      {sheet && <ProgressSheet patient={p} pack={pack} lang={to === 'patient' ? p.language : 'en'} today={st.today} physioName={st.clinic?.physioName} notes={notes} to={hasPhone(phone) ? phone : undefined} onClose={() => setSheet(false)} onSent={log} />}
+    </>
+  );
+}
+
+/** Progress toward the patient's own goal, as the physio judges it. Each entry is dated and logged. */
+function GoalProgress({ patient: p, now }: { patient: Patient; now: number }) {
+  const [pct, setPct] = useState('');
+  const hist = [...(p.goalProgress ?? [])].sort((a, b) => a.date.localeCompare(b.date));
+  const save = () => {
+    const n = Math.round(Number(pct));
+    if (!Number.isFinite(n) || n < 0 || n > 100) return;
+    const st = getState(); const at = new Date(now).toISOString();
+    updatePatient(p.id, (q) => withAuditNote({ ...q, goalProgress: [...(q.goalProgress ?? []).filter((x) => x.date !== st.today), { date: st.today, pct: n, at, by: PHYSIO_NAME }] }, 'goal-progress', `Progress toward the goal recorded: ${n}%`, null, { pct: n }, 'Physio judgement', { nowMs: now, today: st.today }));
+    setPct('');
+  };
+  return (
+    <div className="goalprog">
+      <label className="dfield">Progress toward the goal today (%)
+        <span className="tplrow"><input type="number" min={0} max={100} value={pct} onChange={(e) => setPct(e.target.value)} aria-label="Progress toward the goal, percent" /><button type="button" className="btn" disabled={pct === ''} onClick={save}>Record</button></span>
+      </label>
+      {hist.length > 0 && <small className="tiny">So far: {hist.map((h) => `${h.pct}% (${h.date})`).join(' · ')}</small>}
+    </div>
+  );
+}
+
+/**
+ * External reports (a clinic strength test, a scan report...): the file is kept on this device; up to three key values with a
+ * date are saved as clinic readings, so they appear as clinic points (squares) on the charts. Logged.
+ */
+function ExternalReportsCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
+  const st = getState();
+  const measures = [...pack.measures.filter((m) => m.frequency === 'weekly' && m.valueType === 'number'), ...(pack.measures.some((m) => m.id === 'flexionDeg') ? [{ id: 'flexionDegOther', label: { en: 'Knee bend, other leg (degrees)', hi: '' } }] : [])];
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState(st.today);
+  const [file, setFile] = useState<File | null>(null);
+  const [vals, setVals] = useState<{ measure: string; value: string }[]>([{ measure: '', value: '' }, { measure: '', value: '' }, { measure: '', value: '' }]);
+  const [msg, setMsg] = useState('');
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const reports = p.reports ?? [];
+  useEffect(() => {
+    let live = true; const made: string[] = [];
+    void (async () => { const out: Record<string, string> = {}; for (const r of reports) if (r.attachmentId) { const b = await loadLocalVideo(r.attachmentId); if (b) { const u = URL.createObjectURL(b); made.push(u); out[r.id] = u; } } if (live) setUrls(out); })();
+    return () => { live = false; made.forEach((u) => URL.revokeObjectURL(u)); };
+  }, [reports.map((r) => r.id).join()]);
+  const save = async () => {
+    setMsg('');
+    if (!title.trim()) { setMsg('Give the report a title.'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > st.today) { setMsg('Choose the date of the report (not in the future).'); return; }
+    const keyVals = vals.filter((v) => v.measure && v.value !== '').map((v) => ({ measure: v.measure, value: Number(v.value) }));
+    if (keyVals.some((v) => !Number.isFinite(v.value))) { setMsg('Key values must be numbers.'); return; }
+    let attachmentId: string | undefined;
+    if (file) {
+      if (!/^image\/|^application\/pdf$/.test(file.type)) { setMsg('Attach a PDF or a photo.'); return; }
+      if (file.size > 15 * 1048576) { setMsg('That file is over 15 MB.'); return; }
+      attachmentId = newLocalId();
+      try { await saveLocalVideo(attachmentId, file); } catch (e) { setMsg((e as Error).message.replace('video', 'file')); return; }
+    }
+    const id = `r${now.toString(36)}${reports.length}`;
+    const at = new Date(now).toISOString();
+    updatePatient(p.id, (q) => {
+      const entry = keyVals.length ? [{ date, values: Object.fromEntries(keyVals.map((v) => [v.measure, v.value])), where: 'clinic' as const, methods: Object.fromEntries(keyVals.map((v) => [v.measure, 'manual' as const])) }] : [];
+      return withAuditNote({
+        ...q,
+        reports: [...(q.reports ?? []), { id, title: title.trim().slice(0, 120), date, ...(attachmentId ? { attachmentId } : {}), values: keyVals, at, by: PHYSIO_NAME }],
+        ...(attachmentId && file ? { attachments: [...(q.attachments ?? []), { id: attachmentId, name: file.name.slice(0, 120), mime: file.type, size: file.size, at }] } : {}),
+        periodic: [...q.periodic, ...entry].sort((a, b) => a.date.localeCompare(b.date)),
+      }, 'external-report', `External report attached: ${title.trim().slice(0, 60)} (${date})${keyVals.length ? `; clinic readings: ${keyVals.map((v) => `${v.measure} ${v.value}`).join(', ')}` : ''}`, null, { values: keyVals }, 'Entered by the physio from the report', { nowMs: now, today: st.today });
+    });
+    setTitle(''); setFile(null); setVals(vals.map(() => ({ measure: '', value: '' }))); setMsg('Saved. Key values appear as clinic readings on the charts.');
+  };
+  return (
+    <details className="card" data-testid="external-reports">
+      <summary><b>External reports</b>&nbsp;<small>{reports.length ? `${reports.length} attached` : 'Attach a PDF or photo, e.g. a strength test'}</small></summary>
+      {reports.length > 0 && <ul className="audit">{reports.map((r) => <li key={r.id}><b>{r.date}</b> · {r.title}{r.values.length ? ` · ${r.values.map((v) => `${measures.find((m) => m.id === v.measure)?.label.en ?? v.measure}: ${v.value}`).join(', ')}` : ''} {r.attachmentId && (urls[r.id] ? <a href={urls[r.id]} target="_blank" rel="noopener noreferrer">Open</a> : <small className="tiny">(file on another device)</small>)}</li>)}</ul>}
+      <div className="detailsgrid">
+        <label className="dfield">Title<input value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Isokinetic strength test" /></label>
+        <label className="dfield">Date of the report<input type="date" max={st.today} value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        <label className="dfield wide">File (PDF or photo)<input type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
+        {vals.map((v, i) => (
+          <div key={i} className="dfield wide keyval">Key value {i + 1} (optional)
+            <span className="tplrow">
+              <select aria-label={`Key value ${i + 1}: measure`} value={v.measure} onChange={(e) => setVals(vals.map((x, j) => (j === i ? { ...x, measure: e.target.value } : x)))}>
+                <option value="">Choose a measure…</option>
+                {measures.map((m) => <option key={m.id} value={m.id}>{m.label.en}</option>)}
+              </select>
+              <input type="number" aria-label={`Key value ${i + 1}: number`} value={v.value} onChange={(e) => setVals(vals.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))} />
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="btnrow"><button className="btn" onClick={() => void save()}>Save report</button>{msg && <small className="tiny" role="status">{msg}</small>}</div>
+      <p className="tiny">The file stays on this device only. Key values become clinic readings (squares on the charts); a clinic reading below the expected band can flag on its own, as any clinic reading does.</p>
+    </details>
+  );
+}
+
 /** "Save as my template": keeps this plan under a name for starting new patients. */
 function SaveTemplate({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
   const [open, setOpen] = useState(false);
@@ -852,6 +989,7 @@ function PatientDetailsCard({ patient: p, pack, now }: { patient: Patient; pack:
     <details className="card" data-testid="patient-details">
       <summary><b>Patient details</b>&nbsp;<small>{[p.details?.phone, p.details?.city, p.details?.goal && `Goal: ${p.details.goal}`].filter(Boolean).join(' · ') || 'Phone, diagnosis, carer, goal…'}</small></summary>
       <DetailsFields v={v} set={(patch) => { setV({ ...v, ...patch }); setMsg(''); }} showSurgery={!/surgery/i.test(pack.anchorLabel.en)} />
+      <GoalProgress patient={p} now={now} />
       <div className="btnrow"><button className="btn" onClick={save}>Save details</button>{msg && <small className="okline" role="status">{msg}</small>}</div>
     </details>
   );
@@ -1189,6 +1327,9 @@ function ClinicSettings({ state }: { state: AppState }) {
       </label>
       <label className="menufield">Contact shown to patients
         <input maxLength={120} value={state.clinicContact ?? ''} onChange={(e) => setContact(e.target.value)} aria-label="Clinic contact" />
+      </label>
+      <label className="menufield" title="Shown on progress summaries and reports. Leave empty to show 'your physio'.">Your name on reports
+        <input maxLength={80} value={state.clinic?.physioName ?? ''} onChange={(e) => setClinic({ physioName: e.target.value })} aria-label="Your name on reports" />
       </label>
       <h3 className="cs-sub">Backup for overdue urgent flags</h3>
       <label className="menufield">Name
