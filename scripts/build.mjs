@@ -20,7 +20,7 @@ for (const f of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {
 // Optional offline model for the camera form check (README, "Camera form check"): copied only if the files were added.
 if (existsSync('public/mediapipe')) cpSync('public/mediapipe', 'docs/mediapipe', { recursive: true });
 mkdirSync('docs/media', { recursive: true });
-for (const f of readdirSync('public/media')) copyFileSync(`public/media/${f}`, `docs/media/${f}`);
+cpSync('public/media', 'docs/media', { recursive: true });
 // Installable + offline (Phase 7.3): manifest and icons, then the service worker, which must be written LAST because its version is a hash of everything above.
 copyFileSync('public/manifest.webmanifest', 'docs/manifest.webmanifest');
 mkdirSync('docs/icons', { recursive: true });

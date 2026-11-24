@@ -55,8 +55,8 @@ export interface SetOutcome {
  * One set with the camera. `countOnly`: reps only, nothing judged. `blind` (pilot mode): the rep count and cues are hidden during
  * the set, so the observer's own verdict is not led by the phone.
  */
-export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, onDone, onCancel, onTooSlow }: {
-  kind: FormKind; lang: Lang; limit?: { max?: number; min?: number }; tempo?: number; countOnly: boolean; blind?: boolean; trace?: boolean;
+export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, exerciseId, onDone, onCancel, onTooSlow }: {
+  kind: FormKind; /** Shown as a small demo in the corner of the camera view. */ exerciseId?: string; lang: Lang; limit?: { max?: number; min?: number }; tempo?: number; countOnly: boolean; blind?: boolean; trace?: boolean;
   /** The phone is too slow to measure, or the camera or model could not start: offer a video for the physio instead. */
   onDone: (o: SetOutcome) => void; onCancel: () => void; onTooSlow?: () => void;
 }) {
@@ -350,6 +350,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
           <video ref={video} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-label={F('fcTitle')} />
           <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-hidden="true" />
         </div>
+        {exerciseId && getExercise(exerciseId)?.picture && <div className="fc-demo" aria-hidden="true" style={{ position: 'absolute', right: 8, bottom: 8, borderRadius: 10, overflow: 'hidden', border: '2px solid #fff', background: '#fff', opacity: .92 }}><ExPicture src={getExercise(exerciseId)?.picture} size={84} animated /></div>}
       </div>
       {phase !== 'live' && ready && (
         <div className="field" data-testid="fc-zoom-box">
@@ -504,7 +505,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
   const consent = consentText(lang);
 
   if (stage === 'set' && kind) {
-    return <CameraSet key={kind} kind={kind} lang={lang} countOnly={mode === 'count'} limit={mode === 'form' && kind === baseKind && kind !== 'balance-line' && !KINDS[kind].noLimit ? limitFor(patient, ex) : undefined}
+    return <CameraSet key={kind} kind={kind} exerciseId={ex} lang={lang} countOnly={mode === 'count'} limit={mode === 'form' && kind === baseKind && kind !== 'balance-line' && !KINDS[kind].noLimit ? limitFor(patient, ex) : undefined}
       tempo={mode === 'form' ? limitFor(patient, ex)?.tempo : undefined} onDone={onDone} onCancel={() => setStage('intro')} onTooSlow={() => onVideo(ex)} />;
   }
 
@@ -554,7 +555,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
     return (
       <main data-testid="formcheck-result">
         <h2>{F('fcResult')} <Speak text={[...lines, verdict].join(' ')} lang={lang} /></h2>
-        <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
+        <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={96} animated /><b>{exerciseName(ex, lang)}</b></div>
         {earlier.map((e) => {
           const tally = new Map<string, number>();
           for (const f of e.log.faults) { const c = F(`fault-${f.id}`); tally.set(c, (tally.get(c) ?? 0) + f.reps.length); }
@@ -624,7 +625,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
           <select value={ex} data-testid="fc-exercise" onChange={(e) => { setEx(e.target.value); setVariant(0); setPick(0); }}>{options.map((id) => <option key={id} value={id}>{exerciseName(id, lang)}</option>)}</select>
         </label>
       ) : null}
-      <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
+      <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={96} animated /><b>{exerciseName(ex, lang)}</b></div>
       {variants && (
         <label className="field"><b>{F('fcPickVar')}</b>
           <select value={variant} onChange={(e) => setVariant(Number(e.target.value))} data-testid="fc-variant">{variants.map((v, i) => <option key={v.kind} value={i}>{F(v.labelKey)}</option>)}</select>

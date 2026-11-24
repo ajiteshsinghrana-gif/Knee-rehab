@@ -141,7 +141,7 @@ export function GuidedSession({ patient, pack, lang, onExit, onNeedHelp, onFormC
       <p className="sub">{S('sOf', { i: s.i + 1, n: s.steps.length })}</p>
       <div className="card gs-card">
         <div className="exhead">
-          <ExPicture src={ex?.picture} size={64} />
+          <ExPicture src={ex?.picture} size={112} animated />
           <div><h2>{exerciseName(step.exerciseId, lang)}</h2><small>{doseText(step, lang)}</small></div>
         </div>
         <DemoButton patient={patient} exerciseId={step.exerciseId} lang={lang} />
