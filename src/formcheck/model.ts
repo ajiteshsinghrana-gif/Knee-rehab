@@ -119,9 +119,10 @@ export function setFormLimit(p: Patient, exerciseId: string, v: { max?: number; 
  */
 export function requestForClip(p: Patient, log: FormCheckLog, a: Assessment, atIso: string): { patient: Patient; requestId: string } {
   const requestId = requestIdFor(`v${log.id}`);
-  if (!a.raise) return { patient: p, requestId: '' };
   if ((p.formRequests ?? []).some((r) => r.id === requestId)) return { patient: p, requestId };
   const by = log.answeredBy ?? 'patient';
-  const req: FormRequest = { ...newFormRequest({ id: requestId, exerciseId: log.exerciseId, at: atIso, note: '', by, clip: null, via: 'app' }), consent: { by, at: atIso, version: FORM_CHECK.consentVersion }, auto: { checkId: log.id, reason: a.raise, faults: faultIdsFor(log, a) } };
+  // A flagged set carries its numbers (auto). A set nothing flagged is a plain video the patient chose to send, like "ask my physio".
+  const base = { ...newFormRequest({ id: requestId, exerciseId: log.exerciseId, at: atIso, note: a.raise ? '' : 'Video sent from a camera check (nothing was flagged).', by, clip: null, via: 'app' }), consent: { by, at: atIso, version: FORM_CHECK.consentVersion } };
+  const req: FormRequest = a.raise ? { ...base, auto: { checkId: log.id, reason: a.raise, faults: faultIdsFor(log, a) } } : base;
   return { patient: { ...p, formRequests: [...(p.formRequests ?? []), req] }, requestId };
 }

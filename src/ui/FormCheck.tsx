@@ -193,8 +193,8 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     const out = recordCheck(cur, log, iso);
     updatePatient(patient.id, (q) => recordCheck(q, log, iso).patient);
     setResult({ log: out.patient.formChecks?.find((x) => x.id === log.id) ?? log, a: assess(cur, log), requestId: out.requestId });
-    // The video is kept in memory only to offer it for a flagged set. Otherwise it is dropped here.
-    setClip(blob && assess(cur, log).raise ? blob : null);
+    // The video stays in memory only so the patient can choose to send it. Nothing is uploaded unless they tick the consent box.
+    setClip(blob ?? null);
     setStage('result');
   };
 

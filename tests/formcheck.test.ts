@@ -288,7 +288,9 @@ describe('raising a review item', () => {
     expect(pendingChecks(v.patient)).toHaveLength(2);
     const again = requestForClip(v.patient, second, a, at(4));
     expect(again.patient.formRequests).toHaveLength(v.patient.formRequests!.length); // sending twice does not duplicate
-    expect(requestForClip(base, check(9, []), assess(base, check(9, [])), at(9)).requestId).toBe(''); // nothing to send when nothing was raised
+    const clean = requestForClip(base, check(9, []), assess(base, check(9, [])), at(9));
+    expect(clean.requestId).toBeTruthy(); // a clean set can still send its video, as a plain item without numbers
+    expect(clean.patient.formRequests?.[0].auto).toBeUndefined();
   });
   it('consent is explicit, versioned and can be withdrawn', () => {
     expect(hasConsent(base)).toBe(false);
