@@ -9,12 +9,12 @@
  * Everything that arrives is checked and copied field by field. Unknown fields are dropped, so a damaged or
  * tampered row cannot change anything it should not, and the physio's private reasons never leave his computer.
  */
-import type { ClinicVisit, DailyCheckIn, ExerciseDemo, Notice, Patient, PeriodicEntry, Plan, SessionLog, SyncedDemo, FormRequest, FormReply } from '../types';
+import type { ClinicVisit, DailyCheckIn, ExerciseDemo, Notice, Patient, PeriodicEntry, Plan, SessionLog, SyncedDemo, FormRequest, FormReply, FormCheckLog, FormFault, FormFaultKind, FormLimit } from '../types';
 import { cleanSyncedDemos, demosForPatient } from '../exercises/demos';
 import { isLang } from '../types';
 import { getPack } from '../engine/packs';
 
-export interface UpSlice { v: 1; daily: DailyCheckIn[]; periodic: PeriodicEntry[]; language: string; caregiverMode: boolean; seen: string[]; sessions?: SessionLog[]; forms?: FormRequest[]; consent?: { version: string; at: string }; erasureRequestedAt?: string }
+export interface UpSlice { v: 1; daily: DailyCheckIn[]; periodic: PeriodicEntry[]; language: string; caregiverMode: boolean; seen: string[]; sessions?: SessionLog[]; forms?: FormRequest[]; checks?: FormCheckLog[]; consent?: { version: string; at: string }; erasureRequestedAt?: string }
 export interface DownSlice {
   v: 1; name: string; age: number; anchorDate: string; enrolledOn?: string; currentPhase: string; phaseStartDate: string;
   sessionsPrescribedPerDay: number; plan: Plan; notices: Notice[];
@@ -29,6 +29,8 @@ export interface DownSlice {
   goal?: string;
   goalProgress?: { date: string; pct: number }[];
   clinicReadings?: PeriodicEntry[];
+  /** The physio's range limits for the camera form check, keyed by exercise. The patient's phone uses them; they are physio-owned. */
+  formLimits?: Record<string, FormLimit>;
 }
 
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -100,7 +102,8 @@ const cleanForm = (raw: unknown): FormRequest | null => {
   }
   return { id: raw.id, exerciseId: raw.exerciseId, at: raw.at, note: raw.note, consent: { by: c.by, at: c.at, version: c.version },
     ...(raw.via === 'app' || raw.via === 'whatsapp' ? { via: raw.via } : {}), clip,
-    ...(str(raw.clipGone, 40) ? { clipGone: raw.clipGone } : {}), ...(str(raw.replySeenAt, 40) ? { replySeenAt: raw.replySeenAt } : {}) };
+    ...(str(raw.clipGone, 40) ? { clipGone: raw.clipGone } : {}), ...(str(raw.replySeenAt, 40) ? { replySeenAt: raw.replySeenAt } : {}),
+    ...(() => { const a = raw.auto; return isObj(a) && str(a.checkId, 40) && (a.reason === 'F1' || a.reason === 'PAUSE') && Array.isArray(a.faults) ? { auto: { checkId: a.checkId, reason: a.reason, faults: a.faults.filter((x): x is string => typeof x === 'string' && x.length <= 40).slice(0, 8) } } : {}; })() };
 };
 /** The patient's request without the physio's reply (which the patient's phone only ever receives, never sends back). */
 const formUp = (r: FormRequest): FormRequest => { const { reply: _r, ...rest } = r; return rest; };
@@ -140,7 +143,7 @@ const applyForms = (local: FormRequest[] | undefined, raw: unknown): FormRequest
 
 // ---------------- patient -> physio ----------------
 export function upSlice(p: Patient): UpSlice {
-  return { v: 1, daily: p.daily, periodic: p.periodic.filter((e) => e.where !== 'clinic'), language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id), ...(p.sessions?.length ? { sessions: p.sessions.slice(-60) } : {}), ...(p.formRequests?.length ? { forms: p.formRequests.slice(-200).map(formUp) } : {}), ...(p.consent ? { consent: p.consent } : {}), ...(p.erasureRequestedAt ? { erasureRequestedAt: p.erasureRequestedAt } : {}) };
+  return { v: 1, daily: p.daily, periodic: p.periodic.filter((e) => e.where !== 'clinic'), language: p.language, caregiverMode: !!p.caregiverMode, seen: p.notices.filter((n) => n.seen).map((n) => n.id), ...(p.sessions?.length ? { sessions: p.sessions.slice(-60) } : {}), ...(p.formRequests?.length ? { forms: p.formRequests.slice(-200).map(formUp) } : {}), ...(p.formChecks?.length ? { checks: p.formChecks.slice(-60) } : {}), ...(p.consent ? { consent: p.consent } : {}), ...(p.erasureRequestedAt ? { erasureRequestedAt: p.erasureRequestedAt } : {}) };
 }
 const stamp = (e: object): number => (e as { recordedAt?: number }).recordedAt ?? 0;
 /** Same day: the later recording wins; an entry is never lost because the other side has fewer. */
@@ -166,12 +169,50 @@ export function applyUp(p: Patient, raw: unknown): Patient {
     ...p, daily, periodic, language: isLang(raw.language) ? raw.language : p.language,
     ...(() => { const ss = mergeSessions(p.sessions, raw.sessions); return ss ? { sessions: ss } : {}; })(),
     ...(() => { const ff = mergeFormsUp(p.formRequests, raw.forms); return ff ? { formRequests: ff } : {}; })(),
+    ...(() => { const cc = mergeChecks(p.formChecks, raw.checks); return cc ? { formChecks: cc } : {}; })(),
     ...(raw.caregiverMode === true ? { caregiverMode: true } : { caregiverMode: false }),
     notices: p.notices.map((n) => (seen.has(n.id) ? { ...n, seen: true } : n)),
     ...(isObj(raw.consent) && typeof raw.consent.version === 'string' && typeof raw.consent.at === 'string' ? { consent: { version: raw.consent.version.slice(0, 40), at: raw.consent.at.slice(0, 40) } } : {}),
     ...(typeof raw.erasureRequestedAt === 'string' ? { erasureRequestedAt: raw.erasureRequestedAt.slice(0, 40) } : {}),
   };
 }
+
+// ---- camera form checks (patient-owned, merged by id, newest 60 kept) ----
+const FAULT_KINDS: FormFaultKind[] = ['posture', 'compensation', 'stability', 'range', 'control', 'precaution'];
+const FAULT_UNITS = ['deg', 'pct', 'degps', 'pctps'] as const;
+const cleanLimit = (raw: unknown): FormLimit | undefined => {
+  if (!isObj(raw) || !str(raw.at, 40) || !str(raw.by, 80)) return undefined;
+  const max = num(raw.max) ? raw.max : undefined, min = num(raw.min) ? raw.min : undefined;
+  if (max === undefined && min === undefined) return undefined;
+  return { ...(max !== undefined ? { max: Math.max(0, Math.min(180, max)) } : {}), ...(min !== undefined ? { min: Math.max(0, Math.min(180, min)) } : {}), at: raw.at, by: raw.by };
+};
+const cleanFault = (raw: unknown): FormFault | null => {
+  if (!isObj(raw) || !str(raw.id, 40) || !FAULT_KINDS.includes(raw.kind as FormFaultKind) || !Array.isArray(raw.reps) || !num(raw.peak) || !num(raw.firstSec)) return null;
+  const unit = FAULT_UNITS.find((u) => u === raw.unit);
+  if (!unit) return null;
+  return { id: raw.id, kind: raw.kind as FormFaultKind, reps: raw.reps.filter(num).slice(0, 60), peak: raw.peak, unit, firstSec: raw.firstSec };
+};
+const cleanCheck = (raw: unknown): FormCheckLog | null => {
+  if (!isObj(raw) || !str(raw.id, 40) || !/^[A-Za-z0-9_-]{2,40}$/.test(raw.id) || !str(raw.date, 10) || !num(raw.startedAt) || !num(raw.endedAt) || !str(raw.exerciseId, 60) || !str(raw.kind, 30)
+    || !num(raw.repsCounted) || !Array.isArray(raw.faults) || !num(raw.usable) || typeof raw.reliable !== 'boolean' || typeof raw.paused !== 'boolean') return null;
+  const limit = cleanLimit(raw.limit);
+  return { id: raw.id, date: raw.date, startedAt: raw.startedAt, endedAt: raw.endedAt, exerciseId: raw.exerciseId, kind: raw.kind, repsCounted: raw.repsCounted,
+    faults: raw.faults.slice(0, 12).map(cleanFault).filter((x): x is FormFault => !!x), usable: Math.max(0, Math.min(1, raw.usable)), reliable: raw.reliable, paused: raw.paused,
+    ...(raw.answeredBy === 'patient' || raw.answeredBy === 'caregiver' ? { answeredBy: raw.answeredBy } : {}), ...(str(raw.requestId, 60) ? { requestId: raw.requestId } : {}), ...(limit ? { limit } : {}) };
+};
+const mergeChecks = (local: FormCheckLog[] | undefined, raw: unknown): FormCheckLog[] | undefined => {
+  const incoming = (Array.isArray(raw) ? raw : []).slice(0, 60).map(cleanCheck).filter((x): x is FormCheckLog => !!x);
+  if (!local?.length && !incoming.length) return local;
+  const m = new Map<string, FormCheckLog>((local ?? []).map((x) => [x.id, x]));
+  for (const x of incoming) m.set(x.id, x);
+  return [...m.values()].sort((a, b) => a.startedAt - b.startedAt).slice(-60);
+};
+const cleanLimits = (raw: unknown): Record<string, FormLimit> | undefined => {
+  if (!isObj(raw)) return undefined;
+  const out: Record<string, FormLimit> = {};
+  for (const [k, v] of Object.entries(raw).slice(0, 40)) { const l = cleanLimit(v); if (l && k.length <= 60) out[k] = l; }
+  return Object.keys(out).length ? out : undefined;
+};
 
 // ---------------- physio -> patient ----------------
 /** Reasons the physio wrote are for his audit log only; they are stripped before anything leaves his computer. */
@@ -194,6 +235,7 @@ export function downSlice(p: Patient, clinicDemos?: Record<string, ExerciseDemo>
     ...(p.visits ? { visits: p.visits.map((v) => ({ id: v.id, at: v.at, status: v.status })) } : {}),
     ...(p.details?.goal ? { goal: p.details.goal } : {}),
     ...(p.goalProgress?.length ? { goalProgress: p.goalProgress.map((g) => ({ date: g.date, pct: g.pct })) } : {}),
+    ...(p.formLimits ? { formLimits: p.formLimits } : {}),
     ...(p.periodic.some((e) => e.where === 'clinic') ? { clinicReadings: p.periodic.filter((e) => e.where === 'clinic').map(cleanPeriodic) } : {}),
   };
 }
@@ -229,6 +271,8 @@ export function applyDown(p: Patient, raw: unknown): Patient {
     // Clinic readings come only from the physio: they replace this phone's copy; the patient's own home readings stay as they are.
     ...(Array.isArray(raw.clinicReadings) ? { periodic: [...p.periodic.filter((e) => e.where !== 'clinic'), ...raw.clinicReadings.filter(validPeriodic).map((e: PeriodicEntry) => ({ ...cleanPeriodic(e), where: 'clinic' as const }))].sort((a, b) => a.date.localeCompare(b.date)) } : {}),
     ...(() => { const ff = applyForms(p.formRequests, raw.forms); return ff ? { formRequests: ff } : {}; })(),
+    // The physio's limits replace this phone's copy (an older physio build sends none: keep what is here). Removing the last one sends an empty object.
+    ...(raw.formLimits !== undefined ? { formLimits: cleanLimits(raw.formLimits) } : {}),
   };
 }
 

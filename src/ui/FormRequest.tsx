@@ -12,6 +12,7 @@ import { fmtSize, fs } from '../forms/strings';
 import { newLocalId, saveLocalVideo, loadLocalVideo } from '../exercises/deviceVideos';
 import { clipCloudReady, patientUploadClip } from '../sync/engine';
 import { deleteClipNow, purgeExpired } from '../forms/purge';
+import { fcs } from '../formcheck/strings';
 
 const newId = () => 'f' + Array.from(crypto.getRandomValues(new Uint8Array(8)), (x) => x.toString(16).padStart(2, '0')).join('');
 
@@ -77,6 +78,7 @@ export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: {
           <div className="card" key={r.id} data-testid="form-item">
             <b>{exerciseName(r.exerciseId, lang)}</b> <small>{r.at.slice(0, 10)}</small>
             {r.note && <p>{r.note}</p>}
+            {r.auto && <p className="tiny">{fcs(lang, 'fcAuto')}</p>}
             {r.reply ? (
               <div className="notice-card">
                 <b>{F('fReply')}</b>

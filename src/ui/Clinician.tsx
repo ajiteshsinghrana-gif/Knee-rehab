@@ -29,6 +29,7 @@ import { curveOrigin } from '../engine/curves';
 import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
 import { SessionsCard } from './SessionsCard';
 import { FormReview } from './FormReview';
+import { FormCheckCard } from './FormCheckCard';
 import { pendingForms } from '../forms/model';
 import { optInWeeklyMeasures } from '../checkin';
 import { doseLine } from '../exercises/dose';
@@ -184,7 +185,7 @@ export function Clinician({ state }: { state: AppState }) {
                     <span className="pname"><b>{p.name}</b>{p.age ? `, ${p.age}` : ''}</span>
                     <small>{conditionLabel(p, pack)}</small>
                     {r.triggers.length > 0 && <span className="preason" title={plainReason(r)}>{plainReason(r)}</span>}
-                    {pendingForms(p).length > 0 && <span className="chips"><i data-testid="form-chip">{pendingForms(p).length} video{pendingForms(p).length === 1 ? '' : 's'} to review</i></span>}
+                    {pendingForms(p).length > 0 && <span className="chips"><i data-testid="form-chip">{pendingForms(p).length} {pendingForms(p).every((f) => f.auto && !f.clip) ? `camera check${pendingForms(p).length === 1 ? '' : 's'}` : `video${pendingForms(p).length === 1 ? '' : 's'}`} to review</i></span>}
                   </span>
                   <span className="pdl">
                     <strong className={r.tier}>{TIER_LABEL[r.tier]}</strong>
@@ -582,6 +583,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
           <AuditCard patient={p} />
           {!pendingVideos && <FormReview patient={p} pack={pack} now={now} />}
           <SessionsCard patient={p} pack={pack} />
+          <FormCheckCard patient={p} pack={pack} now={now} />
         </div>
       )}
 
