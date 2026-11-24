@@ -13,6 +13,12 @@ const en: Dict = {
   fcViewSide: 'Prop the phone up about 2 to 3 metres away. It should see you from the side, lying down, with your whole body in the picture and good light.',
   fcViewSideStand: 'Prop the phone up about 2 to 3 metres away. It should see you from the side, standing, with your whole body in the picture and good light. Start standing still, arms by your sides.',
   fcViewBalance: 'Prop the phone up about 2 to 3 metres away, facing you. Stand next to a wall or a sturdy chair you can grab if you wobble. Start standing still on both feet, arms by your sides. Then lift one foot and hold it.',
+  fcViewBalanceLine: 'Prop the phone up about 2 to 3 metres away, facing you. Stand next to a wall or a sturdy chair you can grab if you wobble. Start standing still with your feet apart, arms by your sides. Then put one foot directly in front of the other, heel to toe, and hold.',
+  fcVarLeg: 'Lift one foot',
+  fcVarLine: 'Feet in a line (heel to toe)',
+  fcPickVar: 'Which balance exercise?',
+  fcHolds: 'Hold times: {list} seconds',
+  'fault-bal-short': 'a hold was shorter than the target',
   fcViewSeated: 'Prop the phone up about 2 to 3 metres away, facing you. Sit on a firm chair with your whole body in the picture, including your feet, and good light. Start sitting still.',
   fcViewFront: 'Prop the phone up about 2 to 3 metres away, facing you. Stand with your whole body in the picture and good light. Start standing still, arms by your sides.',
   fcConsentTitle: 'Before the camera starts',
@@ -110,6 +116,12 @@ const hi: Dict = {
   fcViewSide: 'फ़ोन को लगभग 2 से 3 मीटर दूर टिकाएँ। वह आपको बगल से, लेटे हुए, पूरे शरीर के साथ और अच्छी रोशनी में देखे।',
   fcViewSideStand: 'फ़ोन को लगभग 2 से 3 मीटर दूर टिकाइए। वह आपको बगल से, खड़े हुए देखे, पूरा शरीर तस्वीर में हो और रोशनी अच्छी हो। शुरू में स्थिर खड़े रहें, बाँहें बगल में।',
   fcViewBalance: 'फ़ोन को लगभग 2 से 3 मीटर दूर, आपके सामने टिकाइए। दीवार या मज़बूत कुर्सी के पास खड़े हों, ताकि डगमगाने पर पकड़ सकें। शुरू में दोनों पैरों पर स्थिर खड़े रहें, बाँहें बगल में। फिर एक पैर उठाकर रोकें।',
+  fcViewBalanceLine: 'फ़ोन को लगभग 2 से 3 मीटर दूर, आपके सामने टिकाइए। दीवार या मज़बूत कुर्सी के पास खड़े हों, ताकि डगमगाने पर पकड़ सकें। शुरू में पैर अलग रखकर स्थिर खड़े रहें, बाँहें बगल में। फिर एक पैर को दूसरे के ठीक आगे, एड़ी से पंजा मिलाकर रखें और रुकें।',
+  fcVarLeg: 'एक पैर उठाना',
+  fcVarLine: 'पैर एक सीध में (एड़ी से पंजा)',
+  fcPickVar: 'कौन सी संतुलन कसरत?',
+  fcHolds: 'रुकने का समय: {list} सेकंड',
+  'fault-bal-short': 'एक बार रुकना लक्ष्य से कम था',
   fcViewSeated: 'फ़ोन को लगभग 2 से 3 मीटर दूर, आपके सामने टिकाइए। मज़बूत कुर्सी पर बैठें, पैरों समेत पूरा शरीर तस्वीर में हो और रोशनी अच्छी हो। शुरू में स्थिर बैठे रहें।',
   fcViewFront: 'फ़ोन को लगभग 2 से 3 मीटर दूर, अपने सामने टिकाएँ। पूरे शरीर के साथ अच्छी रोशनी में खड़े हों। शुरू में स्थिर खड़े रहें, बाँहें बगल में।',
   fcConsentTitle: 'कैमरा शुरू करने से पहले',
@@ -206,6 +218,12 @@ const bn: Dict = {
   fcViewSide: 'ফোনটি প্রায় 2 থেকে 3 মিটার দূরে দাঁড় করিয়ে রাখুন। এটি যেন আপনাকে পাশ থেকে, শুয়ে থাকা অবস্থায়, পুরো শরীর-সহ ও ভালো আলোয় দেখে।',
   fcViewSideStand: 'ফোনটি প্রায় ২ থেকে ৩ মিটার দূরে ঠেস দিয়ে রাখুন। এটি যেন আপনাকে পাশ থেকে, দাঁড়ানো অবস্থায় দেখে, পুরো শরীর ছবিতে থাকে এবং আলো ভালো হয়। শুরুতে স্থির দাঁড়ান, হাত দুটি পাশে রাখুন।',
   fcViewBalance: 'ফোনটি প্রায় ২ থেকে ৩ মিটার দূরে, আপনার দিকে মুখ করে ঠেস দিয়ে রাখুন। দেয়াল বা শক্ত চেয়ারের পাশে দাঁড়ান, যাতে টললে ধরতে পারেন। শুরুতে দুই পায়ে স্থির দাঁড়ান, হাত দুটি পাশে রাখুন। তারপর এক পা তুলে ধরে রাখুন।',
+  fcViewBalanceLine: 'ফোনটি প্রায় ২ থেকে ৩ মিটার দূরে, আপনার দিকে মুখ করে ঠেস দিয়ে রাখুন। দেয়াল বা শক্ত চেয়ারের পাশে দাঁড়ান, যাতে টললে ধরতে পারেন। শুরুতে পা আলাদা করে স্থির দাঁড়ান, হাত দুটি পাশে রাখুন। তারপর এক পা অন্য পায়ের ঠিক সামনে, গোড়ালি থেকে পায়ের পাতা মিলিয়ে রাখুন এবং ধরে থাকুন।',
+  fcVarLeg: 'এক পা তোলা',
+  fcVarLine: 'পা এক লাইনে (গোড়ালি থেকে পায়ের পাতা)',
+  fcPickVar: 'কোন ভারসাম্যের ব্যায়াম?',
+  fcHolds: 'ধরে রাখার সময়: {list} সেকেন্ড',
+  'fault-bal-short': 'একবার ধরে রাখা লক্ষ্যের চেয়ে কম ছিল',
   fcViewSeated: 'ফোনটি প্রায় ২ থেকে ৩ মিটার দূরে, আপনার দিকে মুখ করে ঠেস দিয়ে রাখুন। শক্ত চেয়ারে বসুন, পা সহ পুরো শরীর ছবিতে থাকে এবং আলো ভালো হয়। শুরুতে স্থির বসে থাকুন।',
   fcViewFront: 'ফোনটি প্রায় 2 থেকে 3 মিটার দূরে, আপনার সামনে দাঁড় করিয়ে রাখুন। পুরো শরীর ছবিতে রেখে ভালো আলোয় দাঁড়ান। শুরুতে স্থির দাঁড়ান, হাত দুই পাশে।',
   fcConsentTitle: 'ক্যামেরা চালু করার আগে',
@@ -337,6 +355,7 @@ export const FAULT_PHYSIO: Record<string, string> = {
   'calf-lean': 'Trunk leaned sideways during the heel raise',
   'calf-sway': 'Hips swayed sideways (share of leg length)',
   'calf-fast': 'Heel raise faster than the default speed limit',
+  'bal-short': 'Hold shorter than the default target of 10 seconds (seconds short of the target)',
   'bal-wobble': 'Sudden sideways movement of the hips while on one leg (share of leg length per second)',
   'bal-lean': 'Trunk leaned from its starting position while on one leg',
   'bal-arms': 'An arm held out from the body to balance (degrees from the body)',
@@ -346,7 +365,7 @@ export const FAULT_PHYSIO: Record<string, string> = {
 export const KIND_LABEL: Record<string, string> = {
   posture: 'Posture or alignment', compensation: 'Compensation', stability: 'Stability', range: 'Range of motion', control: 'Uncontrolled movement', precaution: 'Patient-specific limit',
 };
-export const UNIT_LABEL: Record<string, string> = { deg: '°', pct: '%', degps: '°/s', pctps: '%/s' };
+export const UNIT_LABEL: Record<string, string> = { deg: '°', pct: '%', degps: '°/s', pctps: '%/s', s: ' s' };
 
 /** Which wording tells the patient where to put the phone, per camera view. */
-export const VIEW_KEY: Record<'side' | 'sideStand' | 'front' | 'seated' | 'balance', string> = { side: 'fcViewSide', sideStand: 'fcViewSideStand', front: 'fcViewFront', seated: 'fcViewSeated', balance: 'fcViewBalance' };
+export const VIEW_KEY: Record<'side' | 'sideStand' | 'front' | 'seated' | 'balance' | 'balanceLine', string> = { side: 'fcViewSide', sideStand: 'fcViewSideStand', front: 'fcViewFront', seated: 'fcViewSeated', balance: 'fcViewBalance', balanceLine: 'fcViewBalanceLine' };

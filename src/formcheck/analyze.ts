@@ -9,7 +9,7 @@
  */
 import { angleAt, type Pt } from '../angle';
 import type { FormFault, FormFaultKind, FormLimit } from '../types';
-import { FORM_CHECK, KINDS, LIMIT_FAULTS, LM, type FormKind } from './config';
+import { FORM_CHECK, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, type FormKind } from './config';
 
 export interface Landmark { x: number; y: number; /** 0 to 1: how sure the model is that the point is in view */ v?: number }
 export type Frame = Landmark[];
@@ -28,6 +28,8 @@ export interface FormSummary {
   reliable: boolean;
   paused: boolean;
   seconds: number;
+  /** Balance only: how long each hold lasted, in seconds. */
+  holds?: number[];
 }
 
 const RAD = 180 / Math.PI;
@@ -62,6 +64,9 @@ export class FormAnalyzer {
   private pausedIds = new Set<string>();
   private lastPauseMs = -1e9;
   private maxRun = 0;
+  private holdT0 = 0;
+  private holds: number[] = [];
+  private closed = false;
 
   constructor(readonly kind: FormKind, private limit?: Pick<FormLimit, 'max' | 'min'>) {}
 
@@ -92,13 +97,14 @@ export class FormAnalyzer {
     const cfg = KINDS[this.kind];
     const s = m.signal;
     // Rep counting: up past repUp, back below repDown.
-    if (!this.inRep && s >= cfg.repUp) { this.inRep = true; this.peak = s; }
+    if (!this.inRep && s >= cfg.repUp) { this.inRep = true; this.peak = s; this.holdT0 = tMs; }
     else if (this.inRep) {
       this.peak = Math.max(this.peak, s);
       if (s <= cfg.repDown) {
         this.inRep = false;
         this.reps++;
         ev.push({ type: 'rep', n: this.reps });
+        if (this.isBalance) this.endHold(tMs, ev);
         if (this.limit?.min !== undefined && this.peak < this.limit.min) this.record(LIMIT_FAULTS.min.id, LIMIT_FAULTS.min.kind, this.reps, this.limit.min - this.peak, cfg.signal, tMs, ev);
       }
     }
@@ -114,8 +120,19 @@ export class FormAnalyzer {
     return ev;
   }
 
+  private get isBalance(): boolean { return this.kind === 'balance' || this.kind === 'balance-line'; }
+  /** One hold ended: note how long it lasted, and flag it if it was shorter than the target. */
+  private endHold(tMs: number, ev: FormEvent[]) {
+    const sec = Math.max(0, (tMs - this.holdT0) / 1000);
+    this.holds.push(Math.round(sec * 10) / 10);
+    if (sec < FORM_CHECK.holdMinSec) this.record(HOLD_FAULT.id, HOLD_FAULT.kind, this.reps, FORM_CHECK.holdMinSec - sec, 's', tMs, ev);
+  }
+
   /** Ends the set. Faults are listed only when the camera saw enough; otherwise nothing is flagged. */
   finish(): FormSummary {
+    // A set often ends while the foot is still up: that hold counts too.
+    if (!this.closed && this.isBalance && this.inRep) { this.inRep = false; this.reps++; this.endHold(this.tLast, []); }
+    this.closed = true;
     const usable = this.total ? this.usableN / this.total : 0;
     const reliable = this.total >= FORM_CHECK.minTotalFrames && usable >= FORM_CHECK.minUsable;
     const faults: FormFault[] = reliable
@@ -127,6 +144,7 @@ export class FormAnalyzer {
       reps: this.reps, faults, usable: Math.round(usable * 100) / 100, reliable,
       paused: reliable && this.pausedIds.size > 0,
       seconds: this.t0 === null ? 0 : Math.round(((this.tLast - this.t0) / 1000) * 10) / 10,
+      ...(this.isBalance && this.holds.length ? { holds: this.holds.slice(0, 30) } : {}),
     };
   }
 
@@ -159,7 +177,7 @@ export class FormAnalyzer {
       case 'hip-abduction': return this.mHipAbd(f);
       case 'bridging': return this.mBridge(f);
       case 'calf-raise': return this.mCalf(f);
-      case 'balance': return this.mBalance(f);
+      case 'balance': case 'balance-line': return this.mBalance(f);
     }
   }
 
@@ -340,14 +358,18 @@ export class FormAnalyzer {
     const trunk = ms ? Math.atan2(ms.x - mh.x, -(ms.y - mh.y)) * RAD : 0;
     const b = this.base;
     if (!this.learn({ mh, lA, rA, leg, trunk })) return { ok: true, signal: 0, faults: {} };
-    const signal = (Math.max(b.ankles![0].y - lA.y, b.ankles![1].y - rA.y) / b.leg) * 100;
+    // One foot lifted: how high it is off the floor. Heel to toe: how much closer the feet look than at the start.
+    const startGap = Math.abs(b.ankles![0].x - b.ankles![1].x);
+    const signal = this.kind === 'balance-line'
+      ? (startGap < 0.08 * b.leg ? 0 : Math.max(0, ((startGap - Math.abs(lA.x - rA.x)) / startGap) * 100))
+      : (Math.max(b.ankles![0].y - lA.y, b.ankles![1].y - rA.y) / b.leg) * 100;
     const spd = this.speed(((mh.x - b.hipX) / b.leg) * 100);
     let arms: number | null = null;
     if (shoulders && this.seen(f, LM.lWrist, LM.rWrist)) {
       const a = [angleAt(lH, this.pt(f, LM.lShoulder), this.pt(f, LM.lWrist)), angleAt(rH, this.pt(f, LM.rShoulder), this.pt(f, LM.rWrist))].filter((x): x is number => x !== null);
       arms = a.length ? Math.max(...a) : null;
     }
-    const rest = KINDS.balance.repDown;
+    const rest = KINDS[this.kind].repDown;
     return { ok: true, signal, faults: {
       'bal-wobble': signal > rest ? spd : null,
       'bal-lean': ms && signal > rest ? turn(trunk, b.trunk) : null,

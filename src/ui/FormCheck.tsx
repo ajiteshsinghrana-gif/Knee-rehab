@@ -12,7 +12,7 @@ import { CONSENT_TEXT, consentText, reviewHours, validClip } from '../forms/mode
 import { newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { clipCloudReady, patientUploadClip } from '../sync/engine';
 import { FormAnalyzer, type FormEvent } from '../formcheck/analyze';
-import { BONES, FORM_CHECK, KINDS, formKindFor } from '../formcheck/config';
+import { BONES, FORM_CHECK, KINDS, VARIANTS, formKindFor } from '../formcheck/config';
 import { assess, attachClip, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, requestForClip, withdrawConsent, type Assessment } from '../formcheck/model';
 import { loadPose, type Pose } from '../formcheck/pose';
 import { VIEW_KEY, fcs } from '../formcheck/strings';
@@ -29,7 +29,9 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
   const F = (k: string, p?: Record<string, string | number>) => fcs(lang, k, p);
   const options = currentExercises(patient, pack).filter((id) => formKindFor(id));
   const [ex, setEx] = useState<string>(exerciseId && formKindFor(exerciseId) ? exerciseId : options[0] ?? '');
-  const kind = formKindFor(ex);
+  const variants = VARIANTS[ex];
+  const [variant, setVariant] = useState(0);
+  const kind = variants ? variants[Math.min(variant, variants.length - 1)].kind : formKindFor(ex);
   const [stage, setStage] = useState<Stage>('intro');
   const [agreed, setAgreed] = useState(hasConsent(patient));
   const [facing, setFacing] = useState<'user' | 'environment'>('user');
@@ -154,7 +156,8 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
 
   const startSet = () => {
     if (!kind) return;
-    const lim = limitFor(patient, ex);
+    // A physio limit is for the main movement of the exercise; the heel-to-toe variant has no such number.
+    const lim = kind === 'balance-line' ? undefined : limitFor(patient, ex);
     analyzer.current = new FormAnalyzer(kind, lim ? { max: lim.max, min: lim.min } : undefined);
     setReps(0); setUnseen(false); setPaused(false); setNoticed('');
     chunks.current = []; recMime.current = '';
@@ -188,7 +191,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     const now = clockMs(getState());
     const iso = new Date(now).toISOString();
     const lim = limitFor(patient, ex);
-    const log = newCheckLog({ id: `c${Date.now().toString(36)}`, date: getState().today, startedAt: now - Math.round(summary.seconds * 1000), endedAt: now, exerciseId: ex, summary, by: patient.caregiverMode ? 'caregiver' : 'patient', limit: lim });
+    const log = newCheckLog({ id: `c${Date.now().toString(36)}`, date: getState().today, startedAt: now - Math.round(summary.seconds * 1000), endedAt: now, exerciseId: ex, kind: kind ?? undefined, summary, by: patient.caregiverMode ? 'caregiver' : 'patient', limit: lim });
     const cur = getState().patients.find((x) => x.id === patient.id) ?? patient;
     const out = recordCheck(cur, log, iso);
     updatePatient(patient.id, (q) => recordCheck(q, log, iso).patient);
@@ -237,6 +240,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
         <h2>{F('fcResult')}</h2>
         <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
         <p>{log.repsCounted > 0 ? F('fcRepsDone', { n: log.repsCounted }) : F('fcNoReps')}</p>
+        {log.holds?.length ? <p>{F('fcHolds', { list: log.holds.join(', ') })}</p> : null}
         {a.unreliable ? <p className="hint">{F('fcUnreliable')}</p> : log.faults.length ? (
           <div className="card">
             <b>{F('fcHead')}</b>
@@ -300,9 +304,14 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
       <p className="tiny">{F('fcNoEmergency')}</p>
       {options.length > 1 && !exerciseId ? (
         <label className="field"><b>{F('fcPickEx')}</b>
-          <select value={ex} onChange={(e) => setEx(e.target.value)}>{options.map((id) => <option key={id} value={id}>{exerciseName(id, lang)}</option>)}</select>
+          <select value={ex} onChange={(e) => { setEx(e.target.value); setVariant(0); }}>{options.map((id) => <option key={id} value={id}>{exerciseName(id, lang)}</option>)}</select>
         </label>
       ) : <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>}
+      {variants && (
+        <label className="field"><b>{F('fcPickVar')}</b>
+          <select value={variant} onChange={(e) => setVariant(Number(e.target.value))} data-testid="fc-variant">{variants.map((v, i) => <option key={v.kind} value={i}>{F(v.labelKey)}</option>)}</select>
+        </label>
+      )}
       {kind && <p>{F(VIEW_KEY[KINDS[kind].view])}</p>}
       {!hasConsent(patient) ? (
         <div className="card" data-testid="fc-consent">

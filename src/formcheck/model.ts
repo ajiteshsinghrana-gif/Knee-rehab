@@ -23,12 +23,13 @@ export const withdrawConsent = (p: Patient): Patient => { const { formCheckConse
 
 export const limitFor = (p: Patient, exerciseId: string): FormLimit | undefined => p.formLimits?.[exerciseId];
 
-export function newCheckLog(a: { id: string; date: string; startedAt: number; endedAt: number; exerciseId: string; summary: FormSummary; by: AnsweredBy; limit?: FormLimit }): FormCheckLog {
+export function newCheckLog(a: { kind?: string; id: string; date: string; startedAt: number; endedAt: number; exerciseId: string; summary: FormSummary; by: AnsweredBy; limit?: FormLimit }): FormCheckLog {
   const kind = formKindFor(a.exerciseId);
   if (!kind) throw new Error(`No camera check for ${a.exerciseId}`);
+  const used = a.kind ?? kind;
   return {
-    id: a.id, date: a.date, startedAt: a.startedAt, endedAt: a.endedAt, exerciseId: a.exerciseId, kind,
-    repsCounted: a.summary.reps, faults: a.summary.faults, usable: a.summary.usable, reliable: a.summary.reliable, paused: a.summary.paused,
+    id: a.id, date: a.date, startedAt: a.startedAt, endedAt: a.endedAt, exerciseId: a.exerciseId, kind: used,
+    repsCounted: a.summary.reps, ...(a.summary.holds?.length ? { holds: a.summary.holds } : {}), faults: a.summary.faults, usable: a.summary.usable, reliable: a.summary.reliable, paused: a.summary.paused,
     answeredBy: a.by, ...(a.limit ? { limit: a.limit } : {}),
   };
 }

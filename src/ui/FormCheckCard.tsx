@@ -21,7 +21,8 @@ export function AutoSummary({ patient, r }: { patient: Patient; r: FormRequest }
       <b>Raised by the camera form check</b> ({r.auto.reason === 'PAUSE' ? 'the phone asked the patient to pause' : `rule F1: the same fault in ${FORM_CHECK.f1.checks} of the last ${FORM_CHECK.f1.window} checks`}).
       {c ? (
         <ul>
-          <li>{c.repsCounted} reps counted · camera saw the body in {Math.round(c.usable * 100)}% of frames</li>
+          <li>{c.repsCounted} {c.holds?.length ? 'holds' : 'reps'} counted · camera saw the body in {Math.round(c.usable * 100)}% of frames</li>
+          {c.holds?.length ? <li>Hold times: {c.holds.join(', ')} s</li> : null}
           {c.faults.map((f) => <li key={f.id}>{faultLine(f, c.repsCounted)}</li>)}
         </ul>
       ) : <p className="tiny">The measured numbers have not arrived yet.</p>}
@@ -55,7 +56,7 @@ function One({ c, p }: { c: FormCheckLog; p: Patient }) {
   return (
     <details open={c === (p.formChecks ?? [])[(p.formChecks ?? []).length - 1]} data-testid="formcheck-one">
       <summary>
-        {c.date} · <b>{exerciseName(c.exerciseId, 'en')}</b> · {c.repsCounted} reps
+        {c.date} · <b>{exerciseName(c.exerciseId, 'en')}</b> · {c.repsCounted} {c.holds?.length ? 'holds' : 'reps'}{c.holds?.length ? ` (${c.holds.join(', ')} s)` : ''}
         {!c.reliable && ' · could not see enough (nothing flagged)'}
         {c.reliable && c.faults.length === 0 && ' · nothing measured above the limits'}
         {c.reliable && c.faults.length > 0 && ` · ${c.faults.length} fault${c.faults.length === 1 ? '' : 's'} measured`}

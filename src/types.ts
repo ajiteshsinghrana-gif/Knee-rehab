@@ -343,7 +343,7 @@ export interface FormRequest {
 // ---------- camera form check ----------
 export type FormFaultKind = 'posture' | 'compensation' | 'stability' | 'range' | 'control' | 'precaution';
 /** One repeated fault seen in one camera check. Measured numbers only: no diagnosis. */
-export interface FormFault { id: string; kind: FormFaultKind; /** 1-based reps it was seen in */ reps: number[]; peak: number; unit: 'deg' | 'pct' | 'degps' | 'pctps'; firstSec: number }
+export interface FormFault { id: string; kind: FormFaultKind; /** 1-based reps it was seen in */ reps: number[]; peak: number; unit: 'deg' | 'pct' | 'degps' | 'pctps' | 's'; firstSec: number }
 export interface FormCheckLog {
   id: string;
   date: string;
@@ -353,6 +353,8 @@ export interface FormCheckLog {
   /** Movement type used for the measurement (formcheck/config.ts). */
   kind: string;
   repsCounted: number;
+  /** Balance holds only: how long each hold lasted, in seconds. */
+  holds?: number[];
   faults: FormFault[];
   /** Share of camera frames in which the needed body points were visible (0 to 1). */
   usable: number;

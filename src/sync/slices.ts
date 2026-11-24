@@ -179,7 +179,7 @@ export function applyUp(p: Patient, raw: unknown): Patient {
 
 // ---- camera form checks (patient-owned, merged by id, newest 60 kept) ----
 const FAULT_KINDS: FormFaultKind[] = ['posture', 'compensation', 'stability', 'range', 'control', 'precaution'];
-const FAULT_UNITS = ['deg', 'pct', 'degps', 'pctps'] as const;
+const FAULT_UNITS = ['deg', 'pct', 'degps', 'pctps', 's'] as const;
 const cleanLimit = (raw: unknown): FormLimit | undefined => {
   if (!isObj(raw) || !str(raw.at, 40) || !str(raw.by, 80)) return undefined;
   const max = num(raw.max) ? raw.max : undefined, min = num(raw.min) ? raw.min : undefined;
@@ -197,6 +197,7 @@ const cleanCheck = (raw: unknown): FormCheckLog | null => {
     || !num(raw.repsCounted) || !Array.isArray(raw.faults) || !num(raw.usable) || typeof raw.reliable !== 'boolean' || typeof raw.paused !== 'boolean') return null;
   const limit = cleanLimit(raw.limit);
   return { id: raw.id, date: raw.date, startedAt: raw.startedAt, endedAt: raw.endedAt, exerciseId: raw.exerciseId, kind: raw.kind, repsCounted: raw.repsCounted,
+    ...(Array.isArray(raw.holds) && raw.holds.length ? { holds: raw.holds.filter((h): h is number => num(h) && h >= 0 && h <= 3600).slice(0, 30) } : {}),
     faults: raw.faults.slice(0, 12).map(cleanFault).filter((x): x is FormFault => !!x), usable: Math.max(0, Math.min(1, raw.usable)), reliable: raw.reliable, paused: raw.paused,
     ...(raw.answeredBy === 'patient' || raw.answeredBy === 'caregiver' ? { answeredBy: raw.answeredBy } : {}), ...(str(raw.requestId, 60) ? { requestId: raw.requestId } : {}), ...(limit ? { limit } : {}) };
 };

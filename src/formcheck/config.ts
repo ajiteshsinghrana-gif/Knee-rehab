@@ -10,9 +10,9 @@ import type { FormFaultKind } from '../types';
 
 export type FormKind =
   | 'slr' | 'squat' | 'shoulder-abduction'
-  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance';
+  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance' | 'balance-line';
 /** Where the phone goes: side on lying down, side on standing, facing the person standing, or facing the person seated. */
-export type FormView = 'side' | 'sideStand' | 'front' | 'seated' | 'balance';
+export type FormView = 'side' | 'sideStand' | 'front' | 'seated' | 'balance' | 'balanceLine';
 export const SIGNOFF = 'NEEDS_PHYSIO_SIGNOFF' as const;
 
 /** MediaPipe Pose Landmarker point numbers (33 points). */
@@ -39,6 +39,12 @@ export const KIND_EXERCISES: Record<FormKind, string[]> = {
   bridging: ['bridging'],
   'calf-raise': ['calf-raises'],
   balance: ['balance'],
+  /** The same balance exercise done heel to toe. Chosen on the screen (see VARIANTS), so no exercise maps here on its own. */
+  'balance-line': [],
+};
+/** Exercises the patient does in more than one way: the camera asks which. */
+export const VARIANTS: Record<string, { kind: FormKind; labelKey: string }[]> = {
+  balance: [{ kind: 'balance', labelKey: 'fcVarLeg' }, { kind: 'balance-line', labelKey: 'fcVarLine' }],
 };
 export const formKindFor = (exerciseId: string): FormKind | null => {
   for (const k of Object.keys(KIND_EXERCISES) as FormKind[]) if (KIND_EXERCISES[k].includes(exerciseId)) return k;
@@ -59,7 +65,7 @@ export interface KindConfig {
   minFrames: number;
   /** Faults and where they come from. `limit` is the trigger value in the fault's unit. */
   /** `minFrames` here overrides the default for one fault (speed faults are short, so they need fewer frames in a row). */
-  faults: { id: string; kind: FormFaultKind; limit: number; unit: 'deg' | 'pct' | 'degps' | 'pctps'; minFrames?: number }[];
+  faults: { id: string; kind: FormFaultKind; limit: number; unit: 'deg' | 'pct' | 'degps' | 'pctps' | 's'; minFrames?: number }[];
 }
 
 export const FORM_CHECK = {
@@ -74,6 +80,8 @@ export const FORM_CHECK = {
   /** Fewer usable frames than this share, or fewer than minFrames in total, means "could not see enough": nothing is flagged. */
   minUsable: 0.7,
   minTotalFrames: 20,
+  /** Balance holds: a hold shorter than this many seconds is flagged (placeholder; not yet set per patient). */
+  holdMinSec: 10,
   /** Set ends on its own after this many seconds (also caps the clip size). */
   maxSeconds: 90,
   /** The phone asks the patient to pause for these fault kinds (loss of balance, a physio-set limit). Can be switched off. */
@@ -201,7 +209,20 @@ export const KINDS: Record<FormKind, KindConfig> = {
       { id: 'bal-arms', kind: 'compensation', limit: 50, unit: 'deg' },  // an arm held out more than 50 degrees from the body to balance
     ],
   },
+  // Facing the camera, feet hip-width apart to start, then one foot placed directly in front of the other (heel to toe).
+  // Signal: how much closer together the feet look, as a share of their starting width. Physio limits do not apply to this variant.
+  'balance-line': {
+    signal: 'pct', view: 'balanceLine', hint: 'how much closer the feet came, as % of their starting gap', repUp: 70, repDown: 35, minFrames: 6,
+    faults: [
+      { id: 'bal-wobble', kind: 'stability', limit: 30, unit: 'pctps', minFrames: 3 },
+      { id: 'bal-lean', kind: 'compensation', limit: 10, unit: 'deg' },
+      { id: 'bal-arms', kind: 'compensation', limit: 50, unit: 'deg' },
+    ],
+  },
 };
+
+/** A balance hold shorter than the target. Judged per hold, not per camera frame, so it is not in a kind's fault list. */
+export const HOLD_FAULT = { id: 'bal-short', kind: 'control' as FormFaultKind };
 
 /** Faults the physio's own limits can raise. Not placeholders: they use the number the physio typed. */
 export const LIMIT_FAULTS: Record<'max' | 'min', { id: string; kind: FormFaultKind }> = {

@@ -394,7 +394,7 @@ describe('safety and wording', () => {
     }
   });
   it('every fault the checks can raise has patient wording in three languages and physio wording', () => {
-    const all = new Set<string>(['limit-max', 'limit-min']);
+    const all = new Set<string>(['limit-max', 'limit-min', 'bal-short']);
     for (const k of Object.values(KINDS)) for (const f of k.faults) all.add(f.id);
     for (const id of all) {
       expect(FAULT_PHYSIO[id]).toBeTruthy();
@@ -490,14 +490,49 @@ function oneLeg(lift: number, o: { jerk?: number; arms?: boolean; lean?: number 
 
 describe('camera form check: balance', () => {
   it('counts each held foot lift, and flags nothing for a steady hold', () => {
-    const { sum } = run('balance', (v) => oneLeg(v / 100), 20);
+    const { sum } = run('balance', (v) => oneLeg(v / 100), 20, { frames: 240 });
     expect(sum.reps).toBe(5);
     expect(sum.faults).toEqual([]);
+    expect(sum.holds).toHaveLength(5);
+    expect(Math.min(...sum.holds!) >= FORM_CHECK.holdMinSec).toBe(true);
   });
   it('flags a wobble (hips jerking sideways) as a stability fault that asks the patient to pause', () => {
     const { sum, events } = run('balance', (v, i) => oneLeg(v / 100, { jerk: v > 8 ? (Math.floor(i / 4) % 2 ? 0.1 : -0.1) : 0 }), 20);
     expect(sum.faults.find((x) => x.id === 'bal-wobble')?.kind).toBe('stability');
     expect(events.some((e) => e.type === 'pause')).toBe(true);
+  });
+  it('times each hold and flags a hold shorter than the target, with how many seconds it fell short', () => {
+    const { sum } = run('balance', (v) => oneLeg(v / 100), 20, { frames: 90 }); // each lift above the threshold lasts about 4 seconds
+    const f = sum.faults.find((x) => x.id === 'bal-short')!;
+    expect(f.kind).toBe('control');
+    expect(f.unit).toBe('s');
+    expect(f.reps).toEqual([1, 2, 3, 4, 5]);
+    expect(f.peak).toBeGreaterThan(4);
+    expect(sum.holds).toHaveLength(5);
+    expect(sum.paused).toBe(false); // a short hold is a note for the physio, never a stop
+  });
+  it('a set that ends while the foot is still up still counts that hold', () => {
+    const a = new FormAnalyzer('balance');
+    let t = 0;
+    for (let i = 0; i < 12; i++) a.push(oneLeg(0), (t += DT), 1);
+    for (let i = 0; i < 60; i++) a.push(oneLeg(0.2), (t += DT), 1);
+    const sum = a.finish();
+    expect(sum.reps).toBe(1);
+    expect(sum.holds).toHaveLength(1);
+    expect(ids(sum)).toContain('bal-short');
+    expect(a.finish().reps).toBe(1); // finishing twice does not count it twice
+  });
+  it('heel to toe: counts a hold when the feet come together, and flags wobble, arms and a short hold', () => {
+    const line = (narrow: number, o: { jerk?: number; arms?: boolean } = {}) => {
+      const f = oneLeg(0, o);
+      f[LM.lAnkle] = { x: 0.43 + 0.14 * narrow, y: 0.9, v: 1 }; // feet start 14% of the frame apart, then come together
+      return f;
+    };
+    const ok = run('balance-line', (v) => line(v / 100), 100, { frames: 240 });
+    expect(ok.sum.reps).toBe(5);
+    expect(ok.sum.faults).toEqual([]);
+    expect(run('balance-line', (v) => line(v / 100), 100, { frames: 90 }).sum.faults.map((x) => x.id)).toContain('bal-short');
+    expect(ids(run('balance-line', (v) => line(v / 100, { arms: v > 50 }), 100, { frames: 240 }).sum)).toContain('bal-arms');
   });
   it('flags arms held out to balance and a leaning trunk, but not while both feet are down', () => {
     expect(ids(run('balance', (v) => oneLeg(v / 100, { arms: v > 8 }), 20).sum)).toContain('bal-arms');
@@ -569,6 +604,7 @@ describe('camera form check: the other exercises', () => {
       }
       expect(KINDS[kind].faults.length).toBeGreaterThan(0);
     }
+    expect(formKindFor('balance')).toBe('balance');
     for (const id of ['walking', 'cycling', 'swimming', 'ice-compression', 'quad-set', 'ankle-pumps']) expect(formKindFor(id)).toBeNull();
   });
 });
