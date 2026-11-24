@@ -104,6 +104,11 @@ export interface KindConfig {
 }
 
 export const FORM_CHECK = {
+  /**
+   * Only point out what is clearly off. Every fault limit below is multiplied by `limitFactor`, and the fault must last `framesFactor` times as many frames.
+   * The physio's own per-patient limits are not softened. NEEDS_PHYSIO_SIGNOFF.
+   */
+  gross: { limitFactor: 1.5, framesFactor: 2 },
   /** Landmark must be at least this visible to be used. */
   minVisibility: 0.5,
   /** Smoothing of landmark positions (0 to 1; higher follows the camera faster). */
@@ -393,7 +398,7 @@ export const checkMode = (exerciseId: string): CheckMode => (!formKindFor(exerci
  * rep. The physio can set the tempo per exercise for one patient; otherwise the default below is used. Placeholders: NEEDS_PHYSIO_SIGNOFF.
  * Too fast: shorter than `fast` x tempo. Too slow: longer than `slow` x tempo.
  */
-export const PACE = { fast: 0.5, slow: 2.5, minSec: 1, maxSec: 20 } as const;
+export const PACE = { fast: 0.35, slow: 3, minSec: 1, maxSec: 20 } as const;
 /** No pace for timed holds, walking, cycling (they have their own rates) or the pendulum (a loose swing has no set speed). */
 export const DEFAULT_TEMPO: Partial<Record<FormKind, number>> = {
   slr: 4, squat: 4, 'squat-side': 4, 'lunge-side': 4, 'shoulder-abduction': 4, 'knee-flex': 4, 'sit-to-stand': 4, lunge: 4, 'step-up': 4, 'shoulder-flexion': 4, 'hip-abduction': 4,

@@ -23,6 +23,7 @@ import { loadPose, type Pose } from '../formcheck/pose';
 import { ZOOM, clampZoom, cropFor, toFullFrame } from '../formcheck/zoom';
 import { lumaOf, setupHint, type SetupHint } from '../formcheck/setup';
 import { COUNT_KEYS, VIEW_KEY, fcs } from '../formcheck/strings';
+import { howTo } from '../formcheck/howto';
 import { hasPhone, telHref } from '../contact';
 
 const pickMime = (): string => {
@@ -49,6 +50,19 @@ export interface SetOutcome {
   clipSec: number;
   /** How the set ended: the patient tapped Finish (or time ran out), a stumble, or a limit the physio set. */
   stop: 'finish' | 'stumble' | 'limit';
+}
+
+/** What to do: the starting position, then the movement. `steps` adds the four numbered steps (camera, green frame, count-down, move slowly). */
+export function HowTo({ kind, lang, steps }: { kind: FormKind; lang: Lang; steps?: boolean }) {
+  const F = (k: string) => fcs(lang, k);
+  const h = howTo(lang, kind);
+  return (
+    <div className="card fc-howto" data-testid="fc-howto">
+      {steps && <><h3>{F('fcHowTitle')}</h3><ol className="exlist" style={{ listStyle: 'none', paddingLeft: 0 }}>{['fcHow1', 'fcHow2', 'fcHow3', 'fcHow4'].map((k) => <li key={k}>{F(k)}</li>)}</ol></>}
+      <p><b>{F('fcStartLbl')}:</b> {h.start}</p>
+      <p><b>{F('fcMoveLbl')}:</b> {h.move}</p>
+    </div>
+  );
 }
 
 /**
@@ -388,6 +402,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
         <p className={hint === 'fcSetOk' ? 'okline' : 'hint'} role="status" aria-live="polite" data-testid="fc-setup">{F(hint)} {hint !== 'fcSetOk' && <Speak key={hint} text={F(hint)} lang={lang} />}</p>
       )}
       {phase === 'countdown' && getReady !== null && <p className="gs-count" role="timer" aria-live="polite">{F('fcGetReady', { n: getReady })}</p>}
+      {phase === 'countdown' && <><p className="hint" role="status">{F('fcWaitZero')}</p><HowTo kind={kind} lang={lang} /></>}
       {phase === 'live' && (blind
         ? <p className="gs-count" aria-live="polite">Recording. The phone's results are shown after you enter yours.</p>
         : <p className="gs-count" aria-live="polite">{F(COUNT_KEYS[kind]?.live || 'fcReps', { n: reps })}</p>)}
@@ -401,6 +416,8 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
       {phase === 'live' && cue && <p className="fc-cue" role="status" aria-live="assertive" data-testid="fc-cue">{cue}</p>}
       {phase === 'setup' && (
         <>
+          <HowTo kind={kind} lang={lang} />
+          <p className="tiny">{F('fcHow3')}</p>
           <p className="tiny">{F(VIEW_KEY[KINDS[kind].view])}</p>
           <p className="tiny">{F('fcRecWarn')}</p>
           <button className="big primary" data-testid="fc-begin" disabled={!okToStart} onClick={beginCount}>{F('fcBegin')}</button>
@@ -654,6 +671,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
       )}
       {mode !== 'form' && <p className="hint" data-testid="fc-no-tips">{F('fcNoTips')}{mode === 'video' ? ` ${F('fcCantCount')}` : ''}</p>}
       {mode !== 'video' && kind && <p className="tiny">{F(VIEW_KEY[KINDS[kind].view])}</p>}
+      {mode !== 'video' && kind && <HowTo kind={kind} lang={lang} steps />}
       {mode !== 'video' && (!hasConsent(patient) ? (
         <div className="card" data-testid="fc-consent">
           <h3>{F('fcConsentTitle')}</h3>

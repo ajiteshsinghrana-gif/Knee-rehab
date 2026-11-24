@@ -20,6 +20,11 @@ import { applyDown, applyUp, downSlice, upSlice } from '../src/sync/slices';
 import { exportMyData } from '../src/lifecycle';
 import type { FormCheckLog, Patient } from '../src/types';
 
+// The measuring machinery is tested with the raw limits; the shipped "only gross faults" widening is tested at the bottom.
+const SHIPPED_GROSS = { ...FORM_CHECK.gross };
+const setGross = (g: { limitFactor: number; framesFactor: number }) => Object.assign(FORM_CHECK.gross as { limitFactor: number; framesFactor: number }, g);
+setGross({ limitFactor: 1, framesFactor: 1 });
+
 // ---------- synthetic bodies (no camera): 33 points, all visible unless a test hides them ----------
 const blank = (): Frame => Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, v: 1 }));
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -1254,10 +1259,10 @@ describe('camera check: what is offered for each exercise', () => {
 });
 
 describe('camera check: pace', () => {
-  it('flags reps quicker than half the tempo and slower than 2.5 times it, and not reps near it', () => {
+  it('flags reps much quicker or much slower than the tempo, and not reps near it', () => {
     expect(ids(run('squat', (v) => squat(v / 100), 25).sum)).not.toContain('pace-fast');
     expect(ids(run('squat', (v) => squat(v / 100), 25, { frames: 12 }).sum)).toContain('pace-fast');
-    expect(ids(run('squat', (v) => squat(v / 100), 25, { frames: 200 }).sum)).toContain('pace-slow');
+    expect(ids(run('squat', (v) => squat(v / 100), 25, { frames: 300 }).sum)).toContain('pace-slow');
     const s = run('squat', (v) => squat(v / 100), 25).sum;
     expect(s.tempo).toBe(DEFAULT_TEMPO.squat);
     expect(s.repSecs!.length).toBe(5);
@@ -1418,5 +1423,33 @@ describe('position first, then count-down, then reps', () => {
   });
   it('the position labels exist in every language', () => {
     for (const l of ['en', 'hi', 'bn'] as const) for (const k of ['fcPosGo', 'fcPosOk']) expect(FC_STRINGS[l][k], `${l} ${k}`).toBeTruthy();
+  });
+});
+
+describe('only gross faults are pointed out', () => {
+  it('ships a wider limit and a longer duration than the raw limits', () => {
+    expect(SHIPPED_GROSS.limitFactor).toBeGreaterThan(1);
+    expect(SHIPPED_GROSS.framesFactor).toBeGreaterThan(1);
+  });
+  it('a bent knee just over the raw limit is not flagged, a clearly bent one is', () => {
+    setGross(SHIPPED_GROSS);
+    try {
+      const raw = KINDS.slr.faults.find((f) => f.id === 'slr-knee-bent')!.limit;
+      const run1 = (bend: number) => { const a = new FormAnalyzer('slr', undefined, {}); let t = 1000; for (let i = 0; i < 12; i++) a.push(slr(0), (t += DT), 1); for (let r = 0; r < 3; r++) { for (let i = 0; i <= 40; i++) a.push(slr(45 * Math.sin((Math.PI * i) / 40), { kneeBend: bend * Math.sin((Math.PI * i) / 40) }), (t += DT), 1); for (let i = 0; i < 6; i++) a.push(slr(0), (t += DT), 1); } return a.finish(); };
+      expect(ids(run1(raw + 3))).not.toContain('slr-knee-bent');
+      expect(ids(run1(raw * SHIPPED_GROSS.limitFactor + 15))).toContain('slr-knee-bent');
+    } finally { setGross({ limitFactor: 1, framesFactor: 1 }); }
+  });
+  it('every exercise has a start position and a movement in every language, and the steps explain green and the count-down', async () => {
+    const { HOWTO } = await import('../src/formcheck/howto');
+    for (const l of ['en', 'hi', 'bn'] as const) for (const k of Object.keys(KINDS) as FormKind[]) { expect(HOWTO[l][k]?.start?.length, `${l} ${k} start`).toBeGreaterThan(10); expect(HOWTO[l][k]?.move?.length, `${l} ${k} move`).toBeGreaterThan(10); }
+    for (const l of ['en', 'hi', 'bn'] as const) for (const k of ['fcHow1', 'fcHow2', 'fcHow3', 'fcHow4', 'fcStartLbl', 'fcMoveLbl', 'fcWaitZero']) expect(FC_STRINGS[l][k], `${l} ${k}`).toBeTruthy();
+    expect(FC_STRINGS.en.fcHow2).toMatch(/GREEN/);
+    expect(FC_STRINGS.en.fcHow3).toMatch(/reaches 0/);
+  });
+  it('the screens show the instructions before, during set-up and in the count-down', () => {
+    const ui = readFileSync('src/ui/FormCheck.tsx', 'utf8');
+    expect(ui.match(/<HowTo /g)!.length > 2).toBe(true);
+    expect(ui).toContain("F('fcWaitZero')");
   });
 });
