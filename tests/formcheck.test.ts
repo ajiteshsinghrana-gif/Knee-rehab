@@ -6,7 +6,7 @@ import { triage } from '../src/engine/triage';
 import { addDays } from '../src/engine/dates';
 import { getExercise } from '../src/exercises/library';
 import { FormAnalyzer, type Frame, type FormEvent } from '../src/formcheck/analyze';
-import { FORM_CHECK, KINDS, KIND_EXERCISES, LM, SET_FAULTS, formKindFor, type FormKind } from '../src/formcheck/config';
+import { FORM_CHECK, HAND, HAND_KINDS, KINDS, KIND_EXERCISES, LM, SET_FAULTS, VARIANTS, formKindFor, type FormKind } from '../src/formcheck/config';
 import { FAULT_PHYSIO, FC_STRINGS } from '../src/formcheck/strings';
 import { requestForClip } from '../src/formcheck/model';
 import { assess, attachClip, f1Faults, giveConsent, hasConsent, newCheckLog, pendingChecks, recordCheck, setFormLimit, withdrawConsent } from '../src/formcheck/model';
@@ -833,5 +833,164 @@ describe('camera form check: bird-dog', () => {
   });
   it('core exercises offer plank and bird-dog; the library exercise maps to the first', () => {
     expect(formKindFor('core')).toBe('plank');
+  });
+});
+
+// ---------- hand, wrist and elbow; shoulder blade squeeze; band rotation ----------
+/** 33 body points all unseen, then 21 hand points (so the hand model alone can drive a check). */
+const noBody = (): Frame => Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, v: 0 }));
+const handPts = (W: { x: number; y: number }, tips: number, mcp: number, seen = true, M?: { x: number; y: number }): Frame => {
+  const pts = Array.from({ length: 21 }, () => ({ x: W.x, y: W.y, v: seen ? 1 : 0 }));
+  const dirs: Record<number, number> = { 5: -0.3, 9: -0.1, 13: 0.1, 17: 0.3 };
+  for (const m of [5, 9, 13, 17]) {
+    const a = dirs[m];
+    pts[m] = { x: W.x + mcp * Math.sin(a), y: W.y - mcp * Math.cos(a), v: seen ? 1 : 0 };
+    pts[m + 3] = { x: W.x + tips * Math.sin(a), y: W.y - tips * Math.cos(a), v: seen ? 1 : 0 };
+  }
+  if (M) pts[9] = { ...M, v: seen ? 1 : 0 };
+  return pts;
+};
+/** Close-up of a hand: `curl` 0 is open, 100 a tight fist. `shift` moves the wrist across the picture, as a share of palm length. */
+function fist(curl: number, o: { shift?: number; seen?: boolean } = {}): Frame {
+  const palm = 0.1, r = 1.9 - (1.2 * curl) / 100;
+  const W = { x: 0.5 + (curl > 3 ? (o.shift ?? 0) * palm : 0), y: 0.7 };
+  return [...noBody(), ...handPts(W, palm * r, palm, o.seen ?? true)];
+}
+/** Side on: elbow on the left, forearm along the table, hand bent by `ang` degrees. `elbow` moves the elbow (share of forearm length). */
+function wristF(ang: number, o: { elbow?: number; seen?: boolean } = {}): Frame {
+  const body = noBody();
+  const fore = 0.2;
+  const E = { x: 0.3 - (ang > 3 ? (o.elbow ?? 0) * fore : 0), y: 0.5 };
+  body[LM.lElbow] = { ...E, v: 1 };
+  const W = { x: 0.5, y: 0.5 }, M = { x: W.x + 0.1 * Math.cos(rad(ang)), y: W.y - 0.1 * Math.sin(rad(ang)) };
+  return [...body, ...handPts(W, 0.15, 0.1, o.seen ?? true, M)];
+}
+/** Side on, seated: the upper arm hangs from the shoulder; the elbow bends by `flex`. `arm` swings the upper arm. */
+function elbowF(flex: number, o: { arm?: number } = {}): Frame {
+  const f = noBody();
+  const arm = flex > 25 ? o.arm ?? 0 : 0;
+  const S = { x: 0.5, y: 0.3 };
+  const E = { x: S.x + 0.2 * Math.sin(rad(arm)), y: S.y + 0.2 * Math.cos(rad(arm)) };
+  const d = rad(arm + flex);
+  f[LM.lShoulder] = { ...S, v: 1 }; f[LM.lElbow] = { ...E, v: 1 }; f[LM.lWrist] = { x: E.x + 0.2 * Math.sin(d), y: E.y + 0.2 * Math.cos(d), v: 1 };
+  return f;
+}
+/** From behind: the shoulder points pull in by `sq` percent of their width. `shrug` lifts them, `lean` tilts the trunk. */
+function scapF(sq: number, o: { shrug?: number; lean?: number } = {}): Frame {
+  const f = noBody();
+  const on = sq > 1.5, half = 0.15 * (1 - sq / 100);
+  const y = 0.4 - (on ? o.shrug ?? 0 : 0) * 0.2, dx = on ? Math.tan(rad(o.lean ?? 0)) * 0.3 : 0;
+  f[LM.lShoulder] = { x: 0.5 - half + dx, y, v: 1 }; f[LM.rShoulder] = { x: 0.5 + half + dx, y, v: 1 };
+  f[LM.lHip] = { x: 0.4, y: 0.7, v: 1 }; f[LM.rHip] = { x: 0.6, y: 0.7, v: 1 };
+  return f;
+}
+/** Facing the camera, elbows bent at the sides: the left forearm turns outwards by `out` percent of upper-arm length. */
+function rotF(out: number, o: { away?: number; lean?: number; right?: boolean } = {}): Frame {
+  const f = noBody();
+  const on = Math.abs(out) > 3, dx = on ? Math.tan(rad(o.lean ?? 0)) * 0.35 : 0;
+  const S = [{ x: 0.4 + dx, y: 0.3 }, { x: 0.6 + dx, y: 0.3 }];
+  const upper = Math.hypot(0.02, 0.2);
+  const away = on ? (o.away ?? 0) * upper : 0;
+  const mk = (i: 0 | 1, o2: number, away2: number) => {
+    const dir = i === 0 ? -1 : 1;
+    const E = { x: (i === 0 ? 0.38 : 0.62) + dir * away2, y: 0.5 };
+    return { E, W: { x: E.x + dir * (o2 / 100) * upper, y: 0.48 } };
+  };
+  const L = mk(0, o.right ? 0 : out, o.right ? 0 : away), R = mk(1, o.right ? out : 0, o.right ? away : 0);
+  f[LM.lShoulder] = { ...S[0], v: 1 }; f[LM.rShoulder] = { ...S[1], v: 1 };
+  f[LM.lHip] = { x: 0.42, y: 0.65, v: 1 }; f[LM.rHip] = { x: 0.58, y: 0.65, v: 1 };
+  f[LM.lElbow] = { ...L.E, v: 1 }; f[LM.lWrist] = { ...L.W, v: 1 }; f[LM.rElbow] = { ...R.E, v: 1 }; f[LM.rWrist] = { ...R.W, v: 1 };
+  return f;
+}
+
+describe('camera form check: hand, wrist and elbow', () => {
+  it('maps the exercise to three versions and loads the hand model only for the two that need it', () => {
+    expect(formKindFor('hand-wrist-elbow')).toBe('hand-fist');
+    expect(VARIANTS['hand-wrist-elbow'].map((v) => v.kind)).toEqual(['hand-fist', 'wrist', 'elbow']);
+    expect(HAND_KINDS).toEqual(['hand-fist', 'wrist']);
+    expect(HAND).toBe(33);
+  });
+  it('counts fists from the hand model alone, with no body in the picture, and flags nothing for a steady hand', () => {
+    const r = run('hand-fist', (v) => fist(v), 70);
+    expect(r.sum.reps).toBe(5);
+    expect(r.sum.reliable).toBe(true);
+    expect(r.sum.faults).toEqual([]);
+  });
+  it('flags a hand that wanders and a fist closed very fast', () => {
+    expect(ids(run('hand-fist', (v) => fist(v, { shift: 1.2 }), 70).sum)).toContain('fist-wrist-moves');
+    expect(ids(run('hand-fist', (v) => fist(v), 100, { frames: 8 }).sum)).toContain('fist-fast');
+  });
+  it('says it could not see enough, and flags nothing, when the hand is not found', () => {
+    const r = run('hand-fist', (v) => fist(v, { seen: false, shift: 1.5 }), 70);
+    expect(r.sum.reliable).toBe(false);
+    expect(r.sum.faults).toEqual([]);
+  });
+  it("a physio's limit on the fist works like any other limit", () => {
+    const r = run('hand-fist', (v) => fist(v), 70, { limit: { max: 55 } });
+    expect(r.sum.faults.find((x) => x.id === 'limit-max')?.kind).toBe('precaution');
+  });
+  it('counts wrist bends and flags an elbow that moves or a fast bend', () => {
+    const clean = run('wrist', (v) => wristF(v), 40);
+    expect(clean.sum.reps).toBe(5);
+    expect(clean.sum.faults).toEqual([]);
+    expect(ids(run('wrist', (v) => wristF(v, { elbow: 0.3 }), 40).sum)).toContain('wrist-elbow-moves');
+    expect(ids(run('wrist', (v) => wristF(v), 60, { frames: 8 }).sum)).toContain('wrist-fast');
+  });
+  it('wrist: nothing is flagged when the hand is not seen', () => {
+    const r = run('wrist', (v) => wristF(v, { seen: false, elbow: 0.5 }), 40);
+    expect(r.sum.reliable).toBe(false);
+    expect(r.sum.faults).toEqual([]);
+  });
+  it('counts elbow bends and flags a swinging upper arm or a fast bend', () => {
+    const clean = run('elbow', (v) => elbowF(v), 100);
+    expect(clean.sum.reps).toBe(5);
+    expect(clean.sum.faults).toEqual([]);
+    expect(ids(run('elbow', (v) => elbowF(v, { arm: 28 }), 100).sum)).toContain('elbow-arm-moves');
+    expect(ids(run('elbow', (v) => elbowF(v), 100, { frames: 10 }).sum)).toContain('elbow-fast');
+  });
+});
+
+describe('camera form check: shoulder blade squeeze', () => {
+  it('maps the library exercise and counts squeezes seen from behind', () => {
+    expect(formKindFor('shoulder-blade-squeeze')).toBe('scap');
+    const r = run('scap', (v) => scapF(v), 8);
+    expect(r.sum.reps).toBe(5);
+    expect(r.sum.faults).toEqual([]);
+  });
+  it('flags shoulders that rise, a lean, and a very fast squeeze', () => {
+    expect(ids(run('scap', (v) => scapF(v, { shrug: 0.25 }), 8).sum)).toContain('scap-shrug');
+    expect(ids(run('scap', (v) => scapF(v, { lean: 16 }), 8).sum)).toContain('scap-lean');
+    expect(ids(run('scap', (v) => scapF(v), 15, { frames: 8 }).sum)).toContain('scap-fast');
+  });
+  it('does not count a squeeze that is too small to tell from camera noise', () => {
+    expect(run('scap', (v) => scapF(v), 2.5).sum.reps).toBe(0);
+  });
+  it('a physio minimum flags a squeeze that is too small to reach it', () => {
+    const r = run('scap', (v) => scapF(v), 8, { limit: { min: 12 } });
+    expect(r.sum.faults.find((x) => x.id === 'limit-min')?.kind).toBe('range');
+  });
+});
+
+describe('camera form check: band rotation', () => {
+  it('maps the library exercise and counts outward turns of either arm', () => {
+    expect(formKindFor('band-rotation')).toBe('band-rot');
+    expect(run('band-rot', (v) => rotF(v), 80).sum.reps).toBe(5);
+    const right = run('band-rot', (v) => rotF(v, { right: true }), 80);
+    expect(right.sum.reps).toBe(5);
+    expect(right.sum.faults).toEqual([]);
+    expect(run('band-rot', (v) => rotF(v), 80).sum.faults).toEqual([]);
+  });
+  it('flags an elbow that leaves the side, a lean, and a fast turn', () => {
+    expect(ids(run('band-rot', (v) => rotF(v, { away: 0.4 }), 80).sum)).toContain('rot-elbow-away');
+    expect(ids(run('band-rot', (v) => rotF(v, { lean: 16 }), 80).sum)).toContain('rot-lean');
+    expect(ids(run('band-rot', (v) => rotF(v), 80, { frames: 10 }).sum)).toContain('rot-fast');
+  });
+  it('turning inwards is not counted', () => {
+    expect(run('band-rot', (v) => rotF(-v), 80).sum.reps).toBe(0);
+  });
+  it("a physio's maximum for a rotator cuff patient raises a pause", () => {
+    const r = run('band-rot', (v) => rotF(v), 80, { limit: { max: 60 } });
+    expect(r.sum.faults.find((x) => x.id === 'limit-max')?.kind).toBe('precaution');
+    expect(r.sum.paused).toBe(true);
   });
 });

@@ -9,7 +9,7 @@
  */
 import { angleAt, type Pt } from '../angle';
 import type { FormFault, FormFaultKind, FormLimit } from '../types';
-import { FORM_CHECK, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, PUMP, PUMP_FAULT, STEP_FAULT, WALK, type FormKind } from './config';
+import { FORM_CHECK, HAND, HL, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, PUMP, PUMP_FAULT, STEP_FAULT, WALK, type FormKind } from './config';
 
 export interface Landmark { x: number; y: number; /** 0 to 1: how sure the model is that the point is in view */ v?: number }
 export type Frame = Landmark[];
@@ -43,7 +43,7 @@ const bend = (a: Pt, v: Pt, b: Pt): number | null => { const x = angleAt(a, v, b
 
 interface Measure { ok: boolean; signal: number; faults: Record<string, number | null> }
 interface Cand { mh: Pt; lA: Pt; rA: Pt; leg: number; trunk: number }
-interface Base { n: number; trunk: number; hipY: number; hipX: number; leg: number; ankles: [Pt, Pt] | null; ear: [number, number] | null }
+interface Base { n: number; trunk: number; hipY: number; hipX: number; leg: number; ankles: [Pt, Pt] | null; ear: [number, number] | null; /** band rotation: starting forearm turn and elbow gap, left and right */ arm?: [number, number]; gap?: [number, number] }
 
 export class FormAnalyzer {
   private prev: Landmark[] | null = null;
@@ -234,6 +234,11 @@ export class FormAnalyzer {
       case 'cycle': return this.mCycle(f);
       case 'plank': return this.mPlank(f);
       case 'bird-dog': return this.mBird(f);
+      case 'hand-fist': return this.mFist(f);
+      case 'wrist': return this.mWrist(f);
+      case 'elbow': return this.mElbow(f);
+      case 'scap': return this.mScap(f);
+      case 'band-rot': return this.mRot(f);
     }
   }
 
@@ -624,6 +629,150 @@ export class FormAnalyzer {
       'abd-lean': hasBase && signal > rest ? turn(trunk, b.trunk) : null,
       'abd-shrug': signal > rest ? shrug : null,
       'abd-fast': signal > 5 ? spd : null,
+    } };
+  }
+
+  /** A hand point from the hand model (frame index HAND + n). */
+  private hp(f: Landmark[], n: number): Pt { return this.pt(f, HAND + n); }
+  private hseen(f: Landmark[], ...n: number[]): boolean { return this.seen(f, ...n.map((x) => HAND + x)); }
+
+  /** Close up, palm to the camera: fingertips come towards the wrist as the hand closes. Uses the hand model only. */
+  private mFist(f: Landmark[]): Measure {
+    const tips = [HL.indexTip, HL.middleTip, HL.ringTip, HL.pinkyTip], mcps = [HL.indexMcp, HL.middleMcp, HL.ringMcp, HL.pinkyMcp];
+    if (!this.hseen(f, HL.wrist, ...tips, ...mcps)) return { ok: false, signal: 0, faults: {} };
+    const W = this.hp(f, HL.wrist);
+    const avg = (ids: number[]) => ids.reduce((s, n) => s + dist(this.hp(f, n), W), 0) / ids.length;
+    const palm = dist(this.hp(f, HL.middleMcp), W);
+    const reach = avg(mcps);
+    if (palm < 1e-6 || reach < 1e-6) return { ok: false, signal: 0, faults: {} };
+    // Open hand: the fingertips are about 1.9 times as far from the wrist as the knuckles. Tight fist: about 0.7 times.
+    const signal = Math.min(100, Math.max(0, ((1.9 - avg(tips) / reach) / 1.2) * 100));
+    const b = this.base, N = FORM_CHECK.baselineFrames;
+    if (b.n < N) {
+      this.aWin.push({ ang: signal, k: W });
+      if (this.aWin.length > N) this.aWin.shift();
+      if (this.aWin.length === N) {
+        const sg = this.aWin.map((x) => x.ang), xs = this.aWin.map((x) => x.k.x), ys = this.aWin.map((x) => x.k.y);
+        const range = (v: number[]) => Math.max(...v) - Math.min(...v);
+        if (range(sg) < 10 && range(xs) < 0.15 * palm && range(ys) < 0.15 * palm) { b.hipX = xs.reduce((p, q) => p + q, 0) / N; b.hipY = ys.reduce((p, q) => p + q, 0) / N; b.leg = palm; b.n = N; }
+      }
+      return { ok: true, signal: 0, faults: {} };
+    }
+    const rest = KINDS['hand-fist'].repDown;
+    return { ok: true, signal, faults: {
+      'fist-wrist-moves': signal > rest ? (dist(W, { x: b.hipX, y: b.hipY }) / b.leg) * 100 : null,
+      'fist-fast': signal > 5 ? this.speed(signal) : null,
+    } };
+  }
+
+  /** Side on, forearm resting: the angle between the forearm (elbow to wrist) and the hand (wrist to knuckle). Needs the elbow from the body model and the hand from the hand model. */
+  private mWrist(f: Landmark[]): Measure {
+    const k = this.nearSide(f, { l: [LM.lElbow], r: [LM.rElbow] });
+    const el = k === 'l' ? LM.lElbow : LM.rElbow;
+    if (!this.seen(f, el, HAND + HL.wrist, HAND + HL.middleMcp)) return { ok: false, signal: 0, faults: {} };
+    const E = this.pt(f, el), W = this.hp(f, HL.wrist), M = this.hp(f, HL.middleMcp);
+    const ang = bend(E, W, M), fore = dist(E, W);
+    if (ang === null || fore < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const b = this.base, N = FORM_CHECK.baselineFrames;
+    if (b.n < N) {
+      this.aWin.push({ ang, k: E });
+      if (this.aWin.length > N) this.aWin.shift();
+      if (this.aWin.length === N) {
+        const an = this.aWin.map((x) => x.ang), xs = this.aWin.map((x) => x.k.x), ys = this.aWin.map((x) => x.k.y);
+        const range = (v: number[]) => Math.max(...v) - Math.min(...v);
+        if (range(an) < 6 && range(xs) < 0.05 * fore && range(ys) < 0.05 * fore) { b.hipX = xs.reduce((p, q) => p + q, 0) / N; b.hipY = ys.reduce((p, q) => p + q, 0) / N; b.leg = fore; b.n = N; }
+      }
+      return { ok: true, signal: 0, faults: {} };
+    }
+    const rest = KINDS.wrist.repDown;
+    return { ok: true, signal: ang, faults: {
+      'wrist-elbow-moves': ang > rest ? (dist(E, { x: b.hipX, y: b.hipY }) / b.leg) * 100 : null,
+      'wrist-fast': ang > 5 ? this.speed(ang) : null,
+    } };
+  }
+
+  /** Side on, seated: the elbow bends and straightens. */
+  private mElbow(f: Landmark[]): Measure {
+    const sets = { l: [LM.lShoulder, LM.lElbow, LM.lWrist], r: [LM.rShoulder, LM.rElbow, LM.rWrist] } as const;
+    const k = this.nearSide(f, sets);
+    const [sh, el, wr] = sets[k];
+    if (!this.seen(f, sh, el, wr)) return { ok: false, signal: 0, faults: {} };
+    const S = this.pt(f, sh), E = this.pt(f, el), Wr = this.pt(f, wr);
+    const flex = bend(S, E, Wr);
+    if (flex === null) return { ok: false, signal: 0, faults: {} };
+    const upper = Math.atan2(E.x - S.x, E.y - S.y) * RAD; // 0 when the upper arm hangs straight down
+    const rest = KINDS.elbow.repDown;
+    if (flex < rest && this.base.n < FORM_CHECK.baselineFrames) { this.base.trunk = (this.base.trunk * this.base.n + upper) / (this.base.n + 1); this.base.n++; }
+    const hasBase = this.base.n >= FORM_CHECK.baselineFrames;
+    return { ok: true, signal: flex, faults: {
+      'elbow-arm-moves': hasBase && flex > rest ? turn(upper, this.base.trunk) : null,
+      'elbow-fast': flex > 5 ? this.speed(flex) : null,
+    } };
+  }
+
+  /** From behind: the two shoulder points come closer together. The hips give the scale, because they do not move in this exercise. */
+  private mScap(f: Landmark[]): Measure {
+    if (!this.seen(f, LM.lShoulder, LM.rShoulder, LM.lHip, LM.rHip)) return { ok: false, signal: 0, faults: {} };
+    const lS = this.pt(f, LM.lShoulder), rS = this.pt(f, LM.rShoulder), lH = this.pt(f, LM.lHip), rH = this.pt(f, LM.rHip);
+    const ms = mid(lS, rS), mh = mid(lH, rH), hw = dist(lH, rH);
+    if (hw < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const sw = dist(lS, rS) / hw, vert = (mh.y - ms.y) / hw;
+    const trunk = Math.atan2(ms.x - mh.x, -(ms.y - mh.y)) * RAD;
+    const b = this.base, N = FORM_CHECK.baselineFrames;
+    if (b.n < N) {
+      this.aWin.push({ ang: sw, k: { x: vert, y: trunk } });
+      if (this.aWin.length > N) this.aWin.shift();
+      if (this.aWin.length === N) {
+        const a = this.aWin, m = (g: (x: { ang: number; k: Pt }) => number) => a.reduce((p, x) => p + g(x), 0) / N;
+        const range = (g: (x: { ang: number; k: Pt }) => number) => Math.max(...a.map(g)) - Math.min(...a.map(g));
+        if (range((x) => x.ang) < 0.03 * m((x) => x.ang) && range((x) => x.k.x) < 0.04 * m((x) => x.k.x) && range((x) => x.k.y) < 3) {
+          b.leg = m((x) => x.ang); b.hipY = m((x) => x.k.x); b.trunk = m((x) => x.k.y); b.n = N;
+        }
+      }
+      return { ok: true, signal: 0, faults: {} };
+    }
+    const signal = (1 - sw / b.leg) * 100;
+    const rest = KINDS.scap.repDown;
+    return { ok: true, signal, faults: {
+      'scap-shrug': signal > rest ? (vert / b.hipY - 1) * 100 : null,
+      'scap-lean': signal > rest ? turn(trunk, b.trunk) : null,
+      'scap-fast': signal > 1 ? this.speed(signal) : null,
+    } };
+  }
+
+  /** Facing the camera, elbow at the side: how far the wrist moves outwards from the elbow, as a share of upper-arm length. The arm that moves more is measured. */
+  private mRot(f: Landmark[]): Measure {
+    if (!this.seen(f, LM.lShoulder, LM.rShoulder, LM.lHip, LM.rHip, LM.lElbow, LM.rElbow, LM.lWrist, LM.rWrist)) return { ok: false, signal: 0, faults: {} };
+    const P = (i: number) => this.pt(f, i);
+    const ms = mid(P(LM.lShoulder), P(LM.rShoulder)), mh = mid(P(LM.lHip), P(LM.rHip));
+    const trunk = Math.atan2(ms.x - mh.x, -(ms.y - mh.y)) * RAD;
+    const arm = (sh: number, el: number, wr: number, hip: number) => {
+      const E = P(el), upper = Math.max(dist(P(sh), E), 1e-6), dir = Math.sign(E.x - ms.x) || 1;
+      return { out: (((P(wr).x - E.x) * dir) / upper) * 100, gap: (Math.abs(E.x - P(hip).x) / upper) * 100 };
+    };
+    const L = arm(LM.lShoulder, LM.lElbow, LM.lWrist, LM.lHip), R = arm(LM.rShoulder, LM.rElbow, LM.rWrist, LM.rHip);
+    const b = this.base, N = FORM_CHECK.baselineFrames;
+    if (b.n < N) {
+      this.bWin.push({ ang: L.out, tilt: R.out });
+      this.aWin.push({ ang: L.gap, k: { x: R.gap, y: trunk } });
+      if (this.bWin.length > N) { this.bWin.shift(); this.aWin.shift(); }
+      if (this.bWin.length === N) {
+        const range = (v: number[]) => Math.max(...v) - Math.min(...v), m = (v: number[]) => v.reduce((p, q) => p + q, 0) / N;
+        const lo = this.bWin.map((x) => x.ang), ro = this.bWin.map((x) => x.tilt), lg = this.aWin.map((x) => x.ang), rg = this.aWin.map((x) => x.k.x), tr = this.aWin.map((x) => x.k.y);
+        if (range(lo) < 8 && range(ro) < 8 && range(lg) < 8 && range(rg) < 8 && range(tr) < 3) { b.arm = [m(lo), m(ro)]; b.gap = [m(lg), m(rg)]; b.trunk = m(tr); b.n = N; }
+      }
+      return { ok: true, signal: 0, faults: {} };
+    }
+    const out = { l: L.out - b.arm![0], r: R.out - b.arm![1] };
+    if (!this.side) this.side = out.l >= out.r ? 'l' : 'r';
+    else if (out[this.side === 'l' ? 'r' : 'l'] > out[this.side] + 15) this.side = this.side === 'l' ? 'r' : 'l';
+    const k = this.side, i = k === 'l' ? 0 : 1;
+    const signal = Math.max(0, out[k]);
+    const rest = KINDS['band-rot'].repDown;
+    return { ok: true, signal, faults: {
+      'rot-elbow-away': signal > rest ? (k === 'l' ? L : R).gap - b.gap![i] : null,
+      'rot-lean': signal > rest ? turn(trunk, b.trunk) : null,
+      'rot-fast': signal > 5 ? this.speed(signal) : null,
     } };
   }
 

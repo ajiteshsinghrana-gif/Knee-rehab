@@ -12,7 +12,7 @@ import { CONSENT_TEXT, consentText, reviewHours, validClip } from '../forms/mode
 import { newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { clipCloudReady, patientUploadClip } from '../sync/engine';
 import { FormAnalyzer, type FormEvent } from '../formcheck/analyze';
-import { BONES, FORM_CHECK, KINDS, VARIANTS, formKindFor } from '../formcheck/config';
+import { BONES, FORM_CHECK, HAND, HAND_BONES, HAND_KINDS, KINDS, VARIANTS, formKindFor } from '../formcheck/config';
 import { assess, attachClip, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, requestForClip, withdrawConsent, type Assessment } from '../formcheck/model';
 import { loadPose, type Pose } from '../formcheck/pose';
 import { COUNT_KEYS, VIEW_KEY, fcs } from '../formcheck/strings';
@@ -81,6 +81,13 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
       if (!p || !q || (p.v ?? 0) < FORM_CHECK.minVisibility || (q.v ?? 0) < FORM_CHECK.minVisibility) continue;
       g.beginPath(); g.moveTo(p.x * c.width, p.y * c.height); g.lineTo(q.x * c.width, q.y * c.height); g.stroke();
     }
+    if (frame.length > HAND) {
+      for (const [a, b] of HAND_BONES) {
+        const p = frame[HAND + a], q = frame[HAND + b];
+        if (!p || !q) continue;
+        g.beginPath(); g.moveTo(p.x * c.width, p.y * c.height); g.lineTo(q.x * c.width, q.y * c.height); g.stroke();
+      }
+    }
   };
 
   const onEvents = (evs: FormEvent[]) => {
@@ -124,7 +131,9 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
       if (video.current) { video.current.srcObject = s; await video.current.play(); }
     } catch { setErr(F('fcNoCamera')); return; }
     try {
-      if (!pose.current) pose.current = await loadPose();
+      const needHand = !!kind && HAND_KINDS.includes(kind);
+      if (pose.current && needHand && !pose.current.hand) { pose.current.close(); pose.current = null; }
+      if (!pose.current) pose.current = await loadPose(needHand);
     } catch { stopCamera(); setErr(F('fcNoModel')); return; }
     setReady(true);
     raf.current = requestAnimationFrame(loop);

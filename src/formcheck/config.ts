@@ -10,9 +10,10 @@ import type { FormFaultKind } from '../types';
 
 export type FormKind =
   | 'slr' | 'squat' | 'shoulder-abduction'
-  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance' | 'balance-line' | 'walking' | 'ankle-pump' | 'pendulum' | 'cycle' | 'plank' | 'bird-dog';
+  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance' | 'balance-line' | 'walking' | 'ankle-pump' | 'pendulum' | 'cycle' | 'plank' | 'bird-dog'
+  | 'hand-fist' | 'wrist' | 'elbow' | 'scap' | 'band-rot';
 /** Where the phone goes: side on lying down, side on standing, facing the person standing, or facing the person seated. */
-export type FormView = 'side' | 'sideStand' | 'front' | 'seated' | 'balance' | 'balanceLine' | 'walkSide' | 'sideFoot' | 'pendulum' | 'cycle' | 'plank' | 'birdDog';
+export type FormView = 'side' | 'sideStand' | 'front' | 'seated' | 'balance' | 'balanceLine' | 'walkSide' | 'sideFoot' | 'pendulum' | 'cycle' | 'plank' | 'birdDog' | 'hand' | 'forearm' | 'armSide' | 'back' | 'bandFront';
 export const SIGNOFF = 'NEEDS_PHYSIO_SIGNOFF' as const;
 
 /** MediaPipe Pose Landmarker point numbers (33 points). */
@@ -20,6 +21,17 @@ export const LM = {
   nose: 0, lEar: 7, rEar: 8, lShoulder: 11, rShoulder: 12, lElbow: 13, rElbow: 14, lWrist: 15, rWrist: 16, lHeel: 29, rHeel: 30, lFoot: 31, rFoot: 32,
   lHip: 23, rHip: 24, lKnee: 25, rKnee: 26, lAnkle: 27, rAnkle: 28,
 } as const;
+/**
+ * The hand model adds 21 points after the 33 body points (frame index HAND + n). Only the check for the hand, wrist and elbow uses them.
+ * n: 0 wrist, 4 thumb tip, 5/9/13/17 knuckles of index, middle, ring, little finger, 8/12/16/20 their tips.
+ */
+export const HAND = 33;
+export const HL = { wrist: 0, indexMcp: 5, middleMcp: 9, ringMcp: 13, pinkyMcp: 17, indexTip: 8, middleTip: 12, ringTip: 16, pinkyTip: 20 } as const;
+export const HAND_BONES: [number, number][] = [
+  [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
+];
+/** Kinds that need the separate hand model (loaded only for these, because it is an extra download). */
+export const HAND_KINDS: FormKind[] = ['hand-fist', 'wrist'];
 /** Pairs drawn as the skeleton on screen. */
 export const BONES: [number, number][] = [
   [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28],
@@ -47,11 +59,18 @@ export const KIND_EXERCISES: Record<FormKind, string[]> = {
   cycle: ['stationary-cycling'],
   plank: ['core'],
   'bird-dog': [],
+  /** Hand, wrist and elbow movement is three exercises in one: the patient picks which (see VARIANTS). */
+  'hand-fist': ['hand-wrist-elbow'],
+  wrist: [],
+  elbow: [],
+  scap: ['shoulder-blade-squeeze'],
+  'band-rot': ['band-rotation'],
 };
 /** Exercises the patient does in more than one way: the camera asks which. */
 export const VARIANTS: Record<string, { kind: FormKind; labelKey: string }[]> = {
   balance: [{ kind: 'balance', labelKey: 'fcVarLeg' }, { kind: 'balance-line', labelKey: 'fcVarLine' }],
   core: [{ kind: 'plank', labelKey: 'fcVarPlank' }, { kind: 'bird-dog', labelKey: 'fcVarBird' }],
+  'hand-wrist-elbow': [{ kind: 'hand-fist', labelKey: 'fcVarFist' }, { kind: 'wrist', labelKey: 'fcVarWrist' }, { kind: 'elbow', labelKey: 'fcVarElbow' }],
 };
 export const formKindFor = (exerciseId: string): FormKind | null => {
   for (const k of Object.keys(KIND_EXERCISES) as FormKind[]) if (KIND_EXERCISES[k].includes(exerciseId)) return k;
@@ -271,6 +290,48 @@ export const KINDS: Record<FormKind, KindConfig> = {
     signal: 'deg', view: 'birdDog', hint: 'degrees the back leg is lifted', noLimit: true, repUp: 25, repDown: 10, minFrames: 8,
     faults: [
       { id: 'bird-tilt', kind: 'compensation', limit: 10, unit: 'deg' },
+    ],
+  },
+  // Close up, palm towards the camera (hand model). Signal: how closed the hand is, 0 open to 100 tight fist.
+  'hand-fist': {
+    signal: 'pct', view: 'hand', hint: 'how closed the fist is (0 open, 100 tight fist)', repUp: 50, repDown: 20, minFrames: 6,
+    faults: [
+      { id: 'fist-wrist-moves', kind: 'compensation', limit: 80, unit: 'pct' },  // the wrist travels by 80% of the palm length from where it started
+      { id: 'fist-fast', kind: 'control', limit: 250, unit: 'pctps', minFrames: 3 },
+    ],
+  },
+  // Side-on, forearm resting, upper body in view (hand model for the hand). Signal: how far the wrist bends from straight, either way.
+  wrist: {
+    signal: 'deg', view: 'forearm', hint: 'degrees the wrist is bent (up or down)', repUp: 25, repDown: 10, minFrames: 6,
+    faults: [
+      { id: 'wrist-elbow-moves', kind: 'compensation', limit: 15, unit: 'pct' },  // the elbow moves by 15% of forearm length
+      { id: 'wrist-fast', kind: 'control', limit: 150, unit: 'degps', minFrames: 3 },
+    ],
+  },
+  // Side-on, seated. Signal: how far the elbow bends, in degrees (0 = straight).
+  elbow: {
+    signal: 'deg', view: 'armSide', hint: 'degrees the elbow is bent', repUp: 60, repDown: 20, minFrames: 6,
+    faults: [
+      { id: 'elbow-arm-moves', kind: 'compensation', limit: 20, unit: 'deg' },  // the upper arm swings 20 degrees from where it started
+      { id: 'elbow-fast', kind: 'control', limit: 150, unit: 'degps', minFrames: 3 },
+    ],
+  },
+  // From behind. Signal: how much the shoulder points pull in, as a share of their starting width. The least accurate check: the squeeze moves the points only a little.
+  scap: {
+    signal: 'pct', view: 'back', hint: 'how much the shoulders pulled in (% of their starting width)', repUp: 4, repDown: 1.5, minFrames: 8,
+    faults: [
+      { id: 'scap-shrug', kind: 'compensation', limit: 10, unit: 'pct' },  // shoulders rise by 10% of hip width
+      { id: 'scap-lean', kind: 'compensation', limit: 10, unit: 'deg' },
+      { id: 'scap-fast', kind: 'control', limit: 30, unit: 'pctps', minFrames: 3 },
+    ],
+  },
+  // Facing the camera, elbow at the side. Signal: how far the forearm turns outwards, as a share of upper-arm length. Turning inwards is not counted.
+  'band-rot': {
+    signal: 'pct', view: 'bandFront', hint: 'how far the forearm turned outwards (% of upper-arm length)', repUp: 40, repDown: 15, minFrames: 6,
+    faults: [
+      { id: 'rot-elbow-away', kind: 'compensation', limit: 25, unit: 'pct' },  // the elbow leaves the side by 25% of upper-arm length
+      { id: 'rot-lean', kind: 'compensation', limit: 10, unit: 'deg' },
+      { id: 'rot-fast', kind: 'control', limit: 150, unit: 'pctps', minFrames: 3 },
     ],
   },
 };
