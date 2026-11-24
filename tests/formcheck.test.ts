@@ -7,7 +7,7 @@ import { triage } from '../src/engine/triage';
 import { addDays } from '../src/engine/dates';
 import { getExercise } from '../src/exercises/library';
 import { FormAnalyzer, type Frame, type FormEvent } from '../src/formcheck/analyze';
-import { ANGLES, DEFAULT_TEMPO, FORM_CHECK, HAND, HAND_KINDS, KINDS, KIND_EXERCISES, LM, SET_FAULTS, VARIANTS, checkMode, formKindFor, paceApplies, type FormKind } from '../src/formcheck/config';
+import { ANGLES, DEFAULT_TEMPO, SETUP, FORM_CHECK, HAND, HAND_KINDS, KINDS, KIND_EXERCISES, LM, SET_FAULTS, VARIANTS, checkMode, formKindFor, paceApplies, type FormKind } from '../src/formcheck/config';
 import { FAULT_PHYSIO, FC_STRINGS } from '../src/formcheck/strings';
 import { requestForClip } from '../src/formcheck/model';
 import { PILOT_MIN, countPct, counts, faultsFor, judge, loadPilot, newPilotRecord, putParticipant, repAgreement, savePilot, suggest, summarise, toCsv, upsert, type PilotParticipant, type PilotRecord, type PilotStore } from '../src/formcheck/pilot';
@@ -1402,5 +1402,21 @@ describe('camera check: wording and video', () => {
     for (const l of ['en', 'hi', 'bn'] as const) expect(consentText(l).points.join(' ')).toMatch(/no one else|कोई और|আর কেউ/);
     expect(readFileSync('src/ui/FormCheck.tsx', 'utf8')).toMatch(/FORM_CONFIG\.maxClipSec \* 1000/);
     expect(readFileSync('src/ui/FormRequest.tsx', 'utf8')).toMatch(/FORM_CONFIG\.maxClipSec \+ 0\.5/);
+  });
+});
+
+describe('position first, then count-down, then reps', () => {
+  const ui = readFileSync('src/ui/FormCheck.tsx', 'utf8');
+  it('lights the camera view green when in position and starts the count-down by itself', () => {
+    expect(ui).toContain("data-position={phase === 'live' ? 'live' : inPosition ? 'ok' : 'adjust'}");
+    expect(ui).toMatch(/okRun >= SETUP\.autoFrames && !autoOff\.current\) beginCount\(\)/);
+    expect(SETUP.autoFrames).toBeGreaterThan(SETUP.okFrames);
+  });
+  it('goes back to setup if the patient steps out during the count-down, and a cancel stops auto-start until they re-enter', () => {
+    expect(ui).toMatch(/phaseRef\.current === 'countdown'[\s\S]{0,300}SETUP\.lostFrames[\s\S]{0,200}setPhase\('setup'\)/);
+    expect(ui).toMatch(/autoOff\.current = true; setGetReady\(null\)/);
+  });
+  it('the position labels exist in every language', () => {
+    for (const l of ['en', 'hi', 'bn'] as const) for (const k of ['fcPosGo', 'fcPosOk']) expect(FC_STRINGS[l][k], `${l} ${k}`).toBeTruthy();
   });
 });

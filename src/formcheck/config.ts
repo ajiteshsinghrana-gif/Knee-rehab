@@ -407,4 +407,5 @@ export const PACE_FAULTS = { fast: { id: 'pace-fast', kind: 'control' as FormFau
  * `darkLuma`: average brightness (0 to 255) below which the picture is too dark. `slowFps`: fewer measured frames a second
  * than this while setting up means the phone is too slow to measure, so the screen offers a video for the physio instead.
  */
-export const SETUP = { darkLuma: 45, slowFps: 7, slowAfterMs: 3000, okFrames: 8 } as const;
+/** autoFrames: held in position this many frames (about 1.3 s) and the countdown starts by itself. lostFrames: out of position this long during the countdown and it goes back to setup. */
+export const SETUP = { darkLuma: 45, slowFps: 7, slowAfterMs: 3000, okFrames: 8, autoFrames: 20, lostFrames: 20 } as const;

@@ -117,6 +117,9 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
   const luma = useRef<number | null>(null);
   const fps = useRef({ t0: 0, n: 0, warned: false });
   const okRunRef = useRef(0);
+  const lostRef = useRef(0);
+  /** Set when the patient cancels a count-down, so it does not restart by itself until they leave and re-enter the position. */
+  const autoOff = useRef(false);
   const cueTimer = useRef(0);
   /** Cues waiting to be shown and spoken, one at a time. */
   const cueQueue = useRef<string[]>([]);
@@ -223,6 +226,11 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
         }
         const frame = p.detect(src, now);
         draw(frame && crop ? toFullFrame(frame, crop) : frame);
+        if (phaseRef.current === 'countdown') {
+          // Stepped out of position during the count-down: go back and ask again.
+          if (setupHint(kind, frame, luma.current) === 'fcSetOk') lostRef.current = 0;
+          else if (++lostRef.current >= SETUP.lostFrames) { lostRef.current = 0; okRunRef.current = 0; setOkRun(0); autoOff.current = false; setGetReady(null); setPhase('setup'); }
+        }
         if (phaseRef.current === 'setup') {
           const f = fps.current;
           if (!f.t0 || document.hidden) { f.t0 = now; f.n = 0; }
@@ -343,9 +351,17 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
 
   const mirror = facing === 'user' ? 'scaleX(-1)' : undefined;
   const okToStart = ready && okRun >= SETUP.okFrames;
+  const inPosition = ready && hint === 'fcSetOk' && phase !== 'live';
+  const beginCount = () => { lostRef.current = 0; setPhase('countdown'); setGetReady(FORM_CHECK.getReadySec); };
+  // In position and still for a moment: start the count-down by itself. Cancelling it stops this until the patient moves out and back in.
+  useEffect(() => {
+    if (okRun === 0) autoOff.current = false;
+    if (phase === 'setup' && ready && okRun >= SETUP.autoFrames && !autoOff.current) beginCount();
+  }, [okRun, phase, ready]);
   return (
     <main data-testid="formcheck-live" data-stage={phase === 'setup' ? 'camera' : 'live'}>
-      <div className="fc-stage" style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 12, overflow: 'hidden' }}>
+      <div className="fc-stage" style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 12, overflow: 'hidden', outline: phase === 'live' || !ready ? undefined : `6px solid ${inPosition ? '#1fa34a' : '#e0a100'}`, outlineOffset: -6, boxShadow: inPosition && phase !== 'live' ? '0 0 24px 4px rgba(31,163,74,.7)' : undefined }} data-position={phase === 'live' ? 'live' : inPosition ? 'ok' : 'adjust'}>
+        {phase !== 'live' && ready && <div className="fc-pos" data-testid="fc-pos" role="status" style={{ position: 'absolute', left: 8, top: 8, zIndex: 2, padding: '4px 12px', borderRadius: 999, fontWeight: 700, color: '#fff', background: inPosition ? '#1fa34a' : '#b57f00' }}>{inPosition ? '✓ ' : ''}{F(inPosition ? 'fcPosOk' : 'fcPosGo')}</div>}
         <div style={{ position: 'absolute', inset: 0, transform: !hwZoom && zoom > 1 ? `scale(${zoom})` : undefined, transformOrigin: 'center' }}>
           <video ref={video} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-label={F('fcTitle')} />
           <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-hidden="true" />
@@ -387,12 +403,12 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
         <>
           <p className="tiny">{F(VIEW_KEY[KINDS[kind].view])}</p>
           <p className="tiny">{F('fcRecWarn')}</p>
-          <button className="big primary" data-testid="fc-begin" disabled={!okToStart} onClick={() => { setPhase('countdown'); setGetReady(FORM_CHECK.getReadySec); }}>{F('fcBegin')}</button>
+          <button className="big primary" data-testid="fc-begin" disabled={!okToStart} onClick={beginCount}>{F('fcBegin')}</button>
           <button className="link" onClick={() => void swap()}>{F('fcSwap')}</button>
           <button className="link" onClick={() => { stopCamera(); onCancel(); }}>← {F('fcCancel')}</button>
         </>
       )}
-      {phase === 'countdown' && <button className="big secondary" onClick={() => { setGetReady(null); setPhase('setup'); }}>{F('fcCancel')}</button>}
+      {phase === 'countdown' && <button className="big secondary" onClick={() => { autoOff.current = true; setGetReady(null); setPhase('setup'); }}>{F('fcCancel')}</button>}
       {phase === 'live' && <button className="big primary" data-testid="fc-finish" onClick={() => void end('finish')}>{F('fcFinish')}</button>}
     </main>
   );

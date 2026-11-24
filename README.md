@@ -587,6 +587,10 @@ Every exercise shows a looping animated demo instead of the still picture on the
 
 
 
+### Position first, then count-down (2026-11-25)
+
+The camera opens, the app says how to stand (too close, too dark, turn sideways, show your hand), and the camera view gets a green frame and an "In position" tag when the whole body is seen (amber "Get in position" otherwise). Held for about 1.3 s, the 5 second count-down starts by itself, then reps are counted. Stepping out of position for about 1.3 s during the count-down returns to setup; Cancel stops the auto-start until the patient steps out and back in. The Start button still works as a manual start once in position. Frame counts are `SETUP.autoFrames` / `SETUP.lostFrames`. Not tried on a real camera.
+
 ### Camera check safety round (2026-11-24)
 
 - **On by default (changed 2026-11-24, second round).** Every demo and new patient has the camera check on. The physio can turn it off per patient with the switch at the **top of the Plan tab**; the switch is in the audit log and travels to the patient's phone. The phone cannot change it itself.
