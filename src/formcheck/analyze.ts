@@ -49,8 +49,7 @@ export class FormAnalyzer {
   private unseenNow = false;
   private t0: number | null = null;
   private tLast = 0;
-  private lastSignal: number | null = null;
-  private lastT = 0;
+  private hist: { s: number; t: number }[] = [];
   private reps = 0;
   private inRep = false;
   private peak = 0;
@@ -252,12 +251,14 @@ export class FormAnalyzer {
     } };
   }
 
-  /** Speed of the main movement number per second (absolute), from the last usable frame. */
+  /** Speed of the main movement number per second (absolute), measured over about the last 0.3 s so camera jitter is not read as speed. */
   private speed(sig: number): number | null {
     const t = this.tLast;
-    const out = this.lastSignal === null || t <= this.lastT ? null : (Math.abs(sig - this.lastSignal) / (t - this.lastT)) * 1000;
-    this.lastSignal = sig; this.lastT = t;
-    return out;
+    this.hist.push({ s: sig, t });
+    if (this.hist.length > 5) this.hist.shift();
+    const a = this.hist[0];
+    if (this.hist.length < 3 || t <= a.t) return null;
+    return (Math.abs(sig - a.s) / (t - a.t)) * 1000;
   }
 
   private watch(id: string, kind: FormFaultKind, limit: number, unit: FormFault['unit'], v: number | null, rep: number, tMs: number, minFrames: number, ev: FormEvent[]) {

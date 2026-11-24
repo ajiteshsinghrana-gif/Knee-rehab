@@ -6,6 +6,7 @@ import { exerciseName } from '../exercises/library';
 import { CUES, FORM_CONFIG, isOverdue, replyToForm, reviewHours } from '../forms/model';
 import { clockMs, getState, updatePatient } from '../store';
 import { physioClipUrl } from '../sync/engine';
+import { loadLocalVideo } from '../exercises/deviceVideos';
 import { deleteClipNow, purgeExpired } from '../forms/purge';
 import { PHYSIO } from '../engine/plan';
 import { AutoSummary } from './FormCheckCard';
@@ -28,6 +29,13 @@ function One({ r, p, pack, now }: { r: FormRequest; p: Patient; pack: ProtocolPa
   const [url, setUrl] = useState('');
   const [err, setErr] = useState('');
   const overdue = isOverdue(r, pack, now);
+  // A clip kept on the device can be played when the physio view runs on the same device (the demo, or a one-device clinic).
+  const [localUrl, setLocalUrl] = useState('');
+  useEffect(() => {
+    let u = '';
+    if (r.clip?.where === 'device') void loadLocalVideo(r.clip.ref).then((b) => { if (b) { u = URL.createObjectURL(b); setLocalUrl(u); } });
+    return () => { if (u) URL.revokeObjectURL(u); };
+  }, [r.clip?.ref]);
   const watch = async () => {
     setErr('');
     try { if (r.clip?.where === 'cloud') setUrl(await physioClipUrl(p, r.clip.ref)); } catch (e) { setErr((e as Error).message); }
@@ -48,7 +56,8 @@ function One({ r, p, pack, now }: { r: FormRequest; p: Patient; pack: ProtocolPa
             {url ? <video src={url} controls playsInline preload="metadata" style={{ width: '100%', maxWidth: 480, borderRadius: 12 }} /> : <button className="btn" onClick={watch}>Watch clip</button>}
             {err && <p className="err" role="alert">{err}</p>}
           </>
-        ) : <p className="tiny">The clip is only on the patient's phone (video sending was not available). Ask to see it at the next visit.</p>
+        ) : localUrl ? <video src={localUrl} controls playsInline preload="metadata" style={{ width: '100%', maxWidth: 480, borderRadius: 12 }} />
+          : <p className="tiny">The clip is only on the patient's phone (video sending was not available). Ask to see it at the next visit.</p>
       ) : r.clipGone ? <p className="tiny">Clip deleted {r.clipGone.slice(0, 10)}.</p> : <p className="tiny">{r.auto ? 'Numbers only: the patient has not sent a video of this set.' : 'Sent without a video.'}</p>}
       {r.clip && <p className="tiny">Deleted automatically on {r.clip.deleteAfter}.</p>}
       {r.reply ? (
