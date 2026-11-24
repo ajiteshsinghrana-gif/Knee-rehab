@@ -10,14 +10,14 @@ import type { FormFaultKind } from '../types';
 
 export type FormKind =
   | 'slr' | 'squat' | 'shoulder-abduction'
-  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance' | 'balance-line';
+  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance' | 'balance-line' | 'walking' | 'ankle-pump';
 /** Where the phone goes: side on lying down, side on standing, facing the person standing, or facing the person seated. */
-export type FormView = 'side' | 'sideStand' | 'front' | 'seated' | 'balance' | 'balanceLine';
+export type FormView = 'side' | 'sideStand' | 'front' | 'seated' | 'balance' | 'balanceLine' | 'walkSide' | 'sideFoot';
 export const SIGNOFF = 'NEEDS_PHYSIO_SIGNOFF' as const;
 
 /** MediaPipe Pose Landmarker point numbers (33 points). */
 export const LM = {
-  nose: 0, lEar: 7, rEar: 8, lShoulder: 11, rShoulder: 12, lElbow: 13, rElbow: 14, lWrist: 15, rWrist: 16,
+  nose: 0, lEar: 7, rEar: 8, lShoulder: 11, rShoulder: 12, lElbow: 13, rElbow: 14, lWrist: 15, rWrist: 16, lHeel: 29, rHeel: 30, lFoot: 31, rFoot: 32,
   lHip: 23, rHip: 24, lKnee: 25, rKnee: 26, lAnkle: 27, rAnkle: 28,
 } as const;
 /** Pairs drawn as the skeleton on screen. */
@@ -41,6 +41,8 @@ export const KIND_EXERCISES: Record<FormKind, string[]> = {
   balance: ['balance'],
   /** The same balance exercise done heel to toe. Chosen on the screen (see VARIANTS), so no exercise maps here on its own. */
   'balance-line': [],
+  walking: ['walking'],
+  'ankle-pump': ['ankle-pumps'],
 };
 /** Exercises the patient does in more than one way: the camera asks which. */
 export const VARIANTS: Record<string, { kind: FormKind; labelKey: string }[]> = {
@@ -219,10 +221,35 @@ export const KINDS: Record<FormKind, KindConfig> = {
       { id: 'bal-arms', kind: 'compensation', limit: 50, unit: 'deg' },
     ],
   },
+  // Side-on to a fixed phone, walking across the picture and back. Each step is one "rep". Signal: how far apart the feet are, as a share of trunk length.
+  walking: {
+    signal: 'pct', view: 'walkSide', hint: 'step length as % of trunk length', repUp: 40, repDown: 20, minFrames: 6,
+    faults: [
+      { id: 'walk-lean', kind: 'compensation', limit: 12, unit: 'deg', minFrames: 8 },  // trunk more than 12 degrees from upright
+    ],
+  },
+  // Side-on, lying with the leg straight and the foot in view. Signal: how far the toes point away, in degrees from the relaxed position.
+  'ankle-pump': {
+    signal: 'deg', view: 'sideFoot', hint: 'degrees the toes point away from relaxed', repUp: 15, repDown: 6, minFrames: 4,
+    faults: [
+      { id: 'pump-leg-moves', kind: 'compensation', limit: 12, unit: 'pct' },  // the knee moves by 12% of shank length
+    ],
+  },
 };
+
+/** Walking: the left and right leading steps are compared at the end of the set. Placeholders. */
+export const WALK = { unevenPct: 20, minSteps: 6 } as const;
+/** Ankle pumps: toes should come at least this far towards the shin between pumps (degrees). Placeholder. */
+export const PUMP = { dorsiMinDeg: 8 } as const;
 
 /** A balance hold shorter than the target. Judged per hold, not per camera frame, so it is not in a kind's fault list. */
 export const HOLD_FAULT = { id: 'bal-short', kind: 'control' as FormFaultKind };
+/** Walking: uneven step length, judged on the whole set. */
+export const STEP_FAULT = { id: 'walk-uneven', kind: 'compensation' as FormFaultKind };
+/** Ankle pumps: the toes did not come up far enough between pumps. */
+export const PUMP_FAULT = { id: 'pump-short-dorsi', kind: 'range' as FormFaultKind };
+/** Faults judged per hold, step or pump rather than per camera frame: they are not in a kind's fault list. */
+export const SET_FAULTS = [HOLD_FAULT, STEP_FAULT, PUMP_FAULT] as const;
 
 /** Faults the physio's own limits can raise. Not placeholders: they use the number the physio typed. */
 export const LIMIT_FAULTS: Record<'max' | 'min', { id: string; kind: FormFaultKind }> = {

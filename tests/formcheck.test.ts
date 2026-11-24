@@ -6,7 +6,7 @@ import { triage } from '../src/engine/triage';
 import { addDays } from '../src/engine/dates';
 import { getExercise } from '../src/exercises/library';
 import { FormAnalyzer, type Frame, type FormEvent } from '../src/formcheck/analyze';
-import { FORM_CHECK, KINDS, KIND_EXERCISES, LM, formKindFor, type FormKind } from '../src/formcheck/config';
+import { FORM_CHECK, KINDS, KIND_EXERCISES, LM, SET_FAULTS, formKindFor, type FormKind } from '../src/formcheck/config';
 import { FAULT_PHYSIO, FC_STRINGS } from '../src/formcheck/strings';
 import { requestForClip } from '../src/formcheck/model';
 import { assess, attachClip, f1Faults, giveConsent, hasConsent, newCheckLog, pendingChecks, recordCheck, setFormLimit, withdrawConsent } from '../src/formcheck/model';
@@ -311,7 +311,7 @@ describe("the physio's limits", () => {
     expect(setFormLimit(base, 'squats', { max: 40 }, '  ', ctx)).toBe(base);
     expect(setFormLimit(base, 'shoulder-abduction', { max: 400 }, 'x', ctx)).toBe(base);
     expect(setFormLimit(base, 'shoulder-abduction', { max: 60, min: 70 }, 'x', ctx)).toBe(base);
-    expect(setFormLimit(base, 'ankle-pumps', { max: 40 }, 'x', ctx)).toBe(base);
+    expect(setFormLimit(base, 'quad-set', { max: 40 }, 'x', ctx)).toBe(base);
     const p = setFormLimit(base, 'shoulder-abduction', { max: 90 }, 'Repair at 6 weeks, no overhead', ctx);
     expect(p.formLimits!['shoulder-abduction']).toMatchObject({ max: 90, by: 'physio' });
     const a = p.audit.at(-1)!;
@@ -394,7 +394,7 @@ describe('safety and wording', () => {
     }
   });
   it('every fault the checks can raise has patient wording in three languages and physio wording', () => {
-    const all = new Set<string>(['limit-max', 'limit-min', 'bal-short']);
+    const all = new Set<string>(['limit-max', 'limit-min', ...SET_FAULTS.map((x) => x.id)]);
     for (const k of Object.values(KINDS)) for (const f of k.faults) all.add(f.id);
     for (const id of all) {
       expect(FAULT_PHYSIO[id]).toBeTruthy();
@@ -412,11 +412,11 @@ describe('safety and wording', () => {
     expect(formKindFor('straight-leg-raise')).toBe('slr');
     expect(formKindFor('mini-squats')).toBe('squat');
     expect(formKindFor('shoulder-abduction')).toBe('shoulder-abduction');
-    expect(formKindFor('walking')).toBeNull();
+    expect(formKindFor('walking-aid')).toBeNull();
   });
   it('newCheckLog refuses an exercise the camera cannot measure', () => {
     const summary = new FormAnalyzer('slr').finish();
-    expect(() => newCheckLog({ id: 'x1', date: today, startedAt: 0, endedAt: 1, exerciseId: 'walking', summary, by: 'patient' })).toThrow();
+    expect(() => newCheckLog({ id: 'x1', date: today, startedAt: 0, endedAt: 1, exerciseId: 'walking-aid', summary, by: 'patient' })).toThrow();
   });
 });
 
@@ -605,6 +605,96 @@ describe('camera form check: the other exercises', () => {
       expect(KINDS[kind].faults.length).toBeGreaterThan(0);
     }
     expect(formKindFor('balance')).toBe('balance');
-    for (const id of ['walking', 'cycling', 'swimming', 'ice-compression', 'quad-set', 'ankle-pumps']) expect(formKindFor(id)).toBeNull();
+    expect(formKindFor('walking')).toBe('walking');
+    expect(formKindFor('ankle-pumps')).toBe('ankle-pump');
+    for (const id of ['walking-aid', 'cycling', 'swimming', 'ice-compression', 'quad-set']) expect(formKindFor(id)).toBeNull();
+  });
+});
+
+// ---------- walking and ankle pumps ----------
+/** Side view, walking: `a1` is the step length when the left foot leads, `a2` when the right foot leads (half the gap between the feet). */
+function walkFrames(stepsPerDir: number[], o: { a1?: number; a2?: number } = {}): Frame[] {
+  const out: Frame[] = [];
+  const a1 = o.a1 ?? 0.07, a2 = o.a2 ?? 0.07, per = 12;
+  let x = 0.2;
+  const make = (gapFwd: number, dir: number): Frame => {
+    const f = blank();
+    f[LM.lShoulder] = { x, y: 0.4, v: 1 }; f[LM.lHip] = { x, y: 0.6, v: 1 };
+    f[LM.rShoulder] = { x: 0.5, y: 0.5, v: 0 }; f[LM.rHip] = { x: 0.5, y: 0.5, v: 0 };
+    f[LM.lAnkle] = { x: x + dir * gapFwd / 2, y: 0.95, v: 0.9 }; f[LM.rAnkle] = { x: x - dir * gapFwd / 2, y: 0.95, v: 0.6 };
+    return f;
+  };
+  for (let i = 0; i < 12; i++) out.push(make(0, 1));
+  let dir = 1;
+  for (const n of stepsPerDir) {
+    for (let st = 0; st < n; st++) {
+      const leftLeads = st % 2 === 0;
+      for (let i = 0; i < per; i++) {
+        const s = Math.sin((Math.PI * i) / (per - 1));
+        const gap = (leftLeads ? 2 * a1 : 2 * a2) * s;
+        x += dir * 0.004;
+        out.push(make(leftLeads ? gap : -gap, dir));
+      }
+    }
+    dir = -dir;
+  }
+  return out;
+}
+const feed = (kind: FormKind, frames: Frame[]) => { const a = new FormAnalyzer(kind); let t = 0; for (const f of frames) a.push(f, (t += DT), 1); return a.finish(); };
+
+describe('camera form check: walking', () => {
+  it('counts steps and works out steps a minute', () => {
+    const sum = feed('walking', walkFrames([8]));
+    expect(sum.reps).toBe(8);
+    expect(sum.cadence! >= 70 && sum.cadence! <= 80).toBe(true); // 12 frames a step at 15 frames a second is 75 steps a minute
+    expect(sum.faults).toEqual([]);
+  });
+  it('flags steps of uneven length, also when the person turns and walks back', () => {
+    expect(ids(feed('walking', walkFrames([8], { a1: 0.09, a2: 0.05 })))).toContain('walk-uneven');
+    expect(ids(feed('walking', walkFrames([6, 6], { a1: 0.09, a2: 0.05 })))).toContain('walk-uneven');
+    expect(ids(feed('walking', walkFrames([6, 6], { a1: 0.07, a2: 0.07 })))).not.toContain('walk-uneven');
+  });
+  it('does not judge evenness from too few steps', () => {
+    expect(ids(feed('walking', walkFrames([4], { a1: 0.09, a2: 0.05 })))).not.toContain('walk-uneven');
+  });
+  it('a far leg that is only partly visible does not stop the count', () => {
+    const frames = walkFrames([8]).map((f) => { const g = f.slice(); g[LM.rAnkle] = { ...g[LM.rAnkle], v: 0.35 }; return g; });
+    expect(feed('walking', frames).reps).toBe(8);
+  });
+});
+
+/** Side view, lying: the foot angle at the ankle is 90 degrees when relaxed; `p` degrees positive points the toes away. */
+function foot(p: number, kneeShift = 0): Frame {
+  const f = blank();
+  const K = { x: 0.4 + kneeShift, y: 0.6 }, A = { x: 0.65, y: 0.6 };
+  f[LM.lKnee] = { ...K, v: 1 }; f[LM.lAnkle] = { ...A, v: 1 };
+  f[LM.lFoot] = { x: A.x + 0.1 * Math.sin(rad(p)), y: A.y - 0.1 * Math.cos(rad(p)), v: 1 };
+  for (const i of [LM.rKnee, LM.rAnkle, LM.rFoot]) f[i] = { x: 0.5, y: 0.5, v: 0 };
+  return f;
+}
+function pumps(n: number, o: { dorsi?: number; kneeShift?: number } = {}): Frame[] {
+  const out: Frame[] = [];
+  for (let i = 0; i < 12; i++) out.push(foot(0));
+  for (let r = 0; r < n; r++) {
+    for (let i = 0; i <= 20; i++) out.push(foot(-(o.dorsi ?? 0) * Math.sin((Math.PI * i) / 20)));       // toes towards the shin
+    for (let i = 0; i <= 20; i++) out.push(foot(35 * Math.sin((Math.PI * i) / 20), o.kneeShift ?? 0)); // toes away
+  }
+  out.push(foot(0));
+  return out;
+}
+describe('camera form check: ankle pumps', () => {
+  it('counts pumps from the toes pointing away, and flags nothing when the toes also come up', () => {
+    const sum = feed('ankle-pump', pumps(6, { dorsi: 20 }));
+    expect(sum.reps).toBe(6);
+    expect(sum.faults).toEqual([]);
+  });
+  it('flags toes that do not come up towards the shin', () => {
+    const sum = feed('ankle-pump', pumps(6, { dorsi: 0 }));
+    const f = sum.faults.find((x) => x.id === 'pump-short-dorsi')!;
+    expect(f.kind).toBe('range');
+    expect(f.unit).toBe('deg');
+  });
+  it('flags a leg that moves while pumping', () => {
+    expect(ids(feed('ankle-pump', pumps(6, { dorsi: 20, kneeShift: 0.08 })))).toContain('pump-leg-moves');
   });
 });

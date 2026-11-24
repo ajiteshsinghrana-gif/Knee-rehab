@@ -239,7 +239,8 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
       <main data-testid="formcheck-result">
         <h2>{F('fcResult')}</h2>
         <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
-        <p>{log.repsCounted > 0 ? F('fcRepsDone', { n: log.repsCounted }) : F('fcNoReps')}</p>
+        <p>{log.repsCounted > 0 ? F(log.kind === 'walking' ? 'fcStepsDone' : 'fcRepsDone', { n: log.repsCounted }) : F('fcNoReps')}</p>
+        {log.cadence ? <p>{F('fcCadence', { n: log.cadence })}</p> : null}
         {log.holds?.length ? <p>{F('fcHolds', { list: log.holds.join(', ') })}</p> : null}
         {a.unreliable ? <p className="hint">{F('fcUnreliable')}</p> : log.faults.length ? (
           <div className="card">
@@ -279,7 +280,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
         {err && <p className="err" role="alert">{err}</p>}
         {!err && !ready && <p>{F('fcLoading')}</p>}
         {stage === 'live' && getReady !== null && <p className="gs-count" role="timer" aria-live="polite">{F('fcGetReady', { n: getReady })}</p>}
-        {stage === 'live' && getReady === null && <p className="gs-count" aria-live="polite">{F('fcReps', { n: reps })}</p>}
+        {stage === 'live' && getReady === null && <p className="gs-count" aria-live="polite">{F(kind === 'walking' ? 'fcSteps' : 'fcReps', { n: reps })}</p>}
         {stage === 'live' && unseen && <p className="hint" role="status">{F('fcUnseen')}</p>}
         {stage === 'live' && noticed && <p className="gs-msg" role="status">{noticed}</p>}
         {paused && <div className="red" role="alert" data-testid="fc-pause"><strong>{F('fcPause')}</strong></div>}

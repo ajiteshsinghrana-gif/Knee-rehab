@@ -9,7 +9,7 @@
  */
 import { angleAt, type Pt } from '../angle';
 import type { FormFault, FormFaultKind, FormLimit } from '../types';
-import { FORM_CHECK, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, type FormKind } from './config';
+import { FORM_CHECK, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, PUMP, PUMP_FAULT, STEP_FAULT, WALK, type FormKind } from './config';
 
 export interface Landmark { x: number; y: number; /** 0 to 1: how sure the model is that the point is in view */ v?: number }
 export type Frame = Landmark[];
@@ -30,6 +30,8 @@ export interface FormSummary {
   seconds: number;
   /** Balance only: how long each hold lasted, in seconds. */
   holds?: number[];
+  /** Walking only: steps a minute. */
+  cadence?: number;
 }
 
 const RAD = 180 / Math.PI;
@@ -65,6 +67,14 @@ export class FormAnalyzer {
   private lastPauseMs = -1e9;
   private maxRun = 0;
   private holdT0 = 0;
+  private steps: { len: number; lead: number; t: number }[] = [];
+  private stepSign = 1;
+  private peakSign = 1;
+  private lastHx = 0;
+  private stepHx0 = 0;
+  private dorsiNow = 0;
+  private dorsiMax = 0;
+  private aWin: { ang: number; k: Pt }[] = [];
   private holds: number[] = [];
   private closed = false;
 
@@ -97,14 +107,21 @@ export class FormAnalyzer {
     const cfg = KINDS[this.kind];
     const s = m.signal;
     // Rep counting: up past repUp, back below repDown.
-    if (!this.inRep && s >= cfg.repUp) { this.inRep = true; this.peak = s; this.holdT0 = tMs; }
+    if (!this.inRep && s >= cfg.repUp) { this.inRep = true; this.peak = s; this.holdT0 = tMs; this.stepHx0 = this.lastHx; this.peakSign = this.stepSign; }
     else if (this.inRep) {
+      if (s >= this.peak) this.peakSign = this.stepSign;
       this.peak = Math.max(this.peak, s);
       if (s <= cfg.repDown) {
         this.inRep = false;
         this.reps++;
         ev.push({ type: 'rep', n: this.reps });
         if (this.isBalance) this.endHold(tMs, ev);
+        if (this.kind === 'walking') {
+          // Which foot led: the sign of the feet's gap, flipped when walking leftwards, so the two walking directions agree.
+          const dir = Math.sign(this.lastHx - this.stepHx0);
+          this.steps.push({ len: this.peak, lead: dir === 0 ? 0 : this.peakSign * dir, t: tMs });
+        }
+        if (this.kind === 'ankle-pump') this.endPump(tMs, ev);
         if (this.limit?.min !== undefined && this.peak < this.limit.min) this.record(LIMIT_FAULTS.min.id, LIMIT_FAULTS.min.kind, this.reps, this.limit.min - this.peak, cfg.signal, tMs, ev);
       }
     }
@@ -121,6 +138,27 @@ export class FormAnalyzer {
   }
 
   private get isBalance(): boolean { return this.kind === 'balance' || this.kind === 'balance-line'; }
+  /** Steps a minute, from the first to the last counted step. Needs at least 4 steps. */
+  private cadence(): number | null {
+    const n = this.steps.length;
+    if (n < 4) return null;
+    const ms = this.steps[n - 1].t - this.steps[0].t;
+    return ms > 0 ? Math.round(((n - 1) * 60000) / ms) : null;
+  }
+  /** Walking: compares the step length when the left foot led with when the right foot led. Needs enough steps of each. */
+  private judgeSteps() {
+    const a = this.steps.filter((s) => s.lead > 0).map((s) => s.len), b = this.steps.filter((s) => s.lead < 0).map((s) => s.len);
+    if (this.steps.length < WALK.minSteps || a.length < 2 || b.length < 2) return;
+    const m = (x: number[]) => x.reduce((p, q) => p + q, 0) / x.length;
+    const ma = m(a), mb = m(b);
+    const diff = (Math.abs(ma - mb) / ((ma + mb) / 2)) * 100;
+    if (diff > WALK.unevenPct) this.record(STEP_FAULT.id, STEP_FAULT.kind, this.reps, diff, 'pct', this.tLast, []);
+  }
+  /** Ankle pumps: a pump ended. Flag it if the toes did not come up towards the shin before it. */
+  private endPump(tMs: number, ev: FormEvent[]) {
+    if (this.dorsiMax < PUMP.dorsiMinDeg) this.record(PUMP_FAULT.id, PUMP_FAULT.kind, this.reps, PUMP.dorsiMinDeg - this.dorsiMax, 'deg', tMs, ev);
+    this.dorsiMax = 0;
+  }
   /** One hold ended: note how long it lasted, and flag it if it was shorter than the target. */
   private endHold(tMs: number, ev: FormEvent[]) {
     const sec = Math.max(0, (tMs - this.holdT0) / 1000);
@@ -132,6 +170,7 @@ export class FormAnalyzer {
   finish(): FormSummary {
     // A set often ends while the foot is still up: that hold counts too.
     if (!this.closed && this.isBalance && this.inRep) { this.inRep = false; this.reps++; this.endHold(this.tLast, []); }
+    if (!this.closed && this.kind === 'walking') this.judgeSteps();
     this.closed = true;
     const usable = this.total ? this.usableN / this.total : 0;
     const reliable = this.total >= FORM_CHECK.minTotalFrames && usable >= FORM_CHECK.minUsable;
@@ -145,6 +184,7 @@ export class FormAnalyzer {
       paused: reliable && this.pausedIds.size > 0,
       seconds: this.t0 === null ? 0 : Math.round(((this.tLast - this.t0) / 1000) * 10) / 10,
       ...(this.isBalance && this.holds.length ? { holds: this.holds.slice(0, 30) } : {}),
+      ...(this.kind === 'walking' && this.cadence() !== null ? { cadence: this.cadence()! } : {}),
     };
   }
 
@@ -162,6 +202,8 @@ export class FormAnalyzer {
     return out;
   }
   private seen(f: Landmark[], ...ids: number[]): boolean { return ids.every((i) => (f[i]?.v ?? 0) >= FORM_CHECK.minVisibility); }
+  /** Like seen, with a lower bar: the far leg in a side view is often only partly visible. */
+  private seenMin(f: Landmark[], min: number, ...ids: number[]): boolean { return ids.every((i) => (f[i]?.v ?? 0) >= min); }
   private pt(f: Landmark[], i: number): Pt { return { x: f[i].x * this.aspect, y: f[i].y }; }
 
   private measure(f: Landmark[]): Measure | null {
@@ -178,6 +220,8 @@ export class FormAnalyzer {
       case 'bridging': return this.mBridge(f);
       case 'calf-raise': return this.mCalf(f);
       case 'balance': case 'balance-line': return this.mBalance(f);
+      case 'walking': return this.mWalk(f);
+      case 'ankle-pump': return this.mPump(f);
     }
   }
 
@@ -375,6 +419,49 @@ export class FormAnalyzer {
       'bal-lean': ms && signal > rest ? turn(trunk, b.trunk) : null,
       'bal-arms': signal > rest ? arms : null,
     } };
+  }
+
+  /** Side view, walking across the picture: the gap between the feet rises and falls once per step. */
+  private mWalk(f: Landmark[]): Measure {
+    const sets = { l: [LM.lShoulder, LM.lHip], r: [LM.rShoulder, LM.rHip] } as const;
+    const k = this.nearSide(f, sets);
+    const [sh, hip] = sets[k];
+    if (!this.seen(f, sh, hip) || !this.seenMin(f, 0.3, LM.lAnkle, LM.rAnkle)) return { ok: false, signal: 0, faults: {} };
+    const S = this.pt(f, sh), H = this.pt(f, hip), lA = this.pt(f, LM.lAnkle), rA = this.pt(f, LM.rAnkle);
+    const torso = dist(S, H);
+    if (torso < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const gap = ((lA.x - rA.x) / torso) * 100;
+    this.stepSign = gap >= 0 ? 1 : -1;
+    this.lastHx = H.x;
+    const lean = Math.abs(Math.atan2(S.x - H.x, -(S.y - H.y)) * RAD);
+    return { ok: true, signal: Math.abs(gap), faults: { 'walk-lean': Math.abs(gap) > KINDS.walking.repDown ? lean : null } };
+  }
+
+  /** Side view, lying with the leg straight: the toes point away (plantar flexion) and come back. The relaxed foot angle is learned while still. */
+  private mPump(f: Landmark[]): Measure {
+    const sets = { l: [LM.lKnee, LM.lAnkle, LM.lFoot], r: [LM.rKnee, LM.rAnkle, LM.rFoot] } as const;
+    const k = this.nearSide(f, sets);
+    const [kn, an, ft] = sets[k];
+    if (!this.seen(f, kn, an, ft)) return { ok: false, signal: 0, faults: {} };
+    const K = this.pt(f, kn), A = this.pt(f, an), F = this.pt(f, ft);
+    const ang = angleAt(K, A, F);
+    const shank = dist(K, A);
+    if (ang === null || shank < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const b = this.base, N = FORM_CHECK.baselineFrames;
+    if (b.n < N) {
+      this.aWin.push({ ang, k: K });
+      if (this.aWin.length > N) this.aWin.shift();
+      if (this.aWin.length === N) {
+        const angs = this.aWin.map((x) => x.ang);
+        const still = Math.max(...angs) - Math.min(...angs) < 4 && Math.max(...this.aWin.map((x) => x.k.x)) - Math.min(...this.aWin.map((x) => x.k.x)) < 0.03 * shank && Math.max(...this.aWin.map((x) => x.k.y)) - Math.min(...this.aWin.map((x) => x.k.y)) < 0.03 * shank;
+        if (still) { b.trunk = angs.reduce((p, q) => p + q, 0) / N; b.hipX = this.aWin.reduce((p, x) => p + x.k.x, 0) / N; b.hipY = this.aWin.reduce((p, x) => p + x.k.y, 0) / N; b.leg = shank; b.n = N; }
+      }
+      return { ok: true, signal: 0, faults: {} };
+    }
+    const dev = ang - b.trunk;           // plus: toes pointing away; minus: toes towards the shin
+    this.dorsiNow = Math.max(0, -dev);
+    this.dorsiMax = Math.max(this.dorsiMax, this.dorsiNow);
+    return { ok: true, signal: Math.max(0, dev), faults: { 'pump-leg-moves': (dist(K, { x: b.hipX, y: b.hipY }) / b.leg) * 100 } };
   }
 
   /** Front view, standing: the heels rise. The resting position is learned while the person stands still. */

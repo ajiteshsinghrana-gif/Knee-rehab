@@ -21,8 +21,9 @@ export function AutoSummary({ patient, r }: { patient: Patient; r: FormRequest }
       <b>Raised by the camera form check</b> ({r.auto.reason === 'PAUSE' ? 'the phone asked the patient to pause' : `rule F1: the same fault in ${FORM_CHECK.f1.checks} of the last ${FORM_CHECK.f1.window} checks`}).
       {c ? (
         <ul>
-          <li>{c.repsCounted} {c.holds?.length ? 'holds' : 'reps'} counted · camera saw the body in {Math.round(c.usable * 100)}% of frames</li>
+          <li>{c.repsCounted} {c.holds?.length ? 'holds' : c.kind === 'walking' ? 'steps' : 'reps'} counted · camera saw the body in {Math.round(c.usable * 100)}% of frames</li>
           {c.holds?.length ? <li>Hold times: {c.holds.join(', ')} s</li> : null}
+          {c.cadence ? <li>About {c.cadence} steps a minute</li> : null}
           {c.faults.map((f) => <li key={f.id}>{faultLine(f, c.repsCounted)}</li>)}
         </ul>
       ) : <p className="tiny">The measured numbers have not arrived yet.</p>}

@@ -29,7 +29,7 @@ export function newCheckLog(a: { kind?: string; id: string; date: string; starte
   const used = a.kind ?? kind;
   return {
     id: a.id, date: a.date, startedAt: a.startedAt, endedAt: a.endedAt, exerciseId: a.exerciseId, kind: used,
-    repsCounted: a.summary.reps, ...(a.summary.holds?.length ? { holds: a.summary.holds } : {}), faults: a.summary.faults, usable: a.summary.usable, reliable: a.summary.reliable, paused: a.summary.paused,
+    repsCounted: a.summary.reps, ...(a.summary.holds?.length ? { holds: a.summary.holds } : {}), ...(a.summary.cadence ? { cadence: a.summary.cadence } : {}), faults: a.summary.faults, usable: a.summary.usable, reliable: a.summary.reliable, paused: a.summary.paused,
     answeredBy: a.by, ...(a.limit ? { limit: a.limit } : {}),
   };
 }

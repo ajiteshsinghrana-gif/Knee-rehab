@@ -197,6 +197,7 @@ const cleanCheck = (raw: unknown): FormCheckLog | null => {
     || !num(raw.repsCounted) || !Array.isArray(raw.faults) || !num(raw.usable) || typeof raw.reliable !== 'boolean' || typeof raw.paused !== 'boolean') return null;
   const limit = cleanLimit(raw.limit);
   return { id: raw.id, date: raw.date, startedAt: raw.startedAt, endedAt: raw.endedAt, exerciseId: raw.exerciseId, kind: raw.kind, repsCounted: raw.repsCounted,
+    ...(num(raw.cadence) && raw.cadence >= 0 && raw.cadence <= 400 ? { cadence: Math.round(raw.cadence) } : {}),
     ...(Array.isArray(raw.holds) && raw.holds.length ? { holds: raw.holds.filter((h): h is number => num(h) && h >= 0 && h <= 3600).slice(0, 30) } : {}),
     faults: raw.faults.slice(0, 12).map(cleanFault).filter((x): x is FormFault => !!x), usable: Math.max(0, Math.min(1, raw.usable)), reliable: raw.reliable, paused: raw.paused,
     ...(raw.answeredBy === 'patient' || raw.answeredBy === 'caregiver' ? { answeredBy: raw.answeredBy } : {}), ...(str(raw.requestId, 60) ? { requestId: raw.requestId } : {}), ...(limit ? { limit } : {}) };

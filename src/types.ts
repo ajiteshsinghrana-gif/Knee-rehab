@@ -355,6 +355,8 @@ export interface FormCheckLog {
   repsCounted: number;
   /** Balance holds only: how long each hold lasted, in seconds. */
   holds?: number[];
+  /** Walking only: steps a minute. */
+  cadence?: number;
   faults: FormFault[];
   /** Share of camera frames in which the needed body points were visible (0 to 1). */
   usable: number;
