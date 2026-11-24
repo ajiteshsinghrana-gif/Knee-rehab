@@ -24,6 +24,7 @@ import { ZOOM, clampZoom, cropFor, toFullFrame } from '../formcheck/zoom';
 import { lumaOf, setupHint, type SetupHint } from '../formcheck/setup';
 import { COUNT_KEYS, VIEW_KEY, fcs } from '../formcheck/strings';
 import { howTo } from '../formcheck/howto';
+import { repInfo, repRule, stageStrip } from '../formcheck/repinfo';
 import { hasPhone, telHref } from '../contact';
 
 const pickMime = (): string => {
@@ -52,8 +53,29 @@ export interface SetOutcome {
   stop: 'finish' | 'stumble' | 'limit';
 }
 
+/** Start, middle and end pictures with a caption each, and in plain words why that is a full rep. */
+export function RepStages({ kind, lang }: { kind: FormKind; lang: Lang }) {
+  const F = (k: string) => fcs(lang, k);
+  const info = repInfo(lang, kind), strip = stageStrip(kind);
+  const names = ['fcStageStart', 'fcStageMid', 'fcStageEnd'];
+  return (
+    <div className="fc-stages" data-testid="fc-stages">
+      <h4>{F('fcWhyTitle')}</h4>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+        {info.stages.map((cap, i) => (
+          <figure key={i} style={{ margin: 0, textAlign: 'center' }}>
+            {strip && <div role="img" aria-label={`${F(names[i])}: ${cap}`} style={{ width: '100%', aspectRatio: '1 / 1', borderRadius: 10, backgroundColor: '#d7f0ee', backgroundImage: `url(${strip})`, backgroundSize: '300% 100%', backgroundPosition: `${i * 50}% 0` }} />}
+            <figcaption className="tiny"><b>{i + 1}. {F(names[i])}</b><br />{cap}</figcaption>
+          </figure>
+        ))}
+      </div>
+      <p>{repRule(lang, kind)}</p>
+    </div>
+  );
+}
+
 /** What to do: the starting position, then the movement. `steps` adds the four numbered steps (camera, green frame, count-down, move slowly). */
-export function HowTo({ kind, lang, steps }: { kind: FormKind; lang: Lang; steps?: boolean }) {
+export function HowTo({ kind, lang, steps, stages }: { kind: FormKind; lang: Lang; steps?: boolean; stages?: boolean }) {
   const F = (k: string) => fcs(lang, k);
   const h = howTo(lang, kind);
   return (
@@ -61,6 +83,7 @@ export function HowTo({ kind, lang, steps }: { kind: FormKind; lang: Lang; steps
       {steps && <><h3>{F('fcHowTitle')}</h3><ol className="exlist" style={{ listStyle: 'none', paddingLeft: 0 }}>{['fcHow1', 'fcHow2', 'fcHow3', 'fcHow4'].map((k) => <li key={k}>{F(k)}</li>)}</ol></>}
       <p><b>{F('fcStartLbl')}:</b> {h.start}</p>
       <p><b>{F('fcMoveLbl')}:</b> {h.move}</p>
+      {stages && <RepStages kind={kind} lang={lang} />}
     </div>
   );
 }
@@ -132,6 +155,9 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
   const fps = useRef({ t0: 0, n: 0, warned: false });
   const okRunRef = useRef(0);
   const lostRef = useRef(0);
+  /** Nothing counted after a while: why (a body point not seen, or the movement was small) and how close it got. */
+  const [help, setHelp] = useState<{ h: string; pct: number } | null>(null);
+  const helpRef = useRef<{ h: string; pct: number } | null>(null);
   /** Set when the patient cancels a count-down, so it does not restart by itself until they leave and re-enter the position. */
   const autoOff = useRef(false);
   const cueTimer = useRef(0);
@@ -262,6 +288,11 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
           const evs = frame ? analyzer.current.push(frame, now, v.videoWidth / v.videoHeight) : analyzer.current.push([], now);
           onEvents(evs);
           if (!live.current) return;
+          const an = analyzer.current;
+          if (an.repCount === 0 && now - startedAt.current > SETUP.helpAfterSec * 1000) {
+            const h = setupHint(kind, frame, luma.current), pct = Math.round(an.progress * 20) * 5, cur = helpRef.current;
+            if (!cur || cur.h !== h || cur.pct !== pct) { helpRef.current = { h, pct }; setHelp({ h, pct }); }
+          } else if (helpRef.current) { helpRef.current = null; setHelp(null); }
           if (now - startedAt.current > FORM_CHECK.maxSeconds * 1000) { void end('finish'); return; }
         }
       }
@@ -335,7 +366,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
         recTimer.current = window.setTimeout(() => { try { if (r.state !== 'inactive') r.stop(); } catch { /* already stopped */ } }, FORM_CONFIG.maxClipSec * 1000);
       } catch { rec.current = null; }
     }
-    startedAt.current = performance.now();
+    startedAt.current = performance.now(); helpRef.current = null; setHelp(null);
     live.current = true;
     setPhase('live');
   };
@@ -407,6 +438,17 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
         ? <p className="gs-count" aria-live="polite">Recording. The phone's results are shown after you enter yours.</p>
         : <p className="gs-count" aria-live="polite">{F(COUNT_KEYS[kind]?.live || 'fcReps', { n: reps })}</p>)}
       {phase === 'live' && unseen && <p className="hint" role="status">{F('fcUnseen')}</p>}
+      {phase === 'live' && help && (
+        <div className="card fc-help" role="status" aria-live="polite" data-testid="fc-help">
+          <b>{F('fcHelpTitle')}</b>
+          <p>{help.h !== 'fcSetOk' ? `${F('fcHelpCantSee')} ${F(help.h)}` : help.pct > 0 ? F('fcHelpClose', { pct: help.pct }) : F('fcHelpNone')}</p>
+          <p className="tiny"><b>{F('fcSeeLbl')}:</b> {repInfo(lang, kind).see}</p>
+          <p className="tiny"><b>{F('fcHelpPlace')}:</b> {F(VIEW_KEY[KINDS[kind].view])}</p>
+          <p className="tiny"><b>{F('fcHelpRule')}:</b> {repRule(lang, kind)}</p>
+          <RepStages kind={kind} lang={lang} />
+          <p className="tiny">{F('fcHelpIfNot')}</p>
+        </div>
+      )}
       {phase === 'live' && flags.length > 0 && (
         <div className="red" role="alert" data-testid="fc-redflag">
           {flags.map((f) => <p key={f.id}><strong style={{ fontSize: '1.15em' }}>{f.text}</strong></p>)}
@@ -416,7 +458,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, e
       {phase === 'live' && cue && <p className="fc-cue" role="status" aria-live="assertive" data-testid="fc-cue">{cue}</p>}
       {phase === 'setup' && (
         <>
-          <HowTo kind={kind} lang={lang} />
+          <HowTo kind={kind} lang={lang} stages />
           <p className="tiny">{F('fcHow3')}</p>
           <p className="tiny">{F(VIEW_KEY[KINDS[kind].view])}</p>
           <p className="tiny">{F('fcRecWarn')}</p>
@@ -603,9 +645,11 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
         {earlier.length > 0 && <h3>{angleName(kind!)}</h3>}
         {result.stop === 'limit' && <p className="red" role="alert"><strong>{F('fcPause')}</strong></p>}
         {lines.map((x) => <p key={x}>{x}</p>)}
+        {log.repsCounted === 0 && <div className="card" data-testid="fc-norep"><b>{F('fcHelpTitle')}</b><p className="tiny"><b>{F('fcSeeLbl')}:</b> {repInfo(lang, log.kind).see}</p><p className="tiny"><b>{F('fcHelpPlace')}:</b> {F(VIEW_KEY[KINDS[log.kind].view])}</p><RepStages kind={log.kind} lang={lang} /></div>}
         {count && <p className="hint" data-testid="fc-no-tips">{F('fcNoTips')}</p>}
         {a.unreliable ? <p className="hint">{F('fcUnreliable')}</p> : cues.length ? (
           <div className="card">
+            {log.repsCounted > 0 && <p data-testid="fc-allcounted">{F('fcAllCounted')}</p>}
             <b>{F('fcHead')}</b>
             <ul className="exlist">{cues.map((c) => <li key={c}>{c}</li>)}</ul>
           </div>
@@ -671,7 +715,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
       )}
       {mode !== 'form' && <p className="hint" data-testid="fc-no-tips">{F('fcNoTips')}{mode === 'video' ? ` ${F('fcCantCount')}` : ''}</p>}
       {mode !== 'video' && kind && <p className="tiny">{F(VIEW_KEY[KINDS[kind].view])}</p>}
-      {mode !== 'video' && kind && <HowTo kind={kind} lang={lang} steps />}
+      {mode !== 'video' && kind && <HowTo kind={kind} lang={lang} steps stages />}
       {mode !== 'video' && (!hasConsent(patient) ? (
         <div className="card" data-testid="fc-consent">
           <h3>{F('fcConsentTitle')}</h3>

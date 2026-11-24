@@ -103,6 +103,12 @@ export interface KindConfig {
   faults: { id: string; kind: FormFaultKind; limit: number; unit: 'deg' | 'pct' | 'degps' | 'pctps' | 's'; minFrames?: number }[];
 }
 
+/**
+ * Counting is easy on the patient: a rep counts once the movement reaches `upFactor` of the range in each kind's `repUp`, and ends once it comes back to
+ * `downFactor` times `repDown` (never above 0.8 of the way up). A rep is never taken away for form: faults are only tips. NEEDS_PHYSIO_SIGNOFF.
+ */
+export const REP = { upFactor: 0.7, downFactor: 1.4 } as const;
+
 export const FORM_CHECK = {
   /**
    * Only point out what is clearly off. Every fault limit below is multiplied by `limitFactor`, and the fault must last `framesFactor` times as many frames.
@@ -110,7 +116,7 @@ export const FORM_CHECK = {
    */
   gross: { limitFactor: 1.5, framesFactor: 2 },
   /** Landmark must be at least this visible to be used. */
-  minVisibility: 0.5,
+  minVisibility: 0.4,
   /** Smoothing of landmark positions (0 to 1; higher follows the camera faster). */
   smoothing: 0.6,
   /** Frames at rest used to learn the starting position. */
@@ -413,4 +419,4 @@ export const PACE_FAULTS = { fast: { id: 'pace-fast', kind: 'control' as FormFau
  * than this while setting up means the phone is too slow to measure, so the screen offers a video for the physio instead.
  */
 /** autoFrames: held in position this many frames (about 1.3 s) and the countdown starts by itself. lostFrames: out of position this long during the countdown and it goes back to setup. */
-export const SETUP = { darkLuma: 45, slowFps: 7, slowAfterMs: 3000, okFrames: 8, autoFrames: 20, lostFrames: 20 } as const;
+export const SETUP = { darkLuma: 30, slowFps: 7, slowAfterMs: 3000, okFrames: 6, autoFrames: 12, lostFrames: 30, helpAfterSec: 10 } as const;

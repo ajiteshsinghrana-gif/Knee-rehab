@@ -9,7 +9,7 @@
  */
 import { angleAt, type Pt } from '../angle';
 import type { FormFault, FormFaultKind, FormLimit } from '../types';
-import { DEFAULT_TEMPO, DEPTH_KINDS, FORM_CHECK, HAND, HL, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, PACE, PACE_FAULTS, PUMP, PUMP_FAULT, STEP_FAULT, WALK, paceApplies, type FormKind } from './config';
+import { DEFAULT_TEMPO, DEPTH_KINDS, FORM_CHECK, HAND, HL, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, PACE, PACE_FAULTS, PUMP, PUMP_FAULT, REP, STEP_FAULT, WALK, paceApplies, type FormKind } from './config';
 
 export interface Landmark { x: number; y: number; /** 0 to 1: how sure the model is that the point is in view */ v?: number }
 export type Frame = Landmark[];
@@ -77,6 +77,8 @@ export class FormAnalyzer {
   private hist: { s: number; t: number }[] = [];
   private cand: Cand[] = [];
   private reps = 0;
+  /** The biggest movement number seen so far this set (for telling the patient how close they got). */
+  private bestSignal = 0;
   private inRep = false;
   private peak = 0;
   private side: 'l' | 'r' | null = null;
@@ -114,6 +116,8 @@ export class FormAnalyzer {
 
   constructor(readonly kind: FormKind, private limit?: Pick<FormLimit, 'max' | 'min'>, private opts: AnalyzerOptions = {}) {}
 
+  /** How close the movement has come to counting a rep (0 to 1), for the help shown when nothing has counted. */
+  get progress(): number { return Math.min(1, this.bestSignal / (KINDS[this.kind].repUp * REP.upFactor)); }
   /** The tempo in force (seconds per rep), or null when this kind has no pace. */
   get tempo(): number | null {
     if (!paceApplies(this.kind)) return null;
@@ -156,12 +160,14 @@ export class FormAnalyzer {
 
     const cfg = KINDS[this.kind];
     const s = m.signal;
-    // Rep counting: up past repUp, back below repDown.
-    if (!this.inRep && s >= cfg.repUp) { this.inRep = true; this.peak = s; this.holdT0 = tMs; this.stepHx0 = this.lastHx; this.peakSign = this.stepSign; }
+    // Rep counting: up past the (eased) up level, back below the (eased) down level. See REP in config.ts. Form faults never take a rep away.
+    const up = cfg.repUp * REP.upFactor, down = Math.min(cfg.repDown * REP.downFactor, up * 0.8);
+    if (s > this.bestSignal) this.bestSignal = s;
+    if (!this.inRep && s >= up) { this.inRep = true; this.peak = s; this.holdT0 = tMs; this.stepHx0 = this.lastHx; this.peakSign = this.stepSign; }
     else if (this.inRep) {
       if (s >= this.peak) this.peakSign = this.stepSign;
       this.peak = Math.max(this.peak, s);
-      if (s <= cfg.repDown) {
+      if (s <= down) {
         this.inRep = false;
         this.reps++;
         ev.push({ type: 'rep', n: this.reps });

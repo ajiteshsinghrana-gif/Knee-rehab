@@ -620,6 +620,21 @@ def render(name, out_dir):
     return path, imgs
 
 
+def stages(name, imgs, out_dir):
+    """Three still pictures side by side: start, the far point of the movement (the frame that differs most from the start), and back at the finish."""
+    from PIL import ImageChops
+    g0 = imgs[0].convert('L')
+    diffs = [sum(ImageChops.difference(g0, im.convert('L')).histogram()[i] * i for i in range(256)) for im in imgs]
+    mid = max(range(len(imgs)), key=lambda i: diffs[i])
+    end = len(imgs) - 1
+    strip = Image.new('RGB', (3 * imgs[0].width, imgs[0].height))
+    for k, f in enumerate([imgs[0], imgs[mid], imgs[end]]):
+        strip.paste(f, (k * imgs[0].width, 0))
+    path = os.path.join(out_dir, f'{name}.png')
+    strip.quantize(colors=48, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(path, optimize=True)
+    return path
+
+
 def main():
     args = sys.argv[1:]
     sheet = None
@@ -628,10 +643,12 @@ def main():
     names = args or sorted(EX)
     out_dir = os.path.join(os.path.dirname(__file__), '..', 'public', 'media', 'gif')
     os.makedirs(out_dir, exist_ok=True)
+    st_dir = os.path.join(os.path.dirname(__file__), '..', 'public', 'media', 'stages')
+    os.makedirs(st_dir, exist_ok=True)
     tiles = []
     for n in names:
         path, imgs = render(n, out_dir)
-        print(f'{n}: {os.path.getsize(path) // 1024} KB')
+        print(f'{n}: {os.path.getsize(path) // 1024} KB, stages {os.path.getsize(stages(n, imgs, st_dir)) // 1024} KB')
         tiles.append((n, [imgs[0], imgs[len(imgs) // 3], imgs[len(imgs) * 2 // 3]]))
     if sheet:
         cols = 2

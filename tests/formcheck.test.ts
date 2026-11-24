@@ -1,6 +1,7 @@
 import { ZOOM, clampZoom, cropFor, toFullFrame } from '../src/formcheck/zoom';
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { repBand, repInfo, repRule, stageStrip } from '../src/formcheck/repinfo';
 import { makeAllPatients, DEMO_TODAY_LAST } from '../src/demo/seed';
 import { getPack } from '../src/engine/packs';
 import { triage } from '../src/engine/triage';
@@ -1293,7 +1294,7 @@ describe('camera check: pace', () => {
 });
 
 describe('camera check: setup prompts before a set', () => {
-  const side = (o: { facing?: boolean } = {}): Frame => { const f = slr(0); if (o.facing) { f[LM.rShoulder] = { x: f[LM.lShoulder].x, y: f[LM.lShoulder].y - 0.15, v: 1 }; f[LM.rHip] = { x: f[LM.lHip].x, y: f[LM.lHip].y - 0.15, v: 1 }; } return f; };
+  const side = (o: { facing?: boolean } = {}): Frame => { const f = slr(0); if (o.facing) { f[LM.rShoulder] = { x: f[LM.lShoulder].x, y: f[LM.lShoulder].y - 0.22, v: 1 }; f[LM.rHip] = { x: f[LM.lHip].x, y: f[LM.lHip].y - 0.22, v: 1 }; } return f; };
   it('"I can see you" only when the needed body points are all in the picture', () => {
     expect(setupHint('squat', squat(0), 120)).toBe('fcSetOk');
     expect(setupHint('slr', side(), 120)).toBe('fcSetOk');
@@ -1451,5 +1452,51 @@ describe('only gross faults are pointed out', () => {
     const ui = readFileSync('src/ui/FormCheck.tsx', 'utf8');
     expect(ui.match(/<HowTo /g)!.length > 2).toBe(true);
     expect(ui).toContain("F('fcWaitZero')");
+  });
+});
+
+describe('easy counting, position check and rep pictures', () => {
+  it('counts a smaller movement than before, and a rep with a fault is still counted', () => {
+    const half = KINDS.slr.repUp * 0.8; // below the raw limit, above the eased one
+    const r = run('slr', (v) => slr(v), half);
+    expect(r.sum.reps).toBeGreaterThan(0);
+    const bent = run('slr', (v) => slr(v, { kneeBend: v > 10 ? 70 : 0 }), 35);
+    expect(bent.sum.reps).toBeGreaterThan(0);
+    expect(ids(bent.sum)).toContain('slr-knee-bent');
+  });
+  it('the rep band is eased but always has a gap between up and down', () => {
+    for (const k of Object.keys(KINDS) as FormKind[]) { const { up, down } = repBand(k); expect(up, k).toBeLessThan(KINDS[k].repUp + 1e-9); expect(down, k).toBeLessThan(up); expect(down, k).toBeGreaterThan(0); }
+  });
+  it('bridging set-up only asks for the hip, knee and ankle, matching what is measured', () => {
+    const f = slr(0); f[LM.lShoulder] = { x: 0.2, y: 0.5, v: 0 }; f[LM.rShoulder] = { x: 0.2, y: 0.5, v: 0 };
+    expect(setupHint('bridging', f, 120)).toBe('fcSetOk');
+    f[LM.lAnkle] = { ...f[LM.lAnkle], v: 0 }; f[LM.rAnkle] = { ...f[LM.rAnkle], v: 0 };
+    expect(setupHint('bridging', f, 120)).toBe('fcSetStepBack');
+  });
+  it('reports how close a too-small movement came', () => {
+    const a = new FormAnalyzer('slr', undefined, {});
+    let t = 1000;
+    for (let i = 0; i < 12; i++) a.push(slr(0), (t += DT), 1);
+    for (let i = 0; i <= 30; i++) a.push(slr(6 * Math.sin((Math.PI * i) / 30)), (t += DT), 1);
+    expect(a.repCount).toBe(0);
+    expect(a.progress).toBeGreaterThan(0.2);
+    expect(a.progress).toBeLessThan(1);
+  });
+  it('every camera exercise has pictures, captions and a rule in every language, and the strips exist', () => {
+    for (const k of Object.keys(KINDS) as FormKind[]) {
+      for (const l of ['en', 'hi', 'bn'] as const) {
+        const i = repInfo(l, k);
+        expect(i.stages.every((x) => x.length > 3), `${l} ${k} stages`).toBe(true);
+        expect(i.see.length, `${l} ${k} see`).toBeGreaterThan(5);
+        expect(repRule(l, k), `${l} ${k} rule`).not.toMatch(/\{up\}|\{down\}/);
+      }
+      const strip = stageStrip(k);
+      if (strip) expect(existsSync(`public/${strip}`), strip).toBe(true); else expect(k, 'only the shoulder side raise has no picture').toBe('shoulder-abduction');
+    }
+  });
+  it('the screens show the pictures, the help when nothing counts, and tell the patient every rep was counted', () => {
+    const ui = readFileSync('src/ui/FormCheck.tsx', 'utf8');
+    for (const t of ['<RepStages', 'data-testid="fc-help"', 'data-testid="fc-norep"', 'data-testid="fc-allcounted"', 'SETUP.helpAfterSec']) expect(ui, t).toContain(t);
+    expect(readFileSync('scripts/pwa.mjs', 'utf8')).toContain('walk(');
   });
 });
