@@ -19,10 +19,12 @@ const UPPER_VIEWS: FormView[] = ['pendulum', 'armSide', 'back', 'bandFront', 'fo
 const L = { sh: [LM.lShoulder, LM.rShoulder], hip: [LM.lHip, LM.rHip], knee: [LM.lKnee, LM.rKnee], ank: [LM.lAnkle, LM.rAnkle], elb: [LM.lElbow, LM.rElbow], wr: [LM.lWrist, LM.rWrist] } as const;
 
 /** In view: seen clearly and not cut off at the edge of the picture. */
-const inView = (f: Frame, i: number) => { const p = f[i]; return !!p && (p.v ?? 0) >= FORM_CHECK.minVisibility && p.x > 0.01 && p.x < 0.99 && p.y > 0.01 && p.y < 0.99; };
+const inView = (f: Frame, i: number) => { const p = f[i]; return !!p && (p.v ?? 0) >= FORM_CHECK.minVisibility && p.x > 0 && p.x < 1 && p.y > 0 && p.y < 1; };
 
 /** The body points this view needs, for one side (0 left, 1 right). */
-function needed(view: FormView, side: 0 | 1): number[] {
+function needed(view: FormView, side: 0 | 1, kind?: FormKind): number[] {
+  // Bridging is measured from the hip, knee and ankle only, so that is all the set-up asks for (it must match the measuring in analyze.ts).
+  if (kind === 'bridging') return [L.hip[side], L.knee[side], L.ank[side]];
   if (view === 'sideFoot') return [L.hip[side], L.knee[side], L.ank[side]];
   if (UPPER_VIEWS.includes(view)) return [L.sh[side], L.elb[side], L.wr[side], L.hip[side]];
   return [L.sh[side], L.hip[side], L.knee[side], L.ank[side]];
@@ -36,18 +38,20 @@ export function setupHint(kind: FormKind, frame: Frame | null, luma: number | nu
     return hand ? 'fcSetOk' : 'fcSetHand';
   }
   if (!frame || frame.length < 29) return 'fcSetStepBack';
-  const sideOk = (s: 0 | 1) => needed(view, s).every((i) => inView(frame, i));
+  const sideOk = (s: 0 | 1) => needed(view, s, kind).every((i) => inView(frame, i));
   const front = FRONT_VIEWS.includes(view);
   // Facing the phone: both sides are needed. From the side: the side nearest the phone is enough.
   if (front ? !(sideOk(0) && sideOk(1)) : !(sideOk(0) || sideOk(1))) return 'fcSetStepBack';
   // Which way the person faces: how far apart the shoulders look, compared with the length of the trunk.
+  // Lying on the back (bridging, leg raises, heel slides) there is no way to tell which way the person faces, so only the body points matter.
+  if (kind === 'bridging') return 'fcSetOk';
   const ls = frame[LM.lShoulder], rs = frame[LM.rShoulder], lh = frame[LM.lHip], rh = frame[LM.rHip];
   const bothSh = inView(frame, LM.lShoulder) && inView(frame, LM.rShoulder);
   const trunk = Math.hypot((ls.x + rs.x) / 2 - (lh.x + rh.x) / 2, (ls.y + rs.y) / 2 - (lh.y + rh.y) / 2);
   const width = Math.hypot(ls.x - rs.x, ls.y - rs.y);
   if (bothSh && trunk > 0) {
-    if (SIDE_VIEWS.includes(view) && width > 0.45 * trunk) return 'fcSetSide';
-    if (front && width < 0.25 * trunk) return 'fcSetFront';
+    if (SIDE_VIEWS.includes(view) && width > 0.7 * trunk) return 'fcSetSide';
+    if (front && width < 0.15 * trunk) return 'fcSetFront';
   }
   if (front && !bothSh) return 'fcSetFront';
   return 'fcSetOk';

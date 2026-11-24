@@ -596,6 +596,13 @@ The camera opens, the app says how to stand (too close, too dark, turn sideways,
 - Every camera-checked exercise has a plain **starting position** and **movement** in English, Hindi and Bengali (`src/formcheck/howto.ts`), shown before the camera opens, on the camera set-up screen and during the count-down. Four numbered steps explain the flow: camera on, get into position, the frame turns **green**, then the 5 second count-down, and **reps only count after it reaches 0**.
 - The patient is told what to change when something is clearly off (live cue, then the result list). Small differences are not pointed out: every fault limit is multiplied by `FORM_CHECK.gross.limitFactor` (1.5) and must last `framesFactor` (2) times as long; the pace flags only fire for reps under 0.35x or over 3x the tempo. The physio's own per-patient limits are not softened. All are placeholders (NEEDS_PHYSIO_SIGNOFF). Wording is a draft; Hindi and Bengali need a native reader.
 
+### Easier for the patient (2026-11-25)
+
+- **Looser position check.** Green needs only the body points the exercise is measured from (bridging: hip, knee, ankle); the "turn sideways / face the phone" prompts only fire when clearly wrong; darkness limit, visibility limit and edge margin are lower; the count-down starts after about 0.8 s in position and only cancels after about 2 s out of it.
+- **Easier counting.** `REP` in `src/formcheck/config.ts`: a rep counts at 70% of each exercise's `repUp` and ends at 1.4x `repDown` (kept below 80% of the way up). A rep is never taken away for form; faults are tips. The result says "Every rep you did was counted" before the tips.
+- **When nothing counts.** After 10 s with no rep (`SETUP.helpAfterSec`), the live screen says what is wrong (a body point not seen, or "you got about N% of the way to a rep"), which body points the phone needs, where to put the phone, and the exact rule for a rep with the real numbers. The result screen shows the same when 0 reps were counted.
+- **Pictures.** `public/media/stages/<exercise>.png` (start, middle, end side by side, made by `scripts/make-exercise-gifs.py`) with captions and a "why this is a full rep" sentence (`src/formcheck/repinfo.ts`, English/Hindi/Bengali) on the intro screen, camera set-up and the help panel. Shoulder side raise has no strip (not in the library). Draft wording and numbers: physio sign-off needed.
+
 ### Camera check safety round (2026-11-24)
 
 - **On by default (changed 2026-11-24, second round).** Every demo and new patient has the camera check on. The physio can turn it off per patient with the switch at the **top of the Plan tab**; the switch is in the audit log and travels to the patient's phone. The phone cannot change it itself.

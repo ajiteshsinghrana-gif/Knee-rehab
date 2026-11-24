@@ -22,6 +22,14 @@ describe('exercise demo GIFs', () => {
       expect(b.includes(Buffer.from('NETSCAPE2.0')), `${g} loops`).toBe(true);
     }
   });
+  it('every library exercise has a start / middle / end picture strip, and the offline cache includes it', () => {
+    for (const e of LIBRARY) {
+      const f = `public/media/stages/${e.id}.png`;
+      expect(existsSync(f), f).toBe(true);
+      expect(statSync(f).size, f).toBeLessThan(40_000);
+    }
+    expect((precacheList('public') as string[]).some((f) => f.startsWith('media/stages/'))).toBe(true);
+  });
   it('the offline cache includes sub-folders such as media/gif', () => {
     const list: string[] = precacheList('public');
     expect(list.some((f) => f.startsWith('media/gif/'))).toBe(true);
