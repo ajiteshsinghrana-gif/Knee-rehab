@@ -10,9 +10,9 @@ import type { FormFaultKind } from '../types';
 
 export type FormKind =
   | 'slr' | 'squat' | 'shoulder-abduction'
-  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise';
+  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance';
 /** Where the phone goes: side on lying down, side on standing, facing the person standing, or facing the person seated. */
-export type FormView = 'side' | 'sideStand' | 'front' | 'seated';
+export type FormView = 'side' | 'sideStand' | 'front' | 'seated' | 'balance';
 export const SIGNOFF = 'NEEDS_PHYSIO_SIGNOFF' as const;
 
 /** MediaPipe Pose Landmarker point numbers (33 points). */
@@ -38,6 +38,7 @@ export const KIND_EXERCISES: Record<FormKind, string[]> = {
   'hip-abduction': ['hip-abduction'],
   bridging: ['bridging'],
   'calf-raise': ['calf-raises'],
+  balance: ['balance'],
 };
 export const formKindFor = (exerciseId: string): FormKind | null => {
   for (const k of Object.keys(KIND_EXERCISES) as FormKind[]) if (KIND_EXERCISES[k].includes(exerciseId)) return k;
@@ -189,6 +190,15 @@ export const KINDS: Record<FormKind, KindConfig> = {
       { id: 'calf-lean', kind: 'compensation', limit: 10, unit: 'deg' },
       { id: 'calf-sway', kind: 'stability', limit: 10, unit: 'pct' },
       { id: 'calf-fast', kind: 'control', limit: 40, unit: 'pctps', minFrames: 3 },
+    ],
+  },
+  // Facing the camera, standing near a support. One foot is lifted and held. Signal: how high the lifted foot comes off the floor, as a share of leg length.
+  balance: {
+    signal: 'pct', view: 'balance', hint: 'foot lift as % of leg length', repUp: 8, repDown: 3, minFrames: 6,
+    faults: [
+      { id: 'bal-wobble', kind: 'stability', limit: 30, unit: 'pctps', minFrames: 3 },  // the hips jerk sideways faster than 30% of leg length a second
+      { id: 'bal-lean', kind: 'compensation', limit: 10, unit: 'deg' },
+      { id: 'bal-arms', kind: 'compensation', limit: 50, unit: 'deg' },  // an arm held out more than 50 degrees from the body to balance
     ],
   },
 };

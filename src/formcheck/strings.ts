@@ -12,6 +12,7 @@ const en: Dict = {
   fcPickEx: 'Which exercise?',
   fcViewSide: 'Prop the phone up about 2 to 3 metres away. It should see you from the side, lying down, with your whole body in the picture and good light.',
   fcViewSideStand: 'Prop the phone up about 2 to 3 metres away. It should see you from the side, standing, with your whole body in the picture and good light. Start standing still, arms by your sides.',
+  fcViewBalance: 'Prop the phone up about 2 to 3 metres away, facing you. Stand next to a wall or a sturdy chair you can grab if you wobble. Start standing still on both feet, arms by your sides. Then lift one foot and hold it.',
   fcViewSeated: 'Prop the phone up about 2 to 3 metres away, facing you. Sit on a firm chair with your whole body in the picture, including your feet, and good light. Start sitting still.',
   fcViewFront: 'Prop the phone up about 2 to 3 metres away, facing you. Stand with your whole body in the picture and good light. Start standing still, arms by your sides.',
   fcConsentTitle: 'Before the camera starts',
@@ -93,6 +94,9 @@ const en: Dict = {
   'fault-calf-lean': 'you leaned to one side',
   'fault-calf-sway': 'your balance wobbled',
   'fault-calf-fast': 'the rise was fast',
+  'fault-bal-wobble': 'you wobbled while balancing',
+  'fault-bal-lean': 'you leaned to one side',
+  'fault-bal-arms': 'your arms went out to help you balance',
   'fault-limit-max': 'you went past the limit your physio set',
   'fault-limit-min': 'you did not reach the range your physio set',
   fcNoticed: 'The camera noticed that',
@@ -105,6 +109,7 @@ const hi: Dict = {
   fcPickEx: 'कौन सा व्यायाम?',
   fcViewSide: 'फ़ोन को लगभग 2 से 3 मीटर दूर टिकाएँ। वह आपको बगल से, लेटे हुए, पूरे शरीर के साथ और अच्छी रोशनी में देखे।',
   fcViewSideStand: 'फ़ोन को लगभग 2 से 3 मीटर दूर टिकाइए। वह आपको बगल से, खड़े हुए देखे, पूरा शरीर तस्वीर में हो और रोशनी अच्छी हो। शुरू में स्थिर खड़े रहें, बाँहें बगल में।',
+  fcViewBalance: 'फ़ोन को लगभग 2 से 3 मीटर दूर, आपके सामने टिकाइए। दीवार या मज़बूत कुर्सी के पास खड़े हों, ताकि डगमगाने पर पकड़ सकें। शुरू में दोनों पैरों पर स्थिर खड़े रहें, बाँहें बगल में। फिर एक पैर उठाकर रोकें।',
   fcViewSeated: 'फ़ोन को लगभग 2 से 3 मीटर दूर, आपके सामने टिकाइए। मज़बूत कुर्सी पर बैठें, पैरों समेत पूरा शरीर तस्वीर में हो और रोशनी अच्छी हो। शुरू में स्थिर बैठे रहें।',
   fcViewFront: 'फ़ोन को लगभग 2 से 3 मीटर दूर, अपने सामने टिकाएँ। पूरे शरीर के साथ अच्छी रोशनी में खड़े हों। शुरू में स्थिर खड़े रहें, बाँहें बगल में।',
   fcConsentTitle: 'कैमरा शुरू करने से पहले',
@@ -185,6 +190,9 @@ const hi: Dict = {
   'fault-calf-lean': 'आप एक तरफ़ झुके',
   'fault-calf-sway': 'आपका संतुलन डगमगाया',
   'fault-calf-fast': 'ऊपर उठना तेज़ था',
+  'fault-bal-wobble': 'संतुलन बनाते समय आप डगमगाए',
+  'fault-bal-lean': 'आप एक तरफ़ झुके',
+  'fault-bal-arms': 'संतुलन के लिए आपकी बाँहें बाहर गईं',
   'fault-limit-max': 'आप फ़िज़ियो की तय सीमा से आगे गए',
   'fault-limit-min': 'आप फ़िज़ियो की तय सीमा तक नहीं पहुँचे',
   fcNoticed: 'कैमरे ने देखा कि',
@@ -197,6 +205,7 @@ const bn: Dict = {
   fcPickEx: 'কোন ব্যায়াম?',
   fcViewSide: 'ফোনটি প্রায় 2 থেকে 3 মিটার দূরে দাঁড় করিয়ে রাখুন। এটি যেন আপনাকে পাশ থেকে, শুয়ে থাকা অবস্থায়, পুরো শরীর-সহ ও ভালো আলোয় দেখে।',
   fcViewSideStand: 'ফোনটি প্রায় ২ থেকে ৩ মিটার দূরে ঠেস দিয়ে রাখুন। এটি যেন আপনাকে পাশ থেকে, দাঁড়ানো অবস্থায় দেখে, পুরো শরীর ছবিতে থাকে এবং আলো ভালো হয়। শুরুতে স্থির দাঁড়ান, হাত দুটি পাশে রাখুন।',
+  fcViewBalance: 'ফোনটি প্রায় ২ থেকে ৩ মিটার দূরে, আপনার দিকে মুখ করে ঠেস দিয়ে রাখুন। দেয়াল বা শক্ত চেয়ারের পাশে দাঁড়ান, যাতে টললে ধরতে পারেন। শুরুতে দুই পায়ে স্থির দাঁড়ান, হাত দুটি পাশে রাখুন। তারপর এক পা তুলে ধরে রাখুন।',
   fcViewSeated: 'ফোনটি প্রায় ২ থেকে ৩ মিটার দূরে, আপনার দিকে মুখ করে ঠেস দিয়ে রাখুন। শক্ত চেয়ারে বসুন, পা সহ পুরো শরীর ছবিতে থাকে এবং আলো ভালো হয়। শুরুতে স্থির বসে থাকুন।',
   fcViewFront: 'ফোনটি প্রায় 2 থেকে 3 মিটার দূরে, আপনার সামনে দাঁড় করিয়ে রাখুন। পুরো শরীর ছবিতে রেখে ভালো আলোয় দাঁড়ান। শুরুতে স্থির দাঁড়ান, হাত দুই পাশে।',
   fcConsentTitle: 'ক্যামেরা চালু করার আগে',
@@ -277,6 +286,9 @@ const bn: Dict = {
   'fault-calf-lean': 'আপনি এক পাশে ঝুঁকেছিলেন',
   'fault-calf-sway': 'আপনার ভারসাম্য টলেছিল',
   'fault-calf-fast': 'ওঠা দ্রুত ছিল',
+  'fault-bal-wobble': 'ভারসাম্য রাখার সময় আপনি টলেছিলেন',
+  'fault-bal-lean': 'আপনি এক পাশে ঝুঁকেছিলেন',
+  'fault-bal-arms': 'ভারসাম্যের জন্য আপনার হাত দুটি বাইরে গিয়েছিল',
   'fault-limit-max': 'আপনি ফিজিওর ঠিক করা সীমা ছাড়িয়ে গিয়েছিলেন',
   'fault-limit-min': 'আপনি ফিজিওর ঠিক করা সীমা পর্যন্ত পৌঁছাননি',
   fcNoticed: 'ক্যামেরা লক্ষ করেছে যে',
@@ -325,6 +337,9 @@ export const FAULT_PHYSIO: Record<string, string> = {
   'calf-lean': 'Trunk leaned sideways during the heel raise',
   'calf-sway': 'Hips swayed sideways (share of leg length)',
   'calf-fast': 'Heel raise faster than the default speed limit',
+  'bal-wobble': 'Sudden sideways movement of the hips while on one leg (share of leg length per second)',
+  'bal-lean': 'Trunk leaned from its starting position while on one leg',
+  'bal-arms': 'An arm held out from the body to balance (degrees from the body)',
   'limit-max': 'Went past the limit you set for this patient',
   'limit-min': 'Did not reach the range you set for this patient',
 };
@@ -334,4 +349,4 @@ export const KIND_LABEL: Record<string, string> = {
 export const UNIT_LABEL: Record<string, string> = { deg: '°', pct: '%', degps: '°/s', pctps: '%/s' };
 
 /** Which wording tells the patient where to put the phone, per camera view. */
-export const VIEW_KEY: Record<'side' | 'sideStand' | 'front' | 'seated', string> = { side: 'fcViewSide', sideStand: 'fcViewSideStand', front: 'fcViewFront', seated: 'fcViewSeated' };
+export const VIEW_KEY: Record<'side' | 'sideStand' | 'front' | 'seated' | 'balance', string> = { side: 'fcViewSide', sideStand: 'fcViewSideStand', front: 'fcViewFront', seated: 'fcViewSeated', balance: 'fcViewBalance' };

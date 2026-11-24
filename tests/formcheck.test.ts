@@ -475,6 +475,37 @@ function heels(rise: number, o: { lean?: number; sway?: number } = {}): Frame {
   return f;
 }
 
+/** Front view, standing: the left foot lifts by `lift` (share of leg length). Hips can jerk sideways, arms can go out, the trunk can lean. */
+function oneLeg(lift: number, o: { jerk?: number; arms?: boolean; lean?: number } = {}): Frame {
+  const f = blank();
+  const leg = 0.4, dx = Math.tan(rad(o.lean ?? 0)) * 0.25, hx = (o.jerk ?? 0) * leg;
+  f[LM.lHip] = { x: 0.45 + hx, y: 0.5, v: 1 }; f[LM.rHip] = { x: 0.55 + hx, y: 0.5, v: 1 };
+  f[LM.lKnee] = { x: 0.44, y: 0.7, v: 1 }; f[LM.rKnee] = { x: 0.56, y: 0.7, v: 1 };
+  f[LM.lAnkle] = { x: 0.43, y: 0.9 - lift * leg, v: 1 }; f[LM.rAnkle] = { x: 0.57, y: 0.9, v: 1 };
+  f[LM.lShoulder] = { x: 0.42 + hx + dx, y: 0.25, v: 1 }; f[LM.rShoulder] = { x: 0.58 + hx + dx, y: 0.25, v: 1 };
+  f[LM.lWrist] = o.arms ? { x: 0.2, y: 0.27, v: 1 } : { x: 0.41, y: 0.5, v: 1 };
+  f[LM.rWrist] = o.arms ? { x: 0.8, y: 0.27, v: 1 } : { x: 0.59, y: 0.5, v: 1 };
+  return f;
+}
+
+describe('camera form check: balance', () => {
+  it('counts each held foot lift, and flags nothing for a steady hold', () => {
+    const { sum } = run('balance', (v) => oneLeg(v / 100), 20);
+    expect(sum.reps).toBe(5);
+    expect(sum.faults).toEqual([]);
+  });
+  it('flags a wobble (hips jerking sideways) as a stability fault that asks the patient to pause', () => {
+    const { sum, events } = run('balance', (v, i) => oneLeg(v / 100, { jerk: v > 8 ? (Math.floor(i / 4) % 2 ? 0.1 : -0.1) : 0 }), 20);
+    expect(sum.faults.find((x) => x.id === 'bal-wobble')?.kind).toBe('stability');
+    expect(events.some((e) => e.type === 'pause')).toBe(true);
+  });
+  it('flags arms held out to balance and a leaning trunk, but not while both feet are down', () => {
+    expect(ids(run('balance', (v) => oneLeg(v / 100, { arms: v > 8 }), 20).sum)).toContain('bal-arms');
+    expect(ids(run('balance', (v) => oneLeg(v / 100, { lean: v > 8 ? 16 : 0 }), 20).sum)).toContain('bal-lean');
+    expect(ids(run('balance', (v) => oneLeg(v / 100, { arms: true }), 0).sum)).not.toContain('bal-arms');
+  });
+});
+
 describe('camera form check: the other exercises', () => {
   it('knee bend and straighten (heel slides, gentle knee movement): counts reps, flags a rolled trunk and a fast slide', () => {
     const clean = run('knee-flex', (v) => kneeFlex(v), 70);

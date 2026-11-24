@@ -159,6 +159,7 @@ export class FormAnalyzer {
       case 'hip-abduction': return this.mHipAbd(f);
       case 'bridging': return this.mBridge(f);
       case 'calf-raise': return this.mCalf(f);
+      case 'balance': return this.mBalance(f);
     }
   }
 
@@ -324,6 +325,33 @@ export class FormAnalyzer {
     return { ok: true, signal, faults: {
       'bridge-feet': signal > 3 ? (dist(A, b.ankles![0]) / b.leg) * 100 : null,
       'bridge-fast': signal > 3 ? spd : null,
+    } };
+  }
+
+  /** Front view, standing on one leg: a foot is lifted and held. Counts each lift as one hold; judges the wobble, the lean and the arms. */
+  private mBalance(f: Landmark[]): Measure {
+    if (!this.seen(f, LM.lHip, LM.rHip, LM.lAnkle, LM.rAnkle)) return { ok: false, signal: 0, faults: {} };
+    const lH = this.pt(f, LM.lHip), rH = this.pt(f, LM.rHip), lA = this.pt(f, LM.lAnkle), rA = this.pt(f, LM.rAnkle);
+    const mh = mid(lH, rH);
+    const leg = (dist(lH, lA) + dist(rH, rA)) / 2;
+    if (leg < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const shoulders = this.seen(f, LM.lShoulder, LM.rShoulder);
+    const ms = shoulders ? mid(this.pt(f, LM.lShoulder), this.pt(f, LM.rShoulder)) : null;
+    const trunk = ms ? Math.atan2(ms.x - mh.x, -(ms.y - mh.y)) * RAD : 0;
+    const b = this.base;
+    if (!this.learn({ mh, lA, rA, leg, trunk })) return { ok: true, signal: 0, faults: {} };
+    const signal = (Math.max(b.ankles![0].y - lA.y, b.ankles![1].y - rA.y) / b.leg) * 100;
+    const spd = this.speed(((mh.x - b.hipX) / b.leg) * 100);
+    let arms: number | null = null;
+    if (shoulders && this.seen(f, LM.lWrist, LM.rWrist)) {
+      const a = [angleAt(lH, this.pt(f, LM.lShoulder), this.pt(f, LM.lWrist)), angleAt(rH, this.pt(f, LM.rShoulder), this.pt(f, LM.rWrist))].filter((x): x is number => x !== null);
+      arms = a.length ? Math.max(...a) : null;
+    }
+    const rest = KINDS.balance.repDown;
+    return { ok: true, signal, faults: {
+      'bal-wobble': signal > rest ? spd : null,
+      'bal-lean': ms && signal > rest ? turn(trunk, b.trunk) : null,
+      'bal-arms': signal > rest ? arms : null,
     } };
   }
 
