@@ -64,6 +64,8 @@ export function exportMyData(p: Patient, packName: string, nowMs: number) {
     consent: p.consent ?? null,
     dailyCheckIns: p.daily,
     guidedSessions: p.sessions ?? [],
+    cameraFormChecks: (p.formChecks ?? []).map((c) => ({ date: c.date, exercise: c.exerciseId, repsCounted: c.repsCounted, measuredFaults: c.faults, cameraCouldSeeEnough: c.reliable, askedToPause: c.paused })),
+    cameraConsent: p.formCheckConsent ?? null,
     videoRequests: (p.formRequests ?? []).map((r) => ({ sent: r.at, exercise: r.exerciseId, yourNote: r.note, consentGiven: r.consent, videoDeleted: r.clipGone ?? null, videoStoredUntil: r.clip?.deleteAfter ?? null, physioReply: r.reply ? { at: r.reply.at, text: r.reply.text, points: r.reply.points } : null })),
     periodicEntries: p.periodic,
     changesToYourPlan: p.notices.map((n) => ({ at: n.at, changes: n.changes })),

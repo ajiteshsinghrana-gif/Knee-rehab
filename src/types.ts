@@ -336,7 +336,38 @@ export interface FormRequest {
   reply?: FormReply;
   /** The patient has read the reply (patient's phone sets it). */
   replySeenAt?: string;
+  /** Set when the camera form check raised this request itself (rule F1 or a pause). Numbers only; the clip is optional. */
+  auto?: { checkId: string; reason: 'F1' | 'PAUSE'; faults: string[] };
 }
+
+// ---------- camera form check ----------
+export type FormFaultKind = 'posture' | 'compensation' | 'stability' | 'range' | 'control' | 'precaution';
+/** One repeated fault seen in one camera check. Measured numbers only: no diagnosis. */
+export interface FormFault { id: string; kind: FormFaultKind; /** 1-based reps it was seen in */ reps: number[]; peak: number; unit: 'deg' | 'pct' | 'degps' | 'pctps'; firstSec: number }
+export interface FormCheckLog {
+  id: string;
+  date: string;
+  startedAt: number;
+  endedAt: number;
+  exerciseId: string;
+  /** Movement type used for the measurement (formcheck/config.ts). */
+  kind: string;
+  repsCounted: number;
+  faults: FormFault[];
+  /** Share of camera frames in which the needed body points were visible (0 to 1). */
+  usable: number;
+  /** False when the camera could not see enough to judge. Then nothing is flagged and the patient is asked to try again. */
+  reliable: boolean;
+  /** The check told the patient to pause (a loss of balance or a limit set by the physio was crossed). */
+  paused: boolean;
+  answeredBy?: AnsweredBy;
+  /** Id of the FormRequest this check raised, when it did. */
+  requestId?: string;
+  /** Limit in force when the check was done. */
+  limit?: FormLimit;
+}
+/** The physio's own range limit for an exercise in the camera check. `max` crossing makes the phone ask the patient to pause. */
+export interface FormLimit { max?: number; min?: number; at: string; by: string }
 
 // ---------- patient data ----------
 export type AnsweredBy = 'patient' | 'caregiver';
@@ -411,6 +442,12 @@ export interface Patient {
   sessions?: SessionLog[];
   /** Form-check video requests and the physio's replies. */
   formRequests?: FormRequest[];
+  /** Camera form checks the patient did (measured on the phone; kept to the last 60). Display and review only: never feeds triage. */
+  formChecks?: FormCheckLog[];
+  /** The patient's consent for the camera form check. Patient's phone only. */
+  formCheckConsent?: { by: AnsweredBy; at: string; version: string };
+  /** Limits the physio set per exercise for the camera form check, in the unit of that exercise (see formcheck/config.ts). Physio-owned. */
+  formLimits?: Record<string, FormLimit>;
   anchorDate: string; // surgery date
   currentPhase: string; // phase id
   phaseStartDate: string;

@@ -8,6 +8,7 @@ import { clockMs, getState, updatePatient } from '../store';
 import { physioClipUrl } from '../sync/engine';
 import { deleteClipNow, purgeExpired } from '../forms/purge';
 import { PHYSIO } from '../engine/plan';
+import { AutoSummary } from './FormCheckCard';
 
 export function FormReview({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
   const reqs = [...(p.formRequests ?? [])].reverse();
@@ -15,7 +16,7 @@ export function FormReview({ patient: p, pack, now }: { patient: Patient; pack: 
   if (!reqs.length) return null;
   return (
     <div className="card" data-testid="form-review">
-      <h3>Form-check videos <small>(patient asked for help with an exercise; review within {reviewHours(pack)} h, the protocol's review time. Not for warning signs.)</small></h3>
+      <h3>Form-check videos and camera checks <small>(patient asked for help with an exercise, or the camera form check raised it; review within {reviewHours(pack)} h, the protocol's review time. Not for warning signs.)</small></h3>
       {reqs.map((r) => <One key={r.id} r={r} p={p} pack={pack} now={now} />)}
     </div>
   );
@@ -39,6 +40,7 @@ function One({ r, p, pack, now }: { r: FormRequest; p: Patient; pack: ProtocolPa
     <details open={!r.reply} data-testid="form-one">
       <summary><b>{exerciseName(r.exerciseId, 'en')}</b> · {r.at.slice(0, 10)} {r.reply ? '· replied' : <b className="err">· waiting</b>}{overdue && <span className="overdue">Overdue</span>}{r.via === 'whatsapp' ? ' (WhatsApp)' : ''}</summary>
       {r.note && <p>“{r.note}”</p>}
+      <AutoSummary patient={p} r={r} />
       <p className="tiny">Consent given by the {r.consent.by} on {r.consent.at.slice(0, 10)} (wording {r.consent.version}).</p>
       {r.clip ? (
         r.clip.where === 'cloud' ? (
@@ -47,7 +49,7 @@ function One({ r, p, pack, now }: { r: FormRequest; p: Patient; pack: ProtocolPa
             {err && <p className="err" role="alert">{err}</p>}
           </>
         ) : <p className="tiny">The clip is only on the patient's phone (video sending was not available). Ask to see it at the next visit.</p>
-      ) : r.clipGone ? <p className="tiny">Clip deleted {r.clipGone.slice(0, 10)}.</p> : <p className="tiny">Sent without a video.</p>}
+      ) : r.clipGone ? <p className="tiny">Clip deleted {r.clipGone.slice(0, 10)}.</p> : <p className="tiny">{r.auto ? 'Numbers only: the patient has not sent a video of this set.' : 'Sent without a video.'}</p>}
       {r.clip && <p className="tiny">Deleted automatically on {r.clip.deleteAfter}.</p>}
       {r.reply ? (
         <div className="reviewed"><b>Your reply</b> ({r.reply.at.slice(0, 10)}){r.reply.points.length > 0 && <ul>{r.reply.points.map((c) => <li key={c}>{CUES.find((x) => x.id === c)?.en}</li>)}</ul>}{r.reply.text && <p>{r.reply.text}</p>}</div>

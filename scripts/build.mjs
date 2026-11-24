@@ -1,6 +1,6 @@
 // Builds the static site into docs/ (GitHub Pages serves this folder only).
 import { build } from 'esbuild';
-import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { writeServiceWorker } from './pwa.mjs';
 
 mkdirSync('docs', { recursive: true });
@@ -17,6 +17,8 @@ for (const f of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {
   const src = `node_modules/pdfjs-dist/build/${f}`;
   if (existsSync(src)) copyFileSync(src, `docs/vendor/${f}`); else console.warn(`warning: ${src} not found, PDF import will be unavailable`);
 }
+// Optional offline model for the camera form check (README, "Camera form check"): copied only if the files were added.
+if (existsSync('public/mediapipe')) cpSync('public/mediapipe', 'docs/mediapipe', { recursive: true });
 mkdirSync('docs/media', { recursive: true });
 for (const f of readdirSync('public/media')) copyFileSync(`public/media/${f}`, `docs/media/${f}`);
 // Installable + offline (Phase 7.3): manifest and icons, then the service worker, which must be written LAST because its version is a hash of everything above.

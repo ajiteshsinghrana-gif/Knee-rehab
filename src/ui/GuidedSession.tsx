@@ -10,6 +10,8 @@ import { speak, speakSupported } from '../voice/speak';
 import { DemoButton } from './Demo';
 import { ss } from '../session/strings';
 import { SESSION_CONFIG } from '../session/config';
+import { formKindFor } from '../formcheck/config';
+import { fcs } from '../formcheck/strings';
 import {
   addSession, answerPain, begin, doRep, doseText, encouragement, endRest, exerciseFinished, markStruggling, planSteps,
   startSession, stopExercise, toSessionLog, undoRep, unitsPerSet, type SState,
@@ -17,11 +19,13 @@ import {
 
 const SKIP_EMOJI: Record<string, string> = { pain: '😣', fear: '😨', time: '⏰', access: '🚫', understand: '❓' };
 
-export function GuidedSession({ patient, pack, lang, onExit, onNeedHelp }: {
+export function GuidedSession({ patient, pack, lang, onExit, onNeedHelp, onFormCheck }: {
   patient: Patient; pack: ProtocolPack; lang: Lang;
   onExit: (toCheckIn: boolean) => void;
   /** Opens the video request for this exercise. */
   onNeedHelp?: (exerciseId: string) => void;
+  /** Opens the camera form check for this exercise (only offered for exercises the camera can measure). */
+  onFormCheck?: (exerciseId: string) => void;
 }) {
   const S = (k: string, p?: Record<string, string | number>) => ss(lang, k, p);
   const T = (k: string, p?: Record<string, string | number>) => t(lang, k, p);
@@ -144,6 +148,9 @@ export function GuidedSession({ patient, pack, lang, onExit, onNeedHelp }: {
       </div>
 
       {s.phase === 'ready' && <button className="big primary" onClick={() => act(begin)}>{S('sBegin')}</button>}
+      {s.phase === 'ready' && onFormCheck && formKindFor(step.exerciseId) && (
+        <button type="button" className="big secondary" data-testid="session-formcheck" onClick={() => { save(); onFormCheck(step.exerciseId); }}>{fcs(lang, 'fcHomeBtn')}</button>
+      )}
 
       {s.phase === 'work' && !stopping && (
         <>
