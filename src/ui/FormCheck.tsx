@@ -37,7 +37,8 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
   const [err, setErr] = useState('');
   const [reps, setReps] = useState(0);
   const [unseen, setUnseen] = useState(false);
-  const [paused, setPaused] = useState(false);
+  /** Red flags hit in the last few seconds, each named. The camera check keeps running while they show. */
+  const [flags, setFlags] = useState<{ id: string; text: string }[]>([]);
   const [noticed, setNoticed] = useState('');
   const [result, setResult] = useState<Result | null>(null);
   const [clip, setClip] = useState<Blob | null>(null);
@@ -64,6 +65,14 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
   };
   useEffect(() => () => { stopCamera(); pose.current?.close(); pose.current = null; try { rec.current?.stop(); } catch { /* not recording */ } }, []);
 
+  const flagTimers = useRef(new Map<string, number>());
+  const showFlag = (id: string, text: string) => {
+    setFlags((cur) => [...cur.filter((f) => f.id !== id), { id, text }]);
+    window.clearTimeout(flagTimers.current.get(id));
+    flagTimers.current.set(id, window.setTimeout(() => setFlags((cur) => cur.filter((f) => f.id !== id)), 7000));
+  };
+  const clearFlags = () => { flagTimers.current.forEach((t) => window.clearTimeout(t)); flagTimers.current.clear(); setFlags([]); };
+
   const draw = (frame: ReturnType<Pose['detect']>) => {
     const c = canvas.current, v = video.current;
     if (!c || !v) return;
@@ -85,11 +94,18 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
       if (e.type === 'rep') setReps(e.n);
       else if (e.type === 'unseen') setUnseen(true);
       else if (e.type === 'seen') setUnseen(false);
-      else if (e.type === 'fault') { setNoticed(`${F('fcNoticed')} ${F(`fault-${e.id}`)}`); setTimeout(() => setNoticed(''), 4000); }
+      else if (e.type === 'fault') {
+        if (FORM_CHECK.pauseOn.includes(e.kind)) continue; // a red flag with the same fault is shown instead
+        setNoticed(`${F('fcNoticed')} ${F(`fault-${e.id}`)}`); setTimeout(() => setNoticed(''), 4000);
+      }
       else if (e.type === 'pause') {
-        setPaused(true);
+        const lim = limitFor(patient, ex);
+        const sym = e.unit === 'deg' ? '°' : '%';
+        const nums = e.id === 'limit-max' && lim?.max !== undefined ? ` ${F('fcLimitNums', { got: `${e.value}${sym}`, max: `${lim.max}${sym}` })}` : '';
+        const text = `${F('fcRedFlag')} ${F(`fault-${e.id}`)}.${nums}`;
+        showFlag(e.id, text);
         try { navigator.vibrate?.(300); } catch { /* not supported */ }
-        if (speakSupported(lang)) speak(F('fcPause'), lang);
+        if (speakSupported(lang)) speak(text, lang);
       }
     }
   };
@@ -142,7 +158,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     if (!kind || !ready) return;
     const lim = limitFor(patient, ex);
     analyzer.current = new FormAnalyzer(kind, lim ? { max: lim.max, min: lim.min } : undefined);
-    setReps(0); setUnseen(false); setPaused(false); setNoticed('');
+    setReps(0); setUnseen(false); clearFlags(); setNoticed('');
     chunks.current = []; recMime.current = '';
     if (stream.current && typeof MediaRecorder !== 'undefined') {
       try {
@@ -171,7 +187,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     live.current = false;
     const summary = analyzer.current.finish();
     const blob = await stopRecording();
-    stopCamera();
+    stopCamera(); clearFlags();
     const now = clockMs(getState());
     const iso = new Date(now).toISOString();
     const lim = limitFor(patient, ex);
@@ -256,7 +272,12 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
         {stage === 'live' && <p className="gs-count" aria-live="polite">{F('fcReps', { n: reps })}</p>}
         {stage === 'live' && unseen && <p className="hint" role="status">{F('fcUnseen')}</p>}
         {stage === 'live' && noticed && <p className="gs-msg" role="status">{noticed}</p>}
-        {paused && <div className="red" role="alert" data-testid="fc-pause"><strong>{F('fcPause')}</strong></div>}
+        {flags.length > 0 && (
+          <div className="red" role="alert" data-testid="fc-pause">
+            {flags.map((f) => <p key={f.id}><strong>{f.text}</strong></p>)}
+            <small>{F('fcRedFlagKeep')}</small>
+          </div>
+        )}
         {stage === 'camera' && (
           <>
             <p className="hint">{F(kind && KINDS[kind].view === 'side' ? 'fcViewSide' : 'fcViewFront')}</p>

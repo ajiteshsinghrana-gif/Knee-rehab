@@ -134,6 +134,17 @@ describe('camera form check: counting and measuring', () => {
     expect(events.some((e) => e.type === 'pause')).toBe(true);
     expect(sum.paused).toBe(true);
   });
+  it('a red flag names what was hit and the check keeps counting and measuring afterwards', () => {
+    const { sum, events } = run('squat', (v) => squat(v / 100, { footShift: v > 6 ? 0.25 : 0 }), 25);
+    const flag = events.find((e) => e.type === 'pause');
+    expect(flag).toMatchObject({ type: 'pause', id: 'squat-balance', unit: 'pct' });
+    expect((flag as { value: number }).value).toBeGreaterThan(15);
+    // Nothing stops: all five reps are still counted after the first flag, and the flag comes back for a later rep.
+    const at = events.findIndex((e) => e.type === 'pause');
+    expect(events.slice(at + 1).some((e) => e.type === 'rep')).toBe(true);
+    expect(sum.reps).toBe(5);
+    expect(events.filter((e) => e.type === 'pause').length).toBeGreaterThan(1);
+  });
   it('counts shoulder abduction and measures a bent elbow', () => {
     const clean = run('shoulder-abduction', (v) => abd(v), 80);
     expect(clean.sum.reps).toBe(5);

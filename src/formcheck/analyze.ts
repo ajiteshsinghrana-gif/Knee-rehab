@@ -17,7 +17,8 @@ export type Frame = Landmark[];
 export type FormEvent =
   | { type: 'rep'; n: number }
   | { type: 'fault'; id: string; kind: FormFaultKind; rep: number }
-  | { type: 'pause'; id: string }
+  /** A red flag (loss of steadiness or a physio-set limit crossed). Carries what was measured so the screen can say exactly what was hit. */
+  | { type: 'pause'; id: string; value: number; unit: FormFault['unit'] }
   | { type: 'unseen' }
   | { type: 'seen' };
 
@@ -59,7 +60,7 @@ export class FormAnalyzer {
   private run = new Map<string, number>();
   private found = new Map<string, { kind: FormFaultKind; reps: Set<number>; peak: number; unit: FormFault['unit']; firstSec: number }>();
   private pausedIds = new Set<string>();
-  private lastPauseMs = -1e9;
+  private lastPauseMs = new Map<string, number>();
   private maxRun = 0;
 
   constructor(readonly kind: FormKind, private limit?: Pick<FormLimit, 'max' | 'min'>) {}
@@ -272,11 +273,12 @@ export class FormAnalyzer {
     if (!f) { f = { kind, reps: new Set(), peak: value, unit, firstSec: ((tMs - (this.t0 ?? tMs)) / 1000) }; this.found.set(id, f); }
     f.peak = Math.max(f.peak, value);
     if (!f.reps.has(rep)) { f.reps.add(rep); ev.push({ type: 'fault', id, kind, rep }); }
-    // A pause is asked only when the camera has been seeing the body well, and not more than once every 5 seconds.
-    if (FORM_CHECK.pauseEnabled && FORM_CHECK.pauseOn.includes(kind) && this.recentUsable >= 0.8 && tMs - this.lastPauseMs > 5000) {
-      this.lastPauseMs = tMs;
+    // A red flag is raised only when the camera has been seeing the body well, and for the same fault not more than once every 5 seconds.
+    // Different faults do not silence each other, and the check keeps running: nothing here stops the set.
+    if (FORM_CHECK.pauseEnabled && FORM_CHECK.pauseOn.includes(kind) && this.recentUsable >= 0.8 && tMs - (this.lastPauseMs.get(id) ?? -1e9) > 5000) {
+      this.lastPauseMs.set(id, tMs);
       this.pausedIds.add(id);
-      ev.push({ type: 'pause', id });
+      ev.push({ type: 'pause', id, value: Math.round(value * 10) / 10, unit });
     }
   }
 }
