@@ -15,7 +15,7 @@ import { FormAnalyzer, type FormEvent } from '../formcheck/analyze';
 import { BONES, FORM_CHECK, KINDS, VARIANTS, formKindFor } from '../formcheck/config';
 import { assess, attachClip, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, requestForClip, withdrawConsent, type Assessment } from '../formcheck/model';
 import { loadPose, type Pose } from '../formcheck/pose';
-import { VIEW_KEY, fcs } from '../formcheck/strings';
+import { COUNT_KEYS, VIEW_KEY, fcs } from '../formcheck/strings';
 
 type Stage = 'intro' | 'camera' | 'live' | 'result';
 interface Result { log: FormCheckLog; a: Assessment; requestId: string | null }
@@ -157,7 +157,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
   const startSet = () => {
     if (!kind) return;
     // A physio limit is for the main movement of the exercise; the heel-to-toe variant has no such number.
-    const lim = kind === 'balance-line' ? undefined : limitFor(patient, ex);
+    const lim = kind === 'balance-line' || (kind && KINDS[kind].noLimit) ? undefined : limitFor(patient, ex);
     analyzer.current = new FormAnalyzer(kind, lim ? { max: lim.max, min: lim.min } : undefined);
     setReps(0); setUnseen(false); setPaused(false); setNoticed('');
     chunks.current = []; recMime.current = '';
@@ -239,8 +239,8 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
       <main data-testid="formcheck-result">
         <h2>{F('fcResult')}</h2>
         <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
-        <p>{log.repsCounted > 0 ? F(log.kind === 'walking' ? 'fcStepsDone' : 'fcRepsDone', { n: log.repsCounted }) : F('fcNoReps')}</p>
-        {log.cadence ? <p>{F('fcCadence', { n: log.cadence })}</p> : null}
+        <p>{log.repsCounted > 0 ? F(COUNT_KEYS[log.kind]?.done ?? 'fcRepsDone', { n: log.repsCounted }) : F('fcNoReps')}</p>
+        {log.cadence ? <p>{F(COUNT_KEYS[log.kind]?.rate ?? 'fcCadence', { n: log.cadence })}</p> : null}
         {log.holds?.length ? <p>{F('fcHolds', { list: log.holds.join(', ') })}</p> : null}
         {a.unreliable ? <p className="hint">{F('fcUnreliable')}</p> : log.faults.length ? (
           <div className="card">
@@ -280,7 +280,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
         {err && <p className="err" role="alert">{err}</p>}
         {!err && !ready && <p>{F('fcLoading')}</p>}
         {stage === 'live' && getReady !== null && <p className="gs-count" role="timer" aria-live="polite">{F('fcGetReady', { n: getReady })}</p>}
-        {stage === 'live' && getReady === null && <p className="gs-count" aria-live="polite">{F(kind === 'walking' ? 'fcSteps' : 'fcReps', { n: reps })}</p>}
+        {stage === 'live' && getReady === null && <p className="gs-count" aria-live="polite">{F((kind && COUNT_KEYS[kind]?.live) || 'fcReps', { n: reps })}</p>}
         {stage === 'live' && unseen && <p className="hint" role="status">{F('fcUnseen')}</p>}
         {stage === 'live' && noticed && <p className="gs-msg" role="status">{noticed}</p>}
         {paused && <div className="red" role="alert" data-testid="fc-pause"><strong>{F('fcPause')}</strong></div>}

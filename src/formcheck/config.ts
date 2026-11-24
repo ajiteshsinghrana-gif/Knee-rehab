@@ -10,9 +10,9 @@ import type { FormFaultKind } from '../types';
 
 export type FormKind =
   | 'slr' | 'squat' | 'shoulder-abduction'
-  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance' | 'balance-line' | 'walking' | 'ankle-pump';
+  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance' | 'balance-line' | 'walking' | 'ankle-pump' | 'pendulum' | 'cycle' | 'plank' | 'bird-dog';
 /** Where the phone goes: side on lying down, side on standing, facing the person standing, or facing the person seated. */
-export type FormView = 'side' | 'sideStand' | 'front' | 'seated' | 'balance' | 'balanceLine' | 'walkSide' | 'sideFoot';
+export type FormView = 'side' | 'sideStand' | 'front' | 'seated' | 'balance' | 'balanceLine' | 'walkSide' | 'sideFoot' | 'pendulum' | 'cycle' | 'plank' | 'birdDog';
 export const SIGNOFF = 'NEEDS_PHYSIO_SIGNOFF' as const;
 
 /** MediaPipe Pose Landmarker point numbers (33 points). */
@@ -43,10 +43,15 @@ export const KIND_EXERCISES: Record<FormKind, string[]> = {
   'balance-line': [],
   walking: ['walking'],
   'ankle-pump': ['ankle-pumps'],
+  pendulum: ['pendulum'],
+  cycle: ['stationary-cycling'],
+  plank: ['core'],
+  'bird-dog': [],
 };
 /** Exercises the patient does in more than one way: the camera asks which. */
 export const VARIANTS: Record<string, { kind: FormKind; labelKey: string }[]> = {
   balance: [{ kind: 'balance', labelKey: 'fcVarLeg' }, { kind: 'balance-line', labelKey: 'fcVarLine' }],
+  core: [{ kind: 'plank', labelKey: 'fcVarPlank' }, { kind: 'bird-dog', labelKey: 'fcVarBird' }],
 };
 export const formKindFor = (exerciseId: string): FormKind | null => {
   for (const k of Object.keys(KIND_EXERCISES) as FormKind[]) if (KIND_EXERCISES[k].includes(exerciseId)) return k;
@@ -60,6 +65,8 @@ export interface KindConfig {
   view: FormView;
   /** What the main number means, shown to the physio next to the limit boxes. */
   hint: string;
+  /** The main number has no meaning a physio could cap (a pedal position, a plank angle): no per-patient limit for this kind. */
+  noLimit?: true;
   /** Rep counting with a gap between the two thresholds, so a small wobble is not counted. */
   repUp: number;
   repDown: number;
@@ -233,6 +240,37 @@ export const KINDS: Record<FormKind, KindConfig> = {
     signal: 'deg', view: 'sideFoot', hint: 'degrees the toes point away from relaxed', repUp: 15, repDown: 6, minFrames: 4,
     faults: [
       { id: 'pump-leg-moves', kind: 'compensation', limit: 12, unit: 'pct' },  // the knee moves by 12% of shank length
+    ],
+  },
+  // Side-on, bent forward with one arm hanging. Signal: how far the arm swings from hanging, in degrees. Swings towards or away from the camera are not seen.
+  pendulum: {
+    signal: 'deg', view: 'pendulum', hint: 'degrees the arm swings from hanging', repUp: 8, repDown: 3, minFrames: 4,
+    faults: [
+      { id: 'pend-wide', kind: 'control', limit: 45, unit: 'deg' },
+      { id: 'pend-fast', kind: 'control', limit: 150, unit: 'degps', minFrames: 3 },
+    ],
+  },
+  // Side-on to a stationary bike. Signal: where the knee is in its bend and straighten, 0 to 100 (one rep is one pedal turn).
+  cycle: {
+    signal: 'pct', view: 'cycle', hint: 'pedal position', noLimit: true, repUp: 70, repDown: 30, minFrames: 6,
+    faults: [
+      { id: 'cyc-bob', kind: 'posture', limit: 8, unit: 'pct', minFrames: 3 },         // the hips move up and down by 8% of trunk length
+      { id: 'cyc-lean', kind: 'compensation', limit: 15, unit: 'deg' },
+    ],
+  },
+  // Side-on, on the floor. Signal: how flat the body is, in degrees (0 upright, 90 flat). The hold is timed.
+  plank: {
+    signal: 'deg', view: 'plank', hint: 'degrees flat', noLimit: true, repUp: 60, repDown: 30, minFrames: 8,
+    faults: [
+      { id: 'plank-sag', kind: 'posture', limit: 8, unit: 'pct' },   // hips below the shoulder-to-ankle line by 8% of body length
+      { id: 'plank-pike', kind: 'posture', limit: 10, unit: 'pct' },
+    ],
+  },
+  // Side-on, on hands and knees. Signal: how far the back leg is extended from resting, in degrees. The hold is timed. Only the leg is measured.
+  'bird-dog': {
+    signal: 'deg', view: 'birdDog', hint: 'degrees the back leg is lifted', noLimit: true, repUp: 25, repDown: 10, minFrames: 8,
+    faults: [
+      { id: 'bird-tilt', kind: 'compensation', limit: 10, unit: 'deg' },
     ],
   },
 };

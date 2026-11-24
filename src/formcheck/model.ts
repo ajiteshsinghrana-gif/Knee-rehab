@@ -14,7 +14,7 @@ import type { AnsweredBy, FormCheckLog, FormClip, FormLimit, FormRequest, Patien
 import { addDays } from '../engine/dates';
 import { withAuditNote, type Ctx } from '../engine/plan';
 import { FORM_CONFIG, newFormRequest } from '../forms/model';
-import { FORM_CHECK, formKindFor, unitOf } from './config';
+import { FORM_CHECK, KINDS, formKindFor, unitOf } from './config';
 import type { FormSummary } from './analyze';
 
 export const hasConsent = (p: Patient): boolean => p.formCheckConsent?.version === FORM_CHECK.consentVersion;
@@ -99,7 +99,7 @@ export const pendingChecks = (p: Patient): FormRequest[] => (p.formRequests ?? [
 /** The physio sets a limit for one patient and one exercise, with a reason. Recorded in the audit log. */
 export function setFormLimit(p: Patient, exerciseId: string, v: { max?: number; min?: number }, reason: string, ctx: Ctx): Patient {
   const kind = formKindFor(exerciseId);
-  if (!kind || !reason.trim()) return p;
+  if (!kind || KINDS[kind].noLimit || !reason.trim()) return p;
   const top = unitOf(kind) === 'deg' ? 180 : 100;
   const ok = (n: number | undefined) => n === undefined || (Number.isFinite(n) && n >= 0 && n <= top);
   if (!ok(v.max) || !ok(v.min)) return p;

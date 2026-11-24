@@ -75,6 +75,10 @@ export class FormAnalyzer {
   private dorsiNow = 0;
   private dorsiMax = 0;
   private aWin: { ang: number; k: Pt }[] = [];
+  private bWin: { ang: number; tilt: number }[] = [];
+  private cMin = Infinity;
+  private cMax = -Infinity;
+  private cFrames = 0;
   private holds: number[] = [];
   private closed = false;
 
@@ -116,6 +120,7 @@ export class FormAnalyzer {
         this.reps++;
         ev.push({ type: 'rep', n: this.reps });
         if (this.isBalance) this.endHold(tMs, ev);
+        if (this.kind === 'cycle') this.steps.push({ len: this.peak, lead: 0, t: tMs });
         if (this.kind === 'walking') {
           // Which foot led: the sign of the feet's gap, flipped when walking leftwards, so the two walking directions agree.
           const dir = Math.sign(this.lastHx - this.stepHx0);
@@ -137,7 +142,10 @@ export class FormAnalyzer {
     return ev;
   }
 
-  private get isBalance(): boolean { return this.kind === 'balance' || this.kind === 'balance-line'; }
+  /** Kinds where each rep is a held position, so its length is timed. */
+  private get isBalance(): boolean { return this.kind === 'balance' || this.kind === 'balance-line' || this.kind === 'plank' || this.kind === 'bird-dog'; }
+  /** Kinds counted per step or per turn, with a rate a minute. */
+  private get isRate(): boolean { return this.kind === 'walking' || this.kind === 'cycle'; }
   /** Steps a minute, from the first to the last counted step. Needs at least 4 steps. */
   private cadence(): number | null {
     const n = this.steps.length;
@@ -184,7 +192,7 @@ export class FormAnalyzer {
       paused: reliable && this.pausedIds.size > 0,
       seconds: this.t0 === null ? 0 : Math.round(((this.tLast - this.t0) / 1000) * 10) / 10,
       ...(this.isBalance && this.holds.length ? { holds: this.holds.slice(0, 30) } : {}),
-      ...(this.kind === 'walking' && this.cadence() !== null ? { cadence: this.cadence()! } : {}),
+      ...(this.isRate && this.cadence() !== null ? { cadence: this.cadence()! } : {}),
     };
   }
 
@@ -222,6 +230,10 @@ export class FormAnalyzer {
       case 'balance': case 'balance-line': return this.mBalance(f);
       case 'walking': return this.mWalk(f);
       case 'ankle-pump': return this.mPump(f);
+      case 'pendulum': return this.mPendulum(f);
+      case 'cycle': return this.mCycle(f);
+      case 'plank': return this.mPlank(f);
+      case 'bird-dog': return this.mBird(f);
     }
   }
 
@@ -435,6 +447,94 @@ export class FormAnalyzer {
     this.lastHx = H.x;
     const lean = Math.abs(Math.atan2(S.x - H.x, -(S.y - H.y)) * RAD);
     return { ok: true, signal: Math.abs(gap), faults: { 'walk-lean': Math.abs(gap) > KINDS.walking.repDown ? lean : null } };
+  }
+
+  /** Side view, bent forward with one arm hanging: how far the arm swings from hanging. */
+  private mPendulum(f: Landmark[]): Measure {
+    const sets = { l: [LM.lShoulder, LM.lWrist], r: [LM.rShoulder, LM.rWrist] } as const;
+    const k = this.nearSide(f, sets);
+    const [sh, wr] = sets[k];
+    if (!this.seenMin(f, 0.4, sh, wr)) return { ok: false, signal: 0, faults: {} };
+    const S = this.pt(f, sh), W = this.pt(f, wr);
+    if (dist(S, W) < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const ang = Math.atan2(W.x - S.x, W.y - S.y) * RAD; // 0 when the wrist hangs straight below the shoulder
+    const b = this.base, N = FORM_CHECK.baselineFrames;
+    if (b.n < N) {
+      this.bWin.push({ ang, tilt: 0 });
+      if (this.bWin.length > N) this.bWin.shift();
+      if (this.bWin.length === N) {
+        const a = this.bWin.map((x) => x.ang);
+        if (Math.max(...a) - Math.min(...a) < 3) { b.trunk = a.reduce((p, q) => p + q, 0) / N; b.n = N; }
+      }
+      return { ok: true, signal: 0, faults: {} };
+    }
+    const signal = turn(ang, b.trunk);
+    const spd = this.speed(((ang - b.trunk + 540) % 360) - 180); // the signed swing, so a back-and-forth is not read as two quick half-swings
+    const rest = KINDS.pendulum.repDown;
+    return { ok: true, signal, faults: { 'pend-wide': signal > rest ? signal : null, 'pend-fast': signal > rest ? spd : null } };
+  }
+
+  /** Side view of a stationary bike: the knee bends and straightens once per pedal turn. */
+  private mCycle(f: Landmark[]): Measure {
+    const sets = { l: [LM.lShoulder, LM.lHip, LM.lKnee, LM.lAnkle], r: [LM.rShoulder, LM.rHip, LM.rKnee, LM.rAnkle] } as const;
+    const k = this.nearSide(f, sets);
+    const [sh, hip, kn, an] = sets[k];
+    if (!this.seen(f, sh, hip, kn, an)) return { ok: false, signal: 0, faults: {} };
+    const S = this.pt(f, sh), H = this.pt(f, hip), K = this.pt(f, kn), A = this.pt(f, an);
+    const flex = bend(H, K, A);
+    const torso = dist(S, H);
+    if (flex === null || torso < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const trunk = Math.atan2(S.x - H.x, -(S.y - H.y)) * RAD;
+    const b = this.base, N = FORM_CHECK.baselineFrames;
+    if (b.n < N) { b.trunk = (b.trunk * b.n + trunk) / (b.n + 1); b.hipY = (b.hipY * b.n + H.y) / (b.n + 1); b.leg = (b.leg * b.n + torso) / (b.n + 1); b.n++; }
+    this.cFrames++;
+    this.cMin = Math.min(this.cMin, flex); this.cMax = Math.max(this.cMax, flex);
+    if (b.n < N || this.cFrames < 15 || this.cMax - this.cMin < 25) return { ok: true, signal: 0, faults: {} };
+    const signal = ((flex - this.cMin) / (this.cMax - this.cMin)) * 100;
+    return { ok: true, signal, faults: { 'cyc-bob': (Math.abs(H.y - b.hipY) / b.leg) * 100, 'cyc-lean': turn(trunk, b.trunk) } };
+  }
+
+  /** Side view, on the floor: how flat the body is, and whether the hips sag below or rise above the shoulder-to-ankle line. */
+  private mPlank(f: Landmark[]): Measure {
+    const sets = { l: [LM.lShoulder, LM.lHip], r: [LM.rShoulder, LM.rHip] } as const;
+    const k = this.nearSide(f, sets);
+    const [sh, hip] = sets[k];
+    const an = k === 'l' ? LM.lAnkle : LM.rAnkle;
+    if (!this.seen(f, sh, hip) || !this.seenMin(f, 0.3, an)) return { ok: false, signal: 0, faults: {} };
+    const S = this.pt(f, sh), H = this.pt(f, hip), A = this.pt(f, an);
+    const len = dist(S, A), run = A.x - S.x;
+    if (len < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const flat = 90 - Math.atan2(Math.abs(A.y - S.y), Math.abs(run)) * RAD;
+    if (Math.abs(run) < 1e-6) return { ok: true, signal: flat, faults: {} };
+    const lineY = S.y + ((A.y - S.y) * (H.x - S.x)) / run;
+    const dev = ((H.y - lineY) / len) * 100; // plus: hips lower than the line
+    const rest = KINDS.plank.repDown;
+    return { ok: true, signal: flat, faults: { 'plank-sag': flat > rest ? dev : null, 'plank-pike': flat > rest ? -dev : null } };
+  }
+
+  /** Side view, on hands and knees: the back leg is stretched out. Resting angle and back tilt are learned while still. */
+  private mBird(f: Landmark[]): Measure {
+    const sets = { l: [LM.lShoulder, LM.lHip], r: [LM.rShoulder, LM.rHip] } as const;
+    const k = this.nearSide(f, sets);
+    const [sh, hip] = sets[k];
+    const an = k === 'l' ? LM.lAnkle : LM.rAnkle;
+    if (!this.seen(f, sh, hip) || !this.seenMin(f, 0.3, an)) return { ok: false, signal: 0, faults: {} };
+    const S = this.pt(f, sh), H = this.pt(f, hip), A = this.pt(f, an);
+    const ang = angleAt(S, H, A);
+    if (ang === null) return { ok: false, signal: 0, faults: {} };
+    const tilt = Math.atan2(H.y - S.y, Math.max(Math.abs(H.x - S.x), 1e-6)) * RAD;
+    const b = this.base, N = FORM_CHECK.baselineFrames;
+    if (b.n < N) {
+      this.bWin.push({ ang, tilt });
+      if (this.bWin.length > N) this.bWin.shift();
+      if (this.bWin.length === N) {
+        const a = this.bWin.map((x) => x.ang), t = this.bWin.map((x) => x.tilt);
+        if (Math.max(...a) - Math.min(...a) < 4 && Math.max(...t) - Math.min(...t) < 3) { b.trunk = a.reduce((p, q) => p + q, 0) / N; b.hipX = t.reduce((p, q) => p + q, 0) / N; b.n = N; }
+      }
+      return { ok: true, signal: 0, faults: {} };
+    }
+    const signal = Math.max(0, ang - b.trunk);
+    return { ok: true, signal, faults: { 'bird-tilt': signal > KINDS['bird-dog'].repDown ? Math.abs(tilt - b.hipX) : null } };
   }
 
   /** Side view, lying with the leg straight: the toes point away (plantar flexion) and come back. The relaxed foot angle is learned while still. */

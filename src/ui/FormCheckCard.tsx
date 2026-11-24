@@ -8,7 +8,7 @@ import { currentExercises } from '../engine/plan';
 import { clockMs, getState, updatePatient } from '../store';
 import { FORM_CHECK, KINDS, formKindFor, unitOf } from '../formcheck/config';
 import { f1Faults, limitFor, setFormLimit } from '../formcheck/model';
-import { FAULT_PHYSIO, KIND_LABEL, UNIT_LABEL } from '../formcheck/strings';
+import { COUNT_KEYS, FAULT_PHYSIO, KIND_LABEL, UNIT_LABEL } from '../formcheck/strings';
 
 const faultLine = (f: FormFault, reps: number) => `${FAULT_PHYSIO[f.id] ?? f.id} · ${KIND_LABEL[f.kind] ?? f.kind} · reps ${f.reps.join(', ')} of ${reps} · peak ${f.peak}${UNIT_LABEL[f.unit]}`;
 
@@ -21,9 +21,9 @@ export function AutoSummary({ patient, r }: { patient: Patient; r: FormRequest }
       <b>Raised by the camera form check</b> ({r.auto.reason === 'PAUSE' ? 'the phone asked the patient to pause' : `rule F1: the same fault in ${FORM_CHECK.f1.checks} of the last ${FORM_CHECK.f1.window} checks`}).
       {c ? (
         <ul>
-          <li>{c.repsCounted} {c.holds?.length ? 'holds' : c.kind === 'walking' ? 'steps' : 'reps'} counted · camera saw the body in {Math.round(c.usable * 100)}% of frames</li>
+          <li>{c.repsCounted} {c.holds?.length ? 'holds' : COUNT_KEYS[c.kind]?.word ?? 'reps'} counted · camera saw the body in {Math.round(c.usable * 100)}% of frames</li>
           {c.holds?.length ? <li>Hold times: {c.holds.join(', ')} s</li> : null}
-          {c.cadence ? <li>About {c.cadence} steps a minute</li> : null}
+          {c.cadence ? <li>About {c.cadence} {c.kind === 'cycle' ? 'pedal turns' : 'steps'} a minute</li> : null}
           {c.faults.map((f) => <li key={f.id}>{faultLine(f, c.repsCounted)}</li>)}
         </ul>
       ) : <p className="tiny">The measured numbers have not arrived yet.</p>}
@@ -34,7 +34,7 @@ export function AutoSummary({ patient, r }: { patient: Patient; r: FormRequest }
 
 export function FormCheckCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
   const checks = [...(p.formChecks ?? [])].reverse();
-  const measurable = [...new Set([...currentExercises(p, pack), ...(p.formChecks ?? []).map((c) => c.exerciseId)])].filter((id) => formKindFor(id));
+  const measurable = [...new Set([...currentExercises(p, pack), ...(p.formChecks ?? []).map((c) => c.exerciseId)])].filter((id) => { const k = formKindFor(id); return !!k && !KINDS[k].noLimit; });
   if (!checks.length && !measurable.length) return null;
   return (
     <div className="card" data-testid="formcheck-card">
@@ -57,7 +57,7 @@ function One({ c, p }: { c: FormCheckLog; p: Patient }) {
   return (
     <details open={c === (p.formChecks ?? [])[(p.formChecks ?? []).length - 1]} data-testid="formcheck-one">
       <summary>
-        {c.date} · <b>{exerciseName(c.exerciseId, 'en')}</b> · {c.repsCounted} {c.holds?.length ? 'holds' : 'reps'}{c.holds?.length ? ` (${c.holds.join(', ')} s)` : ''}
+        {c.date} · <b>{exerciseName(c.exerciseId, 'en')}</b> · {c.repsCounted} {c.holds?.length ? 'holds' : COUNT_KEYS[c.kind]?.word ?? 'reps'}{c.holds?.length ? ` (${c.holds.join(', ')} s)` : ''}
         {!c.reliable && ' · could not see enough (nothing flagged)'}
         {c.reliable && c.faults.length === 0 && ' · nothing measured above the limits'}
         {c.reliable && c.faults.length > 0 && ` · ${c.faults.length} fault${c.faults.length === 1 ? '' : 's'} measured`}

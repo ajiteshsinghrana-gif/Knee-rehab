@@ -607,7 +607,9 @@ describe('camera form check: the other exercises', () => {
     expect(formKindFor('balance')).toBe('balance');
     expect(formKindFor('walking')).toBe('walking');
     expect(formKindFor('ankle-pumps')).toBe('ankle-pump');
-    for (const id of ['walking-aid', 'cycling', 'swimming', 'ice-compression', 'quad-set']) expect(formKindFor(id)).toBeNull();
+    expect(formKindFor('pendulum')).toBe('pendulum');
+    expect(formKindFor('stationary-cycling')).toBe('cycle');
+    for (const id of ['walking-aid', 'cycling', 'swimming', 'ice-compression', 'quad-set', 'gait-drills']) expect(formKindFor(id)).toBeNull();
   });
 });
 
@@ -696,5 +698,140 @@ describe('camera form check: ankle pumps', () => {
   });
   it('flags a leg that moves while pumping', () => {
     expect(ids(feed('ankle-pump', pumps(6, { dorsi: 20, kneeShift: 0.08 })))).toContain('pump-leg-moves');
+  });
+});
+
+// ---------- pendulum, stationary cycling, plank, bird-dog ----------
+/** Side view, bent forward: the left arm hangs from the shoulder and swings by `a` degrees. */
+function arm(a: number): Frame {
+  const f = blank();
+  const S = { x: 0.5, y: 0.4 };
+  f[LM.lShoulder] = { ...S, v: 1 }; f[LM.lWrist] = { x: S.x + 0.3 * Math.sin(rad(a)), y: S.y + 0.3 * Math.cos(rad(a)), v: 1 };
+  for (const i of [LM.rShoulder, LM.rWrist]) f[i] = { x: 0.5, y: 0.5, v: 0 };
+  return f;
+}
+const swings = (n: number, amp: number, per: number): Frame[] => {
+  const out: Frame[] = [];
+  for (let i = 0; i < 12; i++) out.push(arm(0));
+  for (let c = 0; c < n; c++) for (let i = 0; i < per; i++) out.push(arm(amp * Math.sin((2 * Math.PI * i) / per)));
+  out.push(arm(0));
+  return out;
+};
+describe('camera form check: pendulum', () => {
+  it('counts swings in each direction and flags nothing for a gentle swing', () => {
+    const sum = feed('pendulum', swings(5, 20, 30));
+    expect(sum.reps).toBe(10);
+    expect(sum.faults).toEqual([]);
+  });
+  it('flags a very wide swing and a fast swing', () => {
+    expect(ids(feed('pendulum', swings(5, 60, 30)))).toContain('pend-wide');
+    expect(ids(feed('pendulum', swings(5, 45, 14)))).toContain('pend-fast');
+    expect(ids(feed('pendulum', swings(5, 20, 30)))).not.toContain('pend-fast');
+  });
+  it("the physio's maximum applies to the swing size", () => {
+    const a = new FormAnalyzer('pendulum', { max: 25 });
+    let t = 0;
+    for (const f of swings(5, 40, 30)) a.push(f, (t += DT), 1);
+    expect(a.finish().faults.find((x) => x.id === 'limit-max')?.kind).toBe('precaution');
+  });
+});
+
+/** Side view of a bike: the knee bends by `flex` degrees; the hips can bob and the trunk can lean. */
+function pedal(flex: number, o: { bob?: number; lean?: number } = {}): Frame {
+  const f = blank();
+  const H = { x: 0.5, y: 0.5 + (o.bob ?? 0) };
+  const th = rad(60), sh = th - rad(flex);
+  const K = { x: H.x + 0.2 * Math.cos(th), y: H.y + 0.2 * Math.sin(th) };
+  const A = { x: K.x + 0.2 * Math.cos(sh), y: K.y + 0.2 * Math.sin(sh) };
+  const S = { x: H.x + 0.3 * Math.sin(rad(o.lean ?? 0)), y: H.y - 0.3 * Math.cos(rad(o.lean ?? 0)) };
+  f[LM.lShoulder] = { ...S, v: 1 }; f[LM.lHip] = { ...H, v: 1 }; f[LM.lKnee] = { ...K, v: 1 }; f[LM.lAnkle] = { ...A, v: 1 };
+  for (const i of [LM.rShoulder, LM.rHip, LM.rKnee, LM.rAnkle]) f[i] = { x: 0.5, y: 0.5, v: 0 };
+  return f;
+}
+const turns = (n: number, o: { bob?: number; lean?: number } = {}): Frame[] => {
+  const out: Frame[] = [];
+  for (let c = 0; c < n; c++) for (let i = 0; i < 15; i++) { const p = Math.sin((2 * Math.PI * i) / 15); out.push(pedal(70 + 35 * p, { bob: (o.bob ?? 0) * Math.cos((2 * Math.PI * i) / 15), lean: out.length >= 30 ? o.lean : 0 })); } // a lean that starts after the first two turns
+  return out;
+};
+describe('camera form check: stationary cycling', () => {
+  it('counts pedal turns and the turns a minute', () => {
+    const sum = feed('cycle', turns(10));
+    expect(sum.reps >= 7 && sum.reps <= 10).toBe(true);
+    expect(sum.cadence! >= 55 && sum.cadence! <= 65).toBe(true); // 15 frames a turn at 15 frames a second is 60 a minute
+    expect(sum.faults).toEqual([]);
+  });
+  it('flags hips bobbing and a leaning trunk', () => {
+    expect(ids(feed('cycle', turns(10, { bob: 0.05 })))).toContain('cyc-bob');
+    expect(ids(feed('cycle', turns(10, { lean: 25 })))).toContain('cyc-lean');
+  });
+  it('has no per-patient limit, since a pedal position is not something a physio can cap', () => {
+    expect(KINDS.cycle.noLimit).toBe(true);
+    expect(setFormLimit(base, 'stationary-cycling', { max: 50 }, 'x', { nowMs: 0, today })).toBe(base);
+  });
+});
+
+/** Side view on the floor: `flat` degrees from upright (0) to flat (90); `sag` is how far the hips hang below the line, as a share of body length. */
+function plankFrame(flat: number, sag = 0): Frame {
+  const f = blank();
+  const L = 0.7, th = rad(90 - flat);
+  const S = { x: 0.15, y: 0.3 }, A = { x: S.x + L * Math.cos(th), y: S.y + L * Math.sin(th) };
+  const H = { x: (S.x + A.x) / 2, y: (S.y + A.y) / 2 + sag * L };
+  f[LM.lShoulder] = { ...S, v: 1 }; f[LM.lHip] = { ...H, v: 1 }; f[LM.lAnkle] = { ...A, v: 1 };
+  for (const i of [LM.rShoulder, LM.rHip, LM.rAnkle]) f[i] = { x: 0.5, y: 0.5, v: 0 };
+  return f;
+}
+const plankSet = (sag: number): Frame[] => {
+  const out: Frame[] = [];
+  for (let i = 0; i < 12; i++) out.push(plankFrame(0));
+  for (let i = 1; i <= 6; i++) out.push(plankFrame((85 * i) / 6, sag * (i / 6)));
+  for (let i = 0; i < 190; i++) out.push(plankFrame(85, sag));
+  for (let i = 1; i <= 6; i++) out.push(plankFrame(85 - (85 * i) / 6, sag * (1 - i / 6)));
+  out.push(plankFrame(0));
+  return out;
+};
+describe('camera form check: plank', () => {
+  it('times the hold and flags nothing for a straight body', () => {
+    const sum = feed('plank', plankSet(0));
+    expect(sum.reps).toBe(1);
+    expect(sum.holds![0] >= FORM_CHECK.holdMinSec).toBe(true);
+    expect(sum.faults).toEqual([]);
+  });
+  it('flags sagging and piked hips', () => {
+    expect(ids(feed('plank', plankSet(0.12)))).toContain('plank-sag');
+    expect(ids(feed('plank', plankSet(-0.14)))).toContain('plank-pike');
+  });
+});
+
+/** Side view, on hands and knees: the back leg is lifted by `lift` degrees; the back can tilt by `tilt` degrees. */
+function birdFrame(lift: number, tilt = 0): Frame {
+  const f = blank();
+  const H = { x: 0.5, y: 0.5 }, S = { x: 0.2, y: 0.5 - Math.tan(rad(tilt)) * 0.3 };
+  const dir = rad(45 - lift);
+  const A = { x: H.x + 0.25 * Math.cos(dir), y: H.y + 0.25 * Math.sin(dir) };
+  f[LM.lShoulder] = { ...S, v: 1 }; f[LM.lHip] = { ...H, v: 1 }; f[LM.lAnkle] = { ...A, v: 1 };
+  for (const i of [LM.rShoulder, LM.rHip, LM.rAnkle]) f[i] = { x: 0.5, y: 0.5, v: 0 };
+  return f;
+}
+const birdSet = (tilt: number): Frame[] => {
+  const out: Frame[] = [];
+  for (let i = 0; i < 12; i++) out.push(birdFrame(0));
+  for (let i = 1; i <= 5; i++) out.push(birdFrame((40 * i) / 5, tilt * (i / 5)));
+  for (let i = 0; i < 190; i++) out.push(birdFrame(40, tilt));
+  for (let i = 1; i <= 5; i++) out.push(birdFrame(40 - (40 * i) / 5, tilt * (1 - i / 5)));
+  out.push(birdFrame(0));
+  return out;
+};
+describe('camera form check: bird-dog', () => {
+  it('times the hold of the stretched leg and flags nothing for a steady back', () => {
+    const sum = feed('bird-dog', birdSet(0));
+    expect(sum.reps).toBe(1);
+    expect(sum.holds![0] >= FORM_CHECK.holdMinSec).toBe(true);
+    expect(sum.faults).toEqual([]);
+  });
+  it('flags a back that tilts while the leg is lifted', () => {
+    expect(ids(feed('bird-dog', birdSet(18)))).toContain('bird-tilt');
+  });
+  it('core exercises offer plank and bird-dog; the library exercise maps to the first', () => {
+    expect(formKindFor('core')).toBe('plank');
   });
 });
