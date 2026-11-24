@@ -17,8 +17,10 @@ import { WhatsAppSim } from './WhatsAppSim';
 import { WhatsAppSetup } from './WhatsAppSetup';
 import { Menu, StepLine, SyncDot, TopBar, ViewSwitch } from './TopBar';
 import { purgeExpired } from '../forms/purge';
+import { Marketplace } from './Marketplace';
 
-const route = (): 'patient' | 'clinician' => (window.location.hash === '#clinician' ? 'clinician' : 'patient');
+type DemoView = 'patient' | 'clinician' | 'marketplace';
+const route = (): DemoView => (window.location.hash === '#clinician' ? 'clinician' : window.location.hash === '#marketplace' ? 'marketplace' : 'patient');
 
 export function App() {
   const [recovery, setRecovery] = useState<string | null>(() => recoveryTokenFromHash(window.location.hash));
@@ -53,7 +55,7 @@ function PatientApp() {
 function LiveApp() {
   const state = useSyncExternalStore(subscribe, getState);
   const sync = useSyncExternalStore(subscribeSync, getSyncStatus);
-  const [view, setView] = useState<'physio' | 'preview' | 'whatsapp'>('physio');
+  const [view, setView] = useState<'physio' | 'preview' | 'whatsapp' | 'marketplace'>('physio');
   const [previewId, setPreviewId] = useState('');
   const gated = sync.ready && sync.enabled && sync.auth && !sync.user; // nobody sees any patient until the physio signs in
   const people = state.patients.filter(isActive);
@@ -66,6 +68,7 @@ function LiveApp() {
           { id: 'physio', label: 'Physio dashboard', short: 'Physio' },
           { id: 'preview', label: 'View as patient', short: 'Patient', testid: 'preview-tab' },
           { id: 'whatsapp', label: 'WhatsApp', short: 'WhatsApp', testid: 'whatsapp-tab' },
+          { id: 'marketplace', label: 'Marketplace', short: 'Market', testid: 'marketplace-tab' },
         ]} />}
         right={<>
           {!gated && <SyncDot />}
@@ -86,7 +89,7 @@ function LiveApp() {
         </main>
       ) : (
         <>
-          {view === 'physio' ? <Clinician state={state} /> : view === 'whatsapp' ? <WhatsAppSetup patients={state.patients} /> : (
+          {view === 'physio' ? <Clinician state={state} /> : view === 'whatsapp' ? <WhatsAppSetup patients={state.patients} /> : view === 'marketplace' ? <Marketplace /> : (
             <section data-testid="preview">
               {!shown ? <p className="card">No active patients yet. Add one on the Physio dashboard.</p> : (
                 <>
@@ -134,7 +137,7 @@ function DemoApp() {
     window.addEventListener('hashchange', f);
     return () => window.removeEventListener('hashchange', f);
   }, []);
-  const go = (v: 'patient' | 'clinician') => { window.location.hash = v; setView(v); };
+  const go = (v: DemoView) => { window.location.hash = v; setView(v); };
   const patient = state.patients.find((p) => p.id === state.activeId) ?? state.patients[0];
   const step = state.demoStep;
   const s = DEMO_STEPS[step];
@@ -154,6 +157,7 @@ function DemoApp() {
         center={<ViewSwitch label="Choose a view" value={view} onChange={go} options={[
           { id: 'patient', label: 'Patient phone', short: 'Patient' },
           { id: 'clinician', label: 'Physio dashboard', short: 'Physio' },
+          { id: 'marketplace', label: 'Marketplace', short: 'Market', testid: 'marketplace-tab' },
         ]} />}
         right={<>
           <SyncDot />
@@ -174,8 +178,8 @@ function DemoApp() {
           </Menu>
         </>}
       />
-      <StepLine stepKey={String(step)} text={step === 0 ? DEMO_INTRO : `${DEMO_STEPS[step - 1].title}: ${DEMO_STEPS[step - 1].narration}${step >= DEMO_STEPS.length ? ` ${DEMO_DONE}` : ''}`} />
-      {view === 'patient' ? <PatientView key={patient.id} patient={patient} /> : <Clinician state={state} />}
+      {view !== 'marketplace' && <StepLine stepKey={String(step)} text={step === 0 ? DEMO_INTRO : `${DEMO_STEPS[step - 1].title}: ${DEMO_STEPS[step - 1].narration}${step >= DEMO_STEPS.length ? ` ${DEMO_DONE}` : ''}`} />}
+      {view === 'patient' ? <PatientView key={patient.id} patient={patient} /> : view === 'marketplace' ? <Marketplace /> : <Clinician state={state} />}
           {wa && <WhatsAppSim key={patient.id} patient={patient} canSave onClose={() => setWa(false)} />}
     </>
   );

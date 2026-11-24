@@ -1,0 +1,87 @@
+{
+  "id": "msk-screening-v1",
+  "version": "0.1",
+  "review": "NEEDS_PHYSIO_SIGNOFF",
+  "disclaimer": {
+    "en": "This is a quick check, not a diagnosis. It cannot replace seeing a doctor or physiotherapist.",
+    "hi": "यह एक त्वरित जाँच है, निदान नहीं। यह डॉक्टर या फिज़ियोथेरेपिस्ट से मिलने का विकल्प नहीं है।"
+  },
+  "areas": [
+    { "id": "back", "icon": "🧍", "label": { "en": "Lower back", "hi": "कमर" } },
+    { "id": "neck", "icon": "🙆", "label": { "en": "Neck", "hi": "गर्दन" } },
+    { "id": "knee", "icon": "🦵", "label": { "en": "Knee", "hi": "घुटना" } },
+    { "id": "sports", "icon": "🏃", "label": { "en": "Sports injury", "hi": "खेल की चोट" } },
+    { "id": "mobility", "icon": "🚶", "label": { "en": "Stiffness or trouble moving", "hi": "अकड़न या चलने-फिरने में दिक्कत" } }
+  ],
+  "durations": [
+    { "id": "lt2w", "weeks": 1, "label": { "en": "Less than 2 weeks", "hi": "2 हफ़्ते से कम" } },
+    { "id": "2to6w", "weeks": 4, "label": { "en": "2 to 6 weeks", "hi": "2 से 6 हफ़्ते" } },
+    { "id": "6to12w", "weeks": 9, "label": { "en": "6 to 12 weeks", "hi": "6 से 12 हफ़्ते" } },
+    { "id": "gt12w", "weeks": 13, "label": { "en": "More than 12 weeks", "hi": "12 हफ़्ते से ज़्यादा" } }
+  ],
+  "functions": [
+    { "id": "none", "label": { "en": "No, I can do everything", "hi": "नहीं, मैं सब कर पाता/पाती हूँ" } },
+    { "id": "some", "label": { "en": "Some things are hard (stairs, bending, sitting long)", "hi": "कुछ काम मुश्किल हैं (सीढ़ियाँ, झुकना, देर तक बैठना)" } },
+    { "id": "cannot", "label": { "en": "I can't do my usual daily activities", "hi": "मैं रोज़ के सामान्य काम नहीं कर पाता/पाती" } }
+  ],
+  "flags": [
+    { "id": "bladderBowel", "label": { "en": "New trouble controlling urine or stool, or numbness around the groin or inner thighs", "hi": "पेशाब या मल पर नियंत्रण में नई दिक्कत, या कमर के निचले हिस्से/भीतरी जाँघों में सुन्नपन" }, "areas": ["back", "mobility"] },
+    { "id": "chestSymptoms", "label": { "en": "Chest pain or pressure, breathlessness, or pain spreading to the arm or jaw with sweating", "hi": "सीने में दर्द या दबाव, साँस फूलना, या पसीने के साथ दर्द का बाँह या जबड़े तक फैलना" } },
+    { "id": "neuroNeck", "label": { "en": "Sudden severe headache, dizziness, double vision, or trouble speaking or swallowing", "hi": "अचानक तेज़ सिरदर्द, चक्कर, दोहरा दिखना, या बोलने या निगलने में दिक्कत" }, "areas": ["neck"] },
+    { "id": "traumaUnableWeight", "label": { "en": "A fall or accident, and I can't put weight on the leg, or the area looks bent out of shape", "hi": "गिरने या हादसे के बाद पैर पर वज़न नहीं डाल पा रहा/रही, या वह हिस्सा टेढ़ा दिखता है" }, "areas": ["knee", "sports", "mobility", "back"] },
+    { "id": "weakness", "label": { "en": "New weakness, numbness or pins and needles in an arm or leg that is getting worse or spreading", "hi": "बाँह या पैर में नई कमज़ोरी, सुन्नपन या झुनझुनी जो बढ़ रही है या फैल रही है" } },
+    { "id": "feverHotJoint", "label": { "en": "Fever or chills, or a joint that is hot, red and swollen", "hi": "बुखार या ठंड लगना, या जोड़ का गर्म, लाल और सूजा होना" } },
+    { "id": "calfSwelling", "label": { "en": "One calf is swollen, painful or red (especially after surgery or a long time in bed)", "hi": "एक पिंडली में सूजन, दर्द या लालिमा (ख़ासकर सर्जरी या लंबे आराम के बाद)" }, "areas": ["knee", "sports", "mobility"] },
+    { "id": "cancerWeightLoss", "label": { "en": "Unexplained weight loss, or a past cancer, along with this pain", "hi": "बिना वजह वज़न घटना, या पहले कैंसर होना, इस दर्द के साथ" } },
+    { "id": "nightPain", "label": { "en": "Constant pain at night that no position eases", "hi": "रात में लगातार दर्द जो किसी भी स्थिति में कम नहीं होता" } },
+    { "id": "lockedKnee", "label": { "en": "The knee locked, or swelled up within hours of an injury", "hi": "घुटना अटक गया, या चोट के कुछ घंटों में सूज गया" }, "areas": ["knee", "sports"] }
+  ],
+  "rules": [
+    { "id": "R1", "tier": "RED_FLAG", "urgency": "now", "source": "SAFETY", "when": { "flag": "bladderBowel" }, "why": { "en": "Trouble controlling urine or stool, or groin numbness, with back symptoms needs emergency assessment.", "hi": "कमर की तकलीफ़ के साथ पेशाब/मल पर नियंत्रण में दिक्कत या कमर के निचले हिस्से में सुन्नपन पर तुरंत आपातकालीन जाँच ज़रूरी है।" } },
+    { "id": "R2", "tier": "RED_FLAG", "urgency": "now", "source": "SAFETY", "when": { "flag": "chestSymptoms" }, "why": { "en": "Chest pain or breathlessness can be a heart or lung emergency, not a muscle or joint problem.", "hi": "सीने में दर्द या साँस फूलना दिल या फेफड़ों की आपात स्थिति हो सकती है, माँसपेशी या जोड़ की समस्या नहीं।" } },
+    { "id": "R3", "tier": "RED_FLAG", "urgency": "now", "source": "SAFETY", "when": { "flag": "neuroNeck" }, "why": { "en": "Severe headache, dizziness or speech and vision changes with neck pain need emergency assessment.", "hi": "गर्दन के दर्द के साथ तेज़ सिरदर्द, चक्कर या बोलने/देखने में बदलाव पर तुरंत आपातकालीन जाँच ज़रूरी है।" } },
+    { "id": "R4", "tier": "RED_FLAG", "urgency": "soon", "source": "SAFETY", "when": { "flag": "traumaUnableWeight" }, "why": { "en": "After an injury, not being able to bear weight or a deformed limb may mean a fracture and needs an X-ray today.", "hi": "चोट के बाद वज़न न डाल पाना या अंग का टेढ़ा दिखना फ्रैक्चर का संकेत हो सकता है; आज ही एक्स-रे ज़रूरी है।" } },
+    { "id": "R5", "tier": "RED_FLAG", "urgency": "soon", "source": "SAFETY", "when": { "flag": "weakness" }, "why": { "en": "Worsening or spreading weakness or numbness can mean a nerve problem and needs a doctor first.", "hi": "बढ़ती या फैलती कमज़ोरी या सुन्नपन नस की समस्या का संकेत हो सकता है; पहले डॉक्टर को दिखाएँ।" } },
+    { "id": "R6", "tier": "RED_FLAG", "urgency": "soon", "source": "SAFETY", "when": { "flag": "feverHotJoint" }, "why": { "en": "Fever, or a hot red swollen joint, can mean infection and needs a doctor first.", "hi": "बुखार, या गर्म लाल सूजा जोड़, संक्रमण का संकेत हो सकता है; पहले डॉक्टर को दिखाएँ।" } },
+    { "id": "R7", "tier": "RED_FLAG", "urgency": "soon", "source": "SAFETY", "when": { "flag": "calfSwelling" }, "why": { "en": "A swollen, painful or red calf can be a blood clot and needs a doctor first.", "hi": "सूजी, दर्द वाली या लाल पिंडली ख़ून का थक्का हो सकती है; पहले डॉक्टर को दिखाएँ।" } },
+    { "id": "R8", "tier": "RED_FLAG", "urgency": "soon", "source": "SAFETY", "when": { "flag": "cancerWeightLoss" }, "why": { "en": "Unexplained weight loss or a past cancer with new pain needs a doctor's check before physiotherapy.", "hi": "बिना वजह वज़न घटना या पहले कैंसर के साथ नया दर्द हो तो फिज़ियोथेरेपी से पहले डॉक्टर की जाँच ज़रूरी है।" } },
+    { "id": "R9", "tier": "RED_FLAG", "urgency": "soon", "source": "DEFAULT", "when": { "all": [{ "flag": "nightPain" }, { "field": "severity", "op": ">=", "value": 7 }] }, "why": { "en": "Severe pain at night that no position eases needs a doctor's check first.", "hi": "रात का तेज़ दर्द जो किसी स्थिति में कम नहीं होता, पहले डॉक्टर की जाँच माँगता है।" } },
+    { "id": "R10", "tier": "RED_FLAG", "urgency": "soon", "source": "DEFAULT", "when": { "flag": "lockedKnee" }, "why": { "en": "A locked knee, or one that swells within hours of injury, needs a doctor's assessment first.", "hi": "अटका हुआ घुटना, या चोट के कुछ घंटों में सूजा घुटना, पहले डॉक्टर की जाँच माँगता है।" } },
+    { "id": "R11", "tier": "RED_FLAG", "urgency": "soon", "source": "DEFAULT", "when": { "field": "severity", "op": ">=", "value": 9 }, "why": { "en": "Pain of 9 or 10 out of 10 needs a doctor's check first.", "hi": "10 में से 9 या 10 का दर्द पहले डॉक्टर की जाँच माँगता है।" } },
+    { "id": "P1", "tier": "PHYSIO", "source": "DEFAULT", "when": { "field": "durationWeeks", "op": ">=", "value": 2 }, "why": { "en": "Pain lasting 2 weeks or more usually benefits from an assessment.", "hi": "2 हफ़्ते या उससे ज़्यादा चलने वाले दर्द में आमतौर पर जाँच से फ़ायदा होता है।" } },
+    { "id": "P2", "tier": "PHYSIO", "source": "DEFAULT", "when": { "field": "severity", "op": ">=", "value": 4 }, "why": { "en": "Pain of 4 out of 10 or more is worth an assessment.", "hi": "10 में से 4 या उससे ज़्यादा का दर्द जाँच के लायक है।" } },
+    { "id": "P3", "tier": "PHYSIO", "source": "DEFAULT", "when": { "field": "function", "in": ["some", "cannot"] }, "why": { "en": "Difficulty with daily activities suggests an assessment would help.", "hi": "रोज़ के कामों में दिक्कत हो तो जाँच से मदद मिल सकती है।" } },
+    { "id": "P4", "tier": "PHYSIO", "source": "DEFAULT", "when": { "field": "recentSurgery", "is": true }, "why": { "en": "Recovering from surgery is best guided by a physiotherapist.", "hi": "सर्जरी के बाद की रिकवरी में फिज़ियोथेरेपिस्ट का मार्गदर्शन सबसे अच्छा रहता है।" } },
+    { "id": "P5", "tier": "PHYSIO", "source": "DEFAULT", "when": { "field": "area", "in": ["sports", "mobility"] }, "why": { "en": "Sports injuries and movement problems are best assessed in person or on video.", "hi": "खेल की चोट और चलने-फिरने की दिक्कतों की जाँच आमने-सामने या वीडियो पर करना बेहतर है।" } },
+    { "id": "P6", "tier": "PHYSIO", "source": "DEFAULT", "when": { "all": [{ "field": "priorEpisodes", "is": true }, { "field": "severity", "op": ">=", "value": 3 }] }, "why": { "en": "Pain that keeps coming back is worth an assessment to find out why.", "hi": "बार-बार लौटने वाले दर्द की वजह जानने के लिए जाँच कराना अच्छा है।" } }
+  ],
+  "results": {
+    "now": {
+      "headline": { "en": "Get emergency care now", "hi": "अभी आपातकालीन इलाज लें" },
+      "body": { "en": "Call 112 or go to the nearest emergency department. Do not wait for a physiotherapy appointment.", "hi": "112 पर कॉल करें या नज़दीकी इमरजेंसी में जाएँ। फिज़ियोथेरेपी अपॉइंटमेंट का इंतज़ार न करें।" }
+    },
+    "soon": {
+      "headline": { "en": "See a doctor first", "hi": "पहले डॉक्टर को दिखाएँ" },
+      "body": { "en": "Please see a doctor within 24 hours, or today if the pain is severe. A physiotherapy booking is not the right first step. If it gets worse or you feel very unwell, call 112.", "hi": "कृपया 24 घंटे के भीतर डॉक्टर को दिखाएँ, दर्द तेज़ हो तो आज ही। फिज़ियोथेरेपी बुकिंग सही पहला क़दम नहीं है। हालत बिगड़े या बहुत बीमार लगे तो 112 पर कॉल करें।" }
+    },
+    "PHYSIO": {
+      "headline": { "en": "A physiotherapy assessment would help", "hi": "फिज़ियोथेरेपी जाँच से मदद मिलेगी" },
+      "body": { "en": "Here are verified physiotherapists who match what you told us. They will assess you and decide the treatment.", "hi": "ये आपकी बताई बातों से मेल खाते सत्यापित फिज़ियोथेरेपिस्ट हैं। वे आपकी जाँच करके इलाज तय करेंगे।" }
+    },
+    "LOW_RISK": {
+      "headline": { "en": "No concerning signs from this check", "hi": "इस जाँच में चिंता की कोई बात नहीं दिखी" },
+      "body": { "en": "Keep moving gently within what is comfortable, and avoid long spells of rest. Check again in about a week. If it is not clearly better, gets worse, or anything new appears, come back for an assessment.", "hi": "आराम के दायरे में हल्का चलते-फिरते रहें और लंबे समय तक आराम से बचें। लगभग एक हफ़्ते बाद फिर जाँचें। साफ़ आराम न मिले, दर्द बढ़े या कुछ नया दिखे तो जाँच के लिए लौटें।" }
+    }
+  },
+  "specialties": [
+    { "id": "spine", "label": { "en": "Back and neck", "hi": "कमर और गर्दन" } },
+    { "id": "knee", "label": { "en": "Knee and joints", "hi": "घुटना और जोड़" } },
+    { "id": "sports", "label": { "en": "Sports rehabilitation", "hi": "खेल पुनर्वास" } },
+    { "id": "post-op", "label": { "en": "After surgery", "hi": "सर्जरी के बाद" } },
+    { "id": "functional", "label": { "en": "Mobility and everyday function", "hi": "चलने-फिरने और रोज़ के काम" } }
+  ],
+  "matching": {
+    "byArea": { "back": ["spine"], "neck": ["spine"], "knee": ["knee", "sports"], "sports": ["sports", "knee"], "mobility": ["functional"] },
+    "recentSurgery": ["post-op"]
+  }
+}
