@@ -609,7 +609,9 @@ describe('camera form check: the other exercises', () => {
     expect(formKindFor('ankle-pumps')).toBe('ankle-pump');
     expect(formKindFor('pendulum')).toBe('pendulum');
     expect(formKindFor('stationary-cycling')).toBe('cycle');
-    for (const id of ['walking-aid', 'cycling', 'swimming', 'ice-compression', 'quad-set', 'gait-drills']) expect(formKindFor(id)).toBeNull();
+    expect(formKindFor('stairs-practice')).toBe('step-up');
+    for (const id of ['walking-programme', 'walking-aid']) expect(formKindFor(id)).toBe('walking');
+    for (const id of ['cycling', 'swimming', 'ice-compression', 'ice-elevation', 'quad-set', 'gait-drills']) expect(formKindFor(id)).toBeNull();
   });
 });
 

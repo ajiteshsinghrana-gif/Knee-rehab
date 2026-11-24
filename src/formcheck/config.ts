@@ -45,7 +45,8 @@ export const KIND_EXERCISES: Record<FormKind, string[]> = {
   'knee-flex': ['heel-slides', 'gentle-rom'],
   'sit-to-stand': ['sit-to-stand'],
   lunge: ['lunges'],
-  'step-up': ['step-ups'],
+  /** Stairs practice is stepping up and down one step: the same check as step-ups. */
+  'step-up': ['step-ups', 'stairs-practice'],
   'shoulder-flexion': ['assisted-arm-raise', 'wall-slide'],
   'hip-abduction': ['hip-abduction'],
   bridging: ['bridging'],
@@ -53,7 +54,8 @@ export const KIND_EXERCISES: Record<FormKind, string[]> = {
   balance: ['balance'],
   /** The same balance exercise done heel to toe. Chosen on the screen (see VARIANTS), so no exercise maps here on its own. */
   'balance-line': [],
-  walking: ['walking'],
+  /** A walking programme or a walk with an aid is judged on one pass across the picture, not on the whole programme. An aid can hide part of a leg: then the check says it could not see enough. */
+  walking: ['walking', 'walking-programme', 'walking-aid'],
   'ankle-pump': ['ankle-pumps'],
   pendulum: ['pendulum'],
   cycle: ['stationary-cycling'],
