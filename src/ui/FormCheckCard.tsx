@@ -40,23 +40,35 @@ export function AutoSummary({ patient, r }: { patient: Patient; r: FormRequest }
   );
 }
 
+/**
+ * The per-patient camera switch, at the top of the Plan tab. On for every patient by default; the physio can turn it off.
+ * Written to the audit log; travels to the patient's phone.
+ */
+export function CameraSwitch({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
+  const on = cameraOn(p);
+  const plan = currentExercises(p, pack);
+  const form = plan.filter((id) => checkMode(id) === 'form').length, count = plan.filter((id) => checkMode(id) === 'count').length, video = plan.length - form - count;
+  const toggle = () => updatePatient(p.id, (q) => setCameraCheck(q, !on, { nowMs: now || clockMs(getState()), today: getState().today }));
+  return (
+    <div className="card camswitch" data-testid="camera-switch">
+      <div className="camswitch-row">
+        <span><b>Camera form check</b> · {on ? 'On' : <b className="err">Off</b>} for this patient{!on && p.formCheckOff?.at ? <small> since {p.formCheckOff.at.slice(0, 10)}</small> : null}</span>
+        <button className="btn" data-testid="fc-switch" onClick={toggle}>{on ? 'Turn off' : 'Turn on'}</button>
+      </div>
+      <p className="tiny">On by default. The patient sees “Check my form with the camera” on their home screen: in the current plan, form tips for {form} exercise{form === 1 ? '' : 's'}{count ? `, reps and pace only for ${count}` : ''}{video ? `, and ${video} the camera cannot count (the patient is offered a video instead)` : ''}. Turning it off or on is written to the audit log.</p>
+    </div>
+  );
+}
+
 export function FormCheckCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
   const checks = [...(p.formChecks ?? [])].reverse();
   const plan = currentExercises(p, pack);
   // Limits and tempo only for exercises with form rules of their own (count-only exercises flag nothing).
   const measurable = [...new Set([...plan, ...(p.formChecks ?? []).map((c) => c.exerciseId)])].filter((id) => { const k = formKindFor(id); return !!k && checkMode(id) === 'form' && (!KINDS[k].noLimit || paceApplies(k)); });
   if (!checks.length && !plan.length) return null;
-  const on = cameraOn(p);
-  const modes = { form: plan.filter((id) => checkMode(id) === 'form').length, count: plan.filter((id) => checkMode(id) === 'count').length, video: plan.filter((id) => checkMode(id) === 'video').length };
-  const toggle = () => updatePatient(p.id, (q) => setCameraCheck(q, !on, { nowMs: now || clockMs(getState()), today: getState().today }));
   return (
     <div className="card" data-testid="formcheck-card">
-      <h3>Camera check <small>(measured on the patient's phone. Not a diagnosis, and it never changes a tier or a plan. {FORM_CHECK.minUsable * 100}% of frames must be clear or nothing is flagged.)</small></h3>
-      <div className="btnrow">
-        <span>{on ? <b>On for this patient</b> : <b>Off for this patient</b>}{on && p.formCheckOn?.at ? <small> · since {p.formCheckOn.at.slice(0, 10)}</small> : null}</span>
-        <button className={`btn${on ? '' : ' primary'}`} data-testid="fc-switch" onClick={toggle}>{on ? 'Switch off' : 'Switch on'}</button>
-      </div>
-      <p className="tiny">Off by default. When on, the patient sees “Use the camera for an exercise”. In their current plan: {modes.form} with form checks, {modes.count} count only, {modes.video} video only. The switch is written to the audit log.</p>
+      <h3>Camera check <small>(measured on the patient's phone. Not a diagnosis, and it never changes a tier or a plan. {FORM_CHECK.minUsable * 100}% of frames must be clear or nothing is flagged. {cameraOn(p) ? 'On' : 'Off'} for this patient: the switch is at the top of the Plan tab.)</small></h3>
       {checks.length === 0 && <p className="tiny">No camera checks yet.</p>}
       {checks.slice(0, 8).map((c) => <One key={c.id} c={c} p={p} />)}
       {measurable.length > 0 && (

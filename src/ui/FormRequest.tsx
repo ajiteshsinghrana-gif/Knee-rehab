@@ -7,7 +7,7 @@ import { t } from '../i18n';
 import { clockMs, getState, updatePatient } from '../store';
 import { exerciseName, getExercise } from '../exercises/library';
 import { currentExercises } from '../engine/plan';
-import { CONSENT_TEXT, FORM_CONFIG, addFormRequest, consentText, cueText, markReplySeen, newFormRequest, reviewHours, validClip } from '../forms/model';
+import { CONSENT_TEXT, FORM_CONFIG, addFormRequest, consentText, cueText, markReplySeen, newFormRequest, reviewHours, unreadReplies, validClip } from '../forms/model';
 import { Speak } from './FormCheck';
 import { fmtSize, fs } from '../forms/strings';
 import { newLocalId, saveLocalVideo, loadLocalVideo } from '../exercises/deviceVideos';
@@ -19,7 +19,8 @@ const newId = () => 'f' + Array.from(crypto.getRandomValues(new Uint8Array(8)), 
 
 export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: { patient: Patient; pack: ProtocolPack; lang: Lang; exerciseId: string | null; onBack: () => void }) {
   const F = (k: string, p?: Record<string, string | number>) => fs(lang, k, p);
-  const [view, setView] = useState<'new' | 'list'>(exerciseId ? 'new' : 'list');
+  // "Send a video to my physio" opens the new video straight away; a new reply opens the list of videos and replies first.
+  const [view, setView] = useState<'new' | 'list'>(exerciseId || !unreadReplies(patient).length ? 'new' : 'list');
   const [ex, setEx] = useState<string>(exerciseId ?? currentExercises(patient, pack)[0] ?? '');
   const [agreed, setAgreed] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -138,6 +139,7 @@ export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: {
     <main data-testid="form-new">
       <button className="back" onClick={onBack}>← {F('fBack')}</button>
       <h2>{F('fTitle')}</h2>
+      {(patient.formRequests ?? []).length > 0 && <button className="linkbtn" data-testid="my-videos-link" onClick={() => setView('list')}>{F('fMine')}{unreadReplies(patient).length > 0 && <span className="newtag">{F('fNew')}</span>}</button>}
       <p className="hint">{F('fNoEmergency')}</p>
       {!exerciseId && (
         <label className="field"><b>{F('fPick')}</b>

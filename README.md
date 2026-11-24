@@ -544,16 +544,11 @@ Demo: yellow bar, **WhatsApp** shows a simulated chat of the daily check-in. Liv
 
 ### Camera check safety round (2026-11-24)
 
-- **Off by default.** The physio switches the camera on per patient (History tab, **Camera check**, Switch on). The switch is in the audit log and travels to the patient's phone; the phone cannot switch itself on. No demo patient has it on.
-- **What each exercise gets** (`checkMode` in `src/formcheck/config.ts`):
-  - **Check my form**: only exercises with form rules of their own, each rule with a test (a test checks that every fault has one).
-  - **Count my reps**: stairs practice, walking programme and walking with an aid. They borrow another exercise's check, so they get no form flags, no pace flags and no stop.
-  - **Record a video for my physio**: everything the camera cannot measure (quad setting, ice, outdoor cycling, swimming, gait drills).
-- **Wording.** The patient never sees "correct", "good form" or "safe" (a test checks all three languages). They see:
-  - rep counts and pace cues;
-  - one plain cue per fault ("Try to keep your knee straight.");
-  - "I can't see you clearly";
-  - when nothing is flagged: "Nothing was flagged. This does not mean your form is correct. Your physio decides."
+- **On by default (changed 2026-11-24, second round).** Every demo and new patient has the camera check on. The physio can turn it off per patient with the switch at the **top of the Plan tab**; the switch is in the audit log and travels to the patient's phone. The phone cannot change it itself.
+- **Patient home.** Two separate options side by side under "Your exercises": **Check my form with the camera** ("The phone watches you and tells you what to fix.") and **Send a video to my physio** ("Your physio watches it and replies."), in English, Hindi and Bengali.
+- **What each exercise gets** (`checkMode` in `src/formcheck/config.ts`): **form**, exercises with form rules of their own, each rule tested (a test checks every fault has one): reps, pace and form tips. **count**, stairs practice, walking programme and walking with an aid (borrowed check): reps and pace only, a stumble still stops the set, and the screen says "Form tips are not available for this exercise yet. You can send a video to your physio." **video**, exercises the camera cannot measure or count (quad setting, ice, outdoor cycling, swimming, gait drills): the camera screen still opens with the same sentence and a **Send a video to my physio** button.
+- **Live cues.** During a set each tip is shown in large text and spoken in the patient's language, one at a time (each stays at least 3 seconds and until it has been spoken), for example "Keep your knee straight.", "Slower.", "Don't lean to one side.", "Go a little further, if you can.". After the set: reps counted and **Things to work on**, each tip with how many times it came up.
+- **Wording.** The phone may say what to fix, but never that the form is "correct", "good" or "safe" (a test checks all three languages). Nothing flagged: "Nothing was flagged. Your physio decides if your form is right."
 - **Pace.** Each rep is timed and compared with a tempo in seconds per rep. Too fast is under half the tempo; too slow is over 2.5 times it. The physio can set the tempo per patient and exercise, with a reason. The defaults are placeholders (`DEFAULT_TEMPO`). The old speed flags (degrees a second) are gone. There is no pace for holds, walking, cycling or the pendulum.
 - **After each set.**
   - The patient is asked pain 0 to 10, then "Do you feel dizzy, or do you have chest pain or breathlessness?"
@@ -567,7 +562,7 @@ Demo: yellow bar, **WhatsApp** shows a simulated chat of the daily check-in. Liv
 **What to test on real phones** (none of this has run on a real phone yet). Use a mid-range Android phone (Chrome) and an iPhone (Safari, and again as a Home Screen app).
 
 1. **Patient flow, on a patient's own link:**
-   - The camera button is missing until you switch the camera on in the physio record, and appears after a sync.
+   - **Check my form with the camera** and **Send a video to my physio** show side by side under Your exercises. Turn the camera off at the top of the physio's Plan tab: after a sync only the video option is left.
    - Allow the camera when asked. On iPhone, check the prompt appears and that "Don't allow" leads to the error and the **Record a video** button.
 2. **Model download:**
    - The first use needs internet and should take under about 20 s on 4G.

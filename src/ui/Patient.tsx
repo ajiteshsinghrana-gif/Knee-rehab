@@ -232,9 +232,16 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
           })}</ul>
           {sheet && <ExerciseSheet patient={patient} id={sheet} lang={lang} onClose={() => setSheet(null)} />}
           {exs.length > 5 && <button type="button" className="linkbtn" aria-expanded={allEx} onClick={() => setAllEx(!allEx)}>{allEx ? T('showFewer') : T('showAll', { n: exs.length })}</button>}
-          <div className="exbtns">
-            {cameraOn(patient) && exs.length > 0 && <button className="btn" data-testid="open-formcheck" onClick={() => go('formcheck')}>{fcs(lang, 'fcHomeBtn')}</button>}
-            <button className="btn" data-testid="open-forms" onClick={() => go('forms')}>{(patient.formRequests ?? []).length ? fs(lang, 'fMine') : fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</button>
+          {/* Two separate options: the camera check (on unless the physio turned it off) and a video for the physio. */}
+          <div className={`optcards${cameraOn(patient) ? '' : ' one'}`}>
+            {cameraOn(patient) && (
+              <button type="button" className="optcard" data-testid="open-formcheck" onClick={() => go('formcheck')}>
+                <b>{fcs(lang, 'fcHomeBtn')}</b><small>{fcs(lang, 'fcHomeLine')}</small>
+              </button>
+            )}
+            <button type="button" className="optcard" data-testid="open-forms" onClick={() => go('forms')}>
+              <b>{fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</b><small>{fs(lang, 'fHomeLine')}</small>
+            </button>
           </div>
         </section>
       )}

@@ -31,7 +31,7 @@ export interface DownSlice {
   clinicReadings?: PeriodicEntry[];
   /** The physio's range limits for the camera form check, keyed by exercise. The patient's phone uses them; they are physio-owned. */
   formLimits?: Record<string, FormLimit>;
-  /** The physio switched the camera check on for this patient (off when missing or false). */
+  /** False when the physio turned the camera check off for this patient (on when true or missing). */
   formCheckOn?: boolean;
   /** The patient's carer, so the phone can offer to call them if the patient stumbles during a camera check. */
   carer?: { name?: string; phone?: string };
@@ -246,7 +246,7 @@ export function downSlice(p: Patient, clinicDemos?: Record<string, ExerciseDemo>
     ...(p.details?.goal ? { goal: p.details.goal } : {}),
     ...(p.goalProgress?.length ? { goalProgress: p.goalProgress.map((g) => ({ date: g.date, pct: g.pct })) } : {}),
     ...(p.formLimits ? { formLimits: p.formLimits } : {}),
-    formCheckOn: !!p.formCheckOn,
+    formCheckOn: !p.formCheckOff,
     ...(p.details?.carerPhone?.trim() ? { carer: { ...(p.details.carerName?.trim() ? { name: p.details.carerName.trim().slice(0, 80) } : {}), phone: p.details.carerPhone.trim().slice(0, 30) } } : {}),
     ...(p.periodic.some((e) => e.where === 'clinic') ? { clinicReadings: p.periodic.filter((e) => e.where === 'clinic').map(cleanPeriodic) } : {}),
   };
@@ -286,7 +286,7 @@ export function applyDown(p: Patient, raw: unknown): Patient {
     // The physio's limits replace this phone's copy (an older physio build sends none: keep what is here). Removing the last one sends an empty object.
     ...(raw.formLimits !== undefined ? { formLimits: cleanLimits(raw.formLimits) } : {}),
     // The camera switch is the physio's: an older physio build sends nothing, so the phone keeps what it has.
-    ...(typeof raw.formCheckOn === 'boolean' ? { formCheckOn: raw.formCheckOn ? (p.formCheckOn ?? { at: '', by: 'physio' }) : null } : {}),
+    ...(typeof raw.formCheckOn === 'boolean' ? { formCheckOff: raw.formCheckOn ? null : (p.formCheckOff ?? { at: '', by: 'physio' }) } : {}),
     ...(isObj(raw.carer) && str(raw.carer.phone, 30) ? { carerContact: { ...(str(raw.carer.name, 80) ? { name: raw.carer.name } : {}), phone: raw.carer.phone } } : {}),
   };
 }

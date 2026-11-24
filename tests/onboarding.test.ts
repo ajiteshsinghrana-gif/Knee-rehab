@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildPatient, decodeInvite, encodeInvite, inviteUrl, validateOnboard, type OnboardDraft } from '../src/onboarding';
+import { cameraOn } from '../src/formcheck/model';
 import { currentExercises, currentFollowUp } from '../src/engine/plan';
 import { triage } from '../src/engine/triage';
 import { qrMatrix, qrSvg } from '../src/qr';
@@ -24,6 +25,7 @@ describe('onboarding (Phase 3.1)', () => {
     expect(p.notices).toEqual([]);
     expect(triage(p, pack, { nowMs: NOW }).tier).toBe('ON_PLAN');
     expect(p.audit[0].action).toBe('onboard');
+    expect(cameraOn(p)).toBe(true); // the camera check is on for new patients
   });
   it('exercise, follow-up and threshold adjustments go through the audited actions', () => {
     const p = buildPatient({ ...base, exercises: ['heel-slides', 'quad-set', 'cycling'], checkInEveryDays: 2, reviewEveryDays: 3, overrides: [{ target: 'rule:R3:stage:0', value: 8, reason: 'high baseline pain' }] }, { nowMs: NOW, today: '2026-11-15' });

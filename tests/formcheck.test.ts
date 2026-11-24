@@ -12,6 +12,7 @@ import { requestForClip } from '../src/formcheck/model';
 import { PILOT_MIN, countPct, counts, faultsFor, judge, loadPilot, newPilotRecord, putParticipant, repAgreement, savePilot, suggest, summarise, toCsv, upsert, type PilotParticipant, type PilotRecord, type PilotStore } from '../src/formcheck/pilot';
 import { setupHint, lumaOf } from '../src/formcheck/setup';
 import { FORM_CONFIG, consentText } from '../src/forms/model';
+import { FORM_STRINGS } from '../src/forms/strings';
 import { assess, attachClip, cameraOn, carerOf, f1Faults, giveConsent, hasConsent, newCheckLog, pendingChecks, recordCheck, setAfterAnswers, setCameraCheck, setFormLimit, withdrawConsent } from '../src/formcheck/model';
 import { isPending, replyToForm } from '../src/forms/model';
 import { applyDown, applyUp, downSlice, upSlice } from '../src/sync/slices';
@@ -408,7 +409,7 @@ describe('safety and wording', () => {
   it('the patient wording never claims a diagnosis or that anything is safe', () => {
     const en = Object.values(FC_STRINGS.en).join(' ').toLowerCase();
     expect(en).not.toMatch(/you are injured|you have injured|you will (get|be) hurt|dangerous|diagnos(is|ed) you/);
-    expect(FC_STRINGS.en.fcNone).toBe('Nothing was flagged. This does not mean your form is correct. Your physio decides.');
+    expect(FC_STRINGS.en.fcNone).toBe('Nothing was flagged. Your physio decides if your form is right.');
   });
   it('exercise mapping: squats and straight leg raise exist in the library; shoulder abduction needs a physio-written exercise', () => {
     for (const id of [...KIND_EXERCISES.slr, ...KIND_EXERCISES.squat]) expect(getExercise(id)).toBeTruthy();
@@ -1121,17 +1122,24 @@ describe('camera check: what is offered for each exercise', () => {
     for (const k of kinds) for (const id of faultsFor(k)) if (!lines.some((l) => l.includes(`'${id}'`))) missing.push(id);
     expect(missing, missing.join(', ')).toEqual([]);
   });
-  it('count only: reps are counted, nothing is flagged, nothing pauses, and the log says so', () => {
-    const a = new FormAnalyzer('step-up', { max: 5 }, { countOnly: true });
-    let t = 1000;
-    for (let i = 0; i < 10; i++) a.push(squat(0), (t += DT), 1);
-    for (let r = 0; r < 5; r++) { for (let i = 0; i <= 10; i++) { const v = 15 * Math.sin((Math.PI * i) / 10); a.push(swayed(squat(-v / 100, { kneeIn: 0.4, lean: 20 }), 0.1), (t += DT), 1); } for (let i = 0; i < 4; i++) a.push(squat(0), (t += DT), 1); }
-    const sum = a.finish();
+  it('no form rules: reps and pace only; no form tips and no limits, but a stumble still stops the set', () => {
+    const feedSet = (make: (v: number) => Frame, frames: number) => {
+      const a = new FormAnalyzer('step-up', { max: 5 }, { countOnly: true });
+      let t = 1000;
+      for (let i = 0; i < 10; i++) a.push(squat(0), (t += DT), 1);
+      for (let r = 0; r < 5; r++) { for (let i = 0; i <= frames; i++) a.push(make(15 * Math.sin((Math.PI * i) / frames)), (t += DT), 1); for (let i = 0; i < 4; i++) a.push(squat(0), (t += DT), 1); }
+      return a.finish();
+    };
+    const sum = feedSet((v) => squat(-v / 100, { kneeIn: 0.4, lean: 20 }), 40);
     expect(sum.reps).toBe(5);
     expect(sum.faults).toEqual([]);
     expect(sum.paused).toBe(false);
     expect(sum.countOnly).toBe(true);
-    expect(sum.repSecs).toBeUndefined();
+    expect(sum.repSecs!.length).toBe(5);
+    expect(ids(feedSet((v) => squat(-v / 100), 8))).toEqual(['pace-fast']);
+    const stumble = feedSet((v) => swayed(squat(-v / 100), v > 4 ? 0.1 : 0), 40);
+    expect(stumble.paused).toBe(true);
+    expect(stumble.faults).toEqual([]);
     const log = newCheckLog({ id: 'k1', date: today, startedAt: 0, endedAt: 1, exerciseId: 'stairs-practice', summary: sum, by: 'patient' });
     expect(log.mode).toBe('count');
     expect(setFormLimit(base, 'stairs-practice', { max: 20 }, 'why', { nowMs: 0, today })).toEqual(base);
@@ -1215,28 +1223,36 @@ describe('camera check: setup prompts before a set', () => {
   });
 });
 
-describe('camera check: off until the physio switches it on', () => {
-  it('no patient has it on by default, including the demo patients', () => {
-    for (const p of makeAllPatients()) expect(cameraOn(p)).toBe(false);
+describe('camera check: on by default, the physio can turn it off', () => {
+  it('every demo patient has it on', () => {
+    for (const p of makeAllPatients()) expect(cameraOn(p)).toBe(true);
   });
-  it('the physio switches it on and off, written to the audit log; it changes no tier', () => {
-        const p = base;
-    const on = setCameraCheck(p, true, ctx);
+  it('the physio turns it off and on, written to the audit log; it changes no tier', () => {
+    const p = base;
+    const off = setCameraCheck(p, false, ctx);
+    expect(cameraOn(off)).toBe(false);
+    expect(off.formCheckOff!.at).toBe(new Date(ctx.nowMs).toISOString());
+    expect(off.audit[off.audit.length - 1].action).toBe('form-check-switch');
+    expect(off.audit[off.audit.length - 1].summary).toMatch(/off/);
+    expect(triage(off, pack)).toEqual(triage(p, pack));
+    const on = setCameraCheck(off, true, ctx);
     expect(cameraOn(on)).toBe(true);
-    expect(on.audit[on.audit.length - 1].action).toBe('form-check-switch');
-    expect(triage(on, pack)).toEqual(triage(p, pack));
-    expect(cameraOn(setCameraCheck(on, false, ctx))).toBe(false);
+    expect(on.formCheckOff).toBeUndefined();
     expect(setCameraCheck(on, true, ctx)).toBe(on);
   });
-  it('the switch and the carer travel to the phone; the phone cannot switch itself on', () => {
-    const phys = { ...setCameraCheck(base, true, ctx), details: { carerName: 'Asha', carerPhone: '+91 98000 00000' } } as Patient;
+  it('the switch is at the top of the Plan tab', () => {
+    const clin = readFileSync('src/ui/Clinician.tsx', 'utf8');
+    expect(clin).toMatch(/aria-labelledby=\{`\$\{idBase\}-tab-plan`\}>\s*<CameraSwitch /);
+  });
+  it('the switch and the carer travel to the phone; the phone cannot turn it off or on itself', () => {
+    const phys = { ...setCameraCheck(base, false, ctx), details: { carerName: 'Asha', carerPhone: '+91 98000 00000' } } as Patient;
     const phone = applyDown(base, JSON.parse(JSON.stringify(downSlice(phys))));
-    expect(cameraOn(phone)).toBe(true);
+    expect(cameraOn(phone)).toBe(false);
     expect(carerOf(phone)).toEqual({ name: 'Asha', phone: '+91 98000 00000' });
-    const off = applyDown(phone, JSON.parse(JSON.stringify(downSlice(base))));
-    expect(cameraOn(off)).toBe(false);
-    const up = { ...upSlice(base), formCheckOn: true } as unknown;
-    expect(cameraOn(applyUp(base, up))).toBe(false);
+    const back = applyDown(phone, JSON.parse(JSON.stringify(downSlice(base))));
+    expect(cameraOn(back)).toBe(true);
+    const up = { ...upSlice(base), formCheckOn: false, formCheckOff: { at: 'x', by: 'patient' } } as unknown;
+    expect(cameraOn(applyUp(base, up))).toBe(true);
   });
 });
 
@@ -1265,16 +1281,24 @@ describe('camera check: after the set', () => {
 });
 
 describe('camera check: wording and video', () => {
-  const BANNED: Record<'en' | 'hi' | 'bn', RegExp> = { en: /\bsafe(ly|ty)?\b|\bcorrect(ly)?\b|good form/i, hi: /सुरक्षित|सही/, bn: /নিরাপদ|সঠিক/ };
-  it('patient wording never says correct, good form or safe, in any language; only the fixed "nothing was flagged" sentence mentions correct', () => {
-    for (const l of ['en', 'hi', 'bn'] as const) {
-      for (const [k, v] of Object.entries(FC_STRINGS[l])) if (k !== 'fcNone') expect(`${k}: ${v}`).not.toMatch(BANNED[l]);
-    }
-    expect(FC_STRINGS.hi.fcNone).toMatch(/सही/);
-    expect(FC_STRINGS.bn.fcNone).toMatch(/সঠিক/);
+  const BANNED: Record<'en' | 'hi' | 'bn', RegExp> = { en: /\bsafe(ly|ty)?\b|\bcorrect(ly)?\b|\bgood\b/i, hi: /सुरक्षित|सही|अच्छ/, bn: /নিরাপদ|সঠিক|ভালো/ };
+  it('patient wording never says correct, good or safe, in any language', () => {
+    for (const l of ['en', 'hi', 'bn'] as const) for (const [k, v] of Object.entries(FC_STRINGS[l])) expect(`${k}: ${v}`).not.toMatch(BANNED[l]);
+    expect(FC_STRINGS.en.fcNone).toBe('Nothing was flagged. Your physio decides if your form is right.');
   });
-  it('each fault is one plain cue', () => {
-    for (const [k, v] of Object.entries(FC_STRINGS.en)) if (k.startsWith('fault-')) expect(v).toMatch(/^(Try|Keep)[^.]*\.( Only your foot moves\.)?$/);
+  it('each fault is one short instruction saying what to fix', () => {
+    for (const [k, v] of Object.entries(FC_STRINGS.en)) if (k.startsWith('fault-')) expect(v).toMatch(/^(Keep|Don't|Hold|Take|Walk|Pull|Make|Sit|Lift|Lower|Go|Slower|A little)\b[^.]*\.( (Only your foot moves|Don't lean)\.)?$/);
+    expect(FC_STRINGS.en['fault-pace-fast']).toBe('Slower.');
+    expect(FC_STRINGS.en['fault-slr-knee-bent']).toBe('Keep your knee straight.');
+  });
+  it('the home screen shows two separate options; exercises without form rules still open the camera', () => {
+    const home = readFileSync('src/ui/Patient.tsx', 'utf8');
+    expect(home).toMatch(/data-testid="open-formcheck"[\s\S]*fcHomeLine[\s\S]*data-testid="open-forms"[\s\S]*fHomeLine/);
+    for (const l of ['en', 'hi', 'bn'] as const) expect(FORM_STRINGS[l].fHomeBtn).toBe(FORM_STRINGS[l].fTitle);
+    expect(FORM_STRINGS.en.fHomeBtn).toBe('Send a video to my physio');
+    expect(FC_STRINGS.en.fcHomeBtn).toBe('Check my form with the camera');
+    expect(FC_STRINGS.en.fcNoTips).toBe('Form tips are not available for this exercise yet. You can send a video to your physio.');
+    expect(readFileSync('src/ui/FormCheck.tsx', 'utf8')).toMatch(/mode !== 'form' && <p className="hint" data-testid="fc-no-tips">/);
   });
   it('videos are capped at 30 seconds and the warning about other people is in the consent', () => {
     expect(FORM_CONFIG.maxClipSec).toBe(30);

@@ -3,9 +3,10 @@ import type { Lang } from '../types';
 
 type Dict = Record<string, string>;
 const en: Dict = {
-  fHomeBtn: 'Ask my physio about an exercise',
+  fHomeBtn: 'Send a video to my physio',
+  fHomeLine: 'Your physio watches it and replies.',
   fMine: 'My videos and replies',
-  fTitle: 'Ask my physio for help',
+  fTitle: 'Send a video to my physio',
   fPick: 'Which exercise do you need help with?',
   fNoEmergency: 'This is not for emergencies or warning signs. For those, use your check-in or call 112.',
   fNoteLabel: 'What is hard? (optional)',
@@ -34,9 +35,10 @@ const en: Dict = {
   fNew: 'New reply',
 };
 const hi: Dict = {
-  fHomeBtn: 'फ़िज़ियो से किसी व्यायाम के बारे में पूछें',
+  fHomeBtn: 'फ़िज़ियो को वीडियो भेजें',
+  fHomeLine: 'आपके फ़िज़ियो इसे देखकर जवाब देते हैं।',
   fMine: 'मेरे वीडियो और जवाब',
-  fTitle: 'फ़िज़ियो से मदद माँगें',
+  fTitle: 'फ़िज़ियो को वीडियो भेजें',
   fPick: 'किस व्यायाम में मदद चाहिए?',
   fNoEmergency: 'यह आपातकाल या चेतावनी के लक्षणों के लिए नहीं है। उनके लिए चेक-इन करें या 112 पर कॉल करें।',
   fNoteLabel: 'क्या मुश्किल है? (ज़रूरी नहीं)',
@@ -65,9 +67,10 @@ const hi: Dict = {
   fNew: 'नया जवाब',
 };
 const bn: Dict = {
-  fHomeBtn: 'ফিজিওকে কোনো ব্যায়াম নিয়ে জিজ্ঞাসা করুন',
+  fHomeBtn: 'ফিজিওকে ভিডিও পাঠান',
+  fHomeLine: 'আপনার ফিজিও এটি দেখে উত্তর দেন।',
   fMine: 'আমার ভিডিও ও উত্তর',
-  fTitle: 'ফিজিওর কাছে সাহায্য চান',
+  fTitle: 'ফিজিওকে ভিডিও পাঠান',
   fPick: 'কোন ব্যায়ামে সাহায্য দরকার?',
   fNoEmergency: 'এটি জরুরি অবস্থা বা সতর্কসংকেতের জন্য নয়। সেজন্য চেক-ইন করুন বা 112-এ ফোন করুন।',
   fNoteLabel: 'কী কঠিন লাগছে? (ঐচ্ছিক)',

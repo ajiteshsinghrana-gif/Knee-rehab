@@ -39,11 +39,14 @@ export interface FormSummary {
   /** Exercises with a pace: how long each rep took, in seconds, and the tempo it was compared with. */
   repSecs?: number[];
   tempo?: number;
-  /** Count only: nothing was judged, only reps counted. */
+  /** Count only: reps and pace, no form tips (an exercise without form rules of its own). */
   countOnly?: true;
 }
 export interface AnalyzerOptions {
-  /** Count reps only: no form flags, no pace flags and no pause (exercises without rules of their own). */
+  /**
+   * Exercises without form rules of their own: reps and pace only. No form flags, no limits; a stumble (loss of balance)
+   * still stops the set, but is not listed as a form fault.
+   */
   countOnly?: boolean;
   /** Seconds per rep the physio set for this patient; otherwise the default tempo for the kind. */
   tempoSec?: number;
@@ -240,7 +243,7 @@ export class FormAnalyzer {
       ...(this.isRate && this.cadence() !== null ? { cadence: this.cadence()! } : {}),
       ...(this.heldMax.size ? { held: Object.fromEntries([...this.heldMax.entries()].map(([k, v]) => [k, Math.round(v * 10) / 10])) } : {}),
       ...(this.recordTrace ? { trace: this.traceOut } : {}),
-      ...(this.tempo !== null && !this.opts.countOnly ? { repSecs: this.repSecs.slice(0, 60), tempo: this.tempo } : {}),
+      ...(this.tempo !== null ? { repSecs: this.repSecs.slice(0, 60), tempo: this.tempo } : {}),
       ...(this.opts.countOnly ? { countOnly: true as const } : {}),
     };
   }
@@ -852,7 +855,11 @@ export class FormAnalyzer {
   }
 
   private record(id: string, kind: FormFaultKind, rep: number, value: number, unit: FormFault['unit'], tMs: number, ev: FormEvent[]) {
-    if (this.opts.countOnly) return; // count only: nothing is judged
+    if (this.opts.countOnly && !id.startsWith('pace-')) {
+      // No form tips here. A stumble still stops the set (safety), without being listed as a form fault.
+      if (FORM_CHECK.pauseEnabled && kind === 'stability' && this.recentUsable >= 0.8 && tMs - this.lastPauseMs > 5000) { this.lastPauseMs = tMs; this.pausedIds.add(id); ev.push({ type: 'pause', id, kind }); }
+      return;
+    }
     let f = this.found.get(id);
     if (!f) { f = { kind, reps: new Set(), peak: value, unit, firstSec: ((tMs - (this.t0 ?? tMs)) / 1000) }; this.found.set(id, f); }
     f.peak = Math.max(f.peak, value);

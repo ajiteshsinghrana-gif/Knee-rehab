@@ -369,7 +369,7 @@ export interface FormCheckLog {
   requestId?: string;
   /** Limit in force when the check was done. */
   limit?: FormLimit;
-  /** 'count': reps only, nothing judged (an exercise without rules of its own). Missing means a form check. */
+  /** 'count': reps and pace only, no form tips (an exercise without rules of its own). Missing means a form check. */
   mode?: 'form' | 'count';
   /** How long each rep took (seconds) and the tempo it was compared with. */
   repSecs?: number[];
@@ -462,8 +462,8 @@ export interface Patient {
   formCheckConsent?: { by: AnsweredBy; at: string; version: string };
   /** Limits the physio set per exercise for the camera form check, in the unit of that exercise (see formcheck/config.ts). Physio-owned. */
   formLimits?: Record<string, FormLimit>;
-  /** The camera check is off until the physio switches it on for this patient. Physio-owned; travels to the patient's phone. */
-  formCheckOn?: { at: string; by: string } | null;
+  /** The camera check is ON for every patient unless the physio turned it off (Plan tab). Physio-owned; travels to the patient's phone. */
+  formCheckOff?: { at: string; by: string } | null;
   /** Patient's phone only: the carer's name and number from the physio's record, for "Call my carer" after a stumble. */
   carerContact?: { name?: string; phone: string };
   anchorDate: string; // surgery date

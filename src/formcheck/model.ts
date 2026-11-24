@@ -23,13 +23,14 @@ export const withdrawConsent = (p: Patient): Patient => { const { formCheckConse
 
 export const limitFor = (p: Patient, exerciseId: string): FormLimit | undefined => p.formLimits?.[exerciseId];
 
-/** The camera check is off for every patient until the physio switches it on. */
-export const cameraOn = (p: Patient): boolean => !!p.formCheckOn;
+/** The camera check is on for every patient (demo and new) unless the physio turned it off for that patient. */
+export const cameraOn = (p: Patient): boolean => !p.formCheckOff;
 /** The physio switches the camera check on or off for one patient. Written to the audit log. Changes no plan and no tier. */
 export function setCameraCheck(p: Patient, on: boolean, ctx: Ctx): Patient {
   if (on === cameraOn(p)) return p;
   const at = new Date(ctx.nowMs).toISOString();
-  const next: Patient = { ...p, formCheckOn: on ? { at, by: ctx.who ?? 'physio' } : null };
+  const { formCheckOff: _o, ...rest } = p;
+  const next: Patient = on ? rest : { ...p, formCheckOff: { at, by: ctx.who ?? 'physio' } };
   return withAuditNote(next, 'form-check-switch', `Camera check switched ${on ? 'on' : 'off'} for this patient`, cameraOn(p), on, on ? 'Physio switched the camera check on' : 'Physio switched the camera check off', ctx);
 }
 /** The carer to offer a call to after a stumble: the copy synced to the patient's phone, or the physio's record on a shared device. */

@@ -91,6 +91,28 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
   const fps = useRef({ t0: 0, n: 0, warned: false });
   const okRunRef = useRef(0);
   const cueTimer = useRef(0);
+  /** Cues waiting to be shown and spoken, one at a time. */
+  const cueQueue = useRef<string[]>([]);
+  const cueBusy = useRef(false);
+  const cueStop = useRef<null | (() => void)>(null);
+  /** Show and speak the next cue; each stays at least 3 seconds and until it has been spoken. */
+  const nextCue = () => {
+    const text = cueQueue.current.shift();
+    if (!text) { cueBusy.current = false; setCue(''); return; }
+    cueBusy.current = true;
+    setCue(text);
+    let spoken = !speakSupported(lang), shown = false, moved = false;
+    const done = () => { if (spoken && shown && !moved) { moved = true; nextCue(); } };
+    if (!spoken) cueStop.current = speak(text, lang, () => { spoken = true; done(); });
+    cueTimer.current = window.setTimeout(() => { shown = true; if (!spoken) window.setTimeout(() => { spoken = true; done(); }, 4000); done(); }, 3000);
+  };
+  const pushCue = (text: string) => {
+    // One at a time: the same cue is not queued twice, and at most two wait (the newest ones).
+    if (cueQueue.current.includes(text)) return;
+    cueQueue.current = [...cueQueue.current, text].slice(-2);
+    if (!cueBusy.current) nextCue();
+  };
+  const clearCues = () => { clearTimeout(cueTimer.current); cueQueue.current = []; cueBusy.current = false; try { cueStop.current?.(); } catch { /* not speaking */ } setCue(''); };
 
   const stopCamera = () => {
     cancelAnimationFrame(raf.current);
@@ -98,7 +120,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
     stream.current = null;
   };
   useEffect(() => () => {
-    stopCamera(); pose.current?.close(); pose.current = null; clearTimeout(recTimer.current); clearTimeout(cueTimer.current);
+    stopCamera(); pose.current?.close(); pose.current = null; clearTimeout(recTimer.current); clearTimeout(cueTimer.current); try { cueStop.current?.(); } catch { /* not speaking */ }
     try { rec.current?.stop(); } catch { /* not recording */ }
   }, []);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -144,9 +166,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
       else if (e.type === 'unseen') setUnseen(true);
       else if (e.type === 'seen') setUnseen(false);
       else if (e.type === 'fault' && !blind) {
-        clearTimeout(cueTimer.current);
-        setCue(F(`fault-${e.id}`));
-        cueTimer.current = window.setTimeout(() => setCue(''), 4000);
+        pushCue(F(`fault-${e.id}`));
       } else if (e.type === 'pause') {
         void end(e.kind === 'stability' ? 'stumble' : 'limit');
         return;
@@ -215,7 +235,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
   const startSet = () => {
     analyzer.current = new FormAnalyzer(kind, countOnly ? undefined : limit, { countOnly, tempoSec: tempo });
     analyzer.current.recordTrace = !!trace;
-    setReps(0); setUnseen(false); setCue('');
+    setReps(0); setUnseen(false); clearCues();
     chunks.current = []; recMime.current = ''; recStop.current = null;
     if (stream.current && typeof MediaRecorder !== 'undefined') {
       try {
@@ -246,6 +266,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
   async function end(stop: SetOutcome['stop']) {
     if (!live.current || !analyzer.current) return;
     live.current = false;
+    clearCues();
     const summary = analyzer.current.finish();
     if (stop === 'stumble') {
       try { navigator.vibrate?.(300); } catch { /* not supported */ }
@@ -275,7 +296,7 @@ export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, o
         ? <p className="gs-count" aria-live="polite">Recording. The phone's results are shown after you enter yours.</p>
         : <p className="gs-count" aria-live="polite">{F(COUNT_KEYS[kind]?.live || 'fcReps', { n: reps })}</p>)}
       {phase === 'live' && unseen && <p className="hint" role="status">{F('fcUnseen')}</p>}
-      {phase === 'live' && cue && <p className="gs-msg" role="status">{cue}</p>}
+      {phase === 'live' && cue && <p className="fc-cue" role="status" aria-live="assertive" data-testid="fc-cue">{cue}</p>}
       {phase === 'setup' && (
         <>
           <p className="tiny">{F(VIEW_KEY[KINDS[kind].view])}</p>
@@ -429,20 +450,25 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
     if (log.cadence) lines.push(F(COUNT_KEYS[log.kind]?.rate ?? 'fcCadence', { n: log.cadence }));
     if (log.holds?.length) lines.push(F('fcHolds', { list: log.holds.join(', ') }));
     if (log.repSecs?.length && log.tempo) lines.push(F('fcPaceLine', { sec: median(log.repSecs), tempo: log.tempo }));
-    const cues = log.faults.map((f) => F('fcLine', { what: F(`fault-${f.id}`), n: f.reps.length, total: Math.max(log.repsCounted, f.reps.length) }));
-    const verdict = log.mode === 'count' ? F('fcCountNote') : a.unreliable ? F('fcUnreliable') : cues.length ? `${F('fcHead')} ${cues.join(' ')}` : F('fcNone');
+    // "Things to work on": each cue once, with how many times it came up (the reps it was seen in; two faults with the same cue add up).
+    const tally = new Map<string, number>();
+    for (const f of log.faults) { const c = F(`fault-${f.id}`); tally.set(c, (tally.get(c) ?? 0) + f.reps.length); }
+    const cues = [...tally.entries()].sort((x, y) => y[1] - x[1]).map(([what, n]) => (n === 1 ? F('fcLineOnce', { what }) : F('fcLine', { what, n })));
+    const count = log.mode === 'count';
+    const verdict = a.unreliable ? F('fcUnreliable') : [count ? F('fcNoTips') : '', cues.length ? `${F('fcHead')} ${cues.join(' ')}` : count ? '' : F('fcNone')].filter(Boolean).join(' ');
     return (
       <main data-testid="formcheck-result">
         <h2>{F('fcResult')} <Speak text={[...lines, verdict].join(' ')} lang={lang} /></h2>
         <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
         {result.stop === 'limit' && <p className="red" role="alert"><strong>{F('fcPause')}</strong></p>}
         {lines.map((x) => <p key={x}>{x}</p>)}
-        {log.mode === 'count' ? <p className="hint">{F('fcCountNote')}</p> : a.unreliable ? <p className="hint">{F('fcUnreliable')}</p> : cues.length ? (
+        {count && <p className="hint" data-testid="fc-no-tips">{F('fcNoTips')}</p>}
+        {a.unreliable ? <p className="hint">{F('fcUnreliable')}</p> : cues.length ? (
           <div className="card">
             <b>{F('fcHead')}</b>
             <ul className="exlist">{cues.map((c) => <li key={c}>{c}</li>)}</ul>
           </div>
-        ) : <p data-testid="fc-none">{F('fcNone')}</p>}
+        ) : count ? null : <p data-testid="fc-none">{F('fcNone')}</p>}
         {(a.raise || log.paused) && <p className="okline" data-testid="fc-told">{F('fcTold', { hours })}</p>}
         {a.raise && !clip && clipState === 'idle' && <p className="tiny">{F('fcToldNoClip')}</p>}
         {clip && clipState !== 'deleted' && (
@@ -485,8 +511,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVid
           <select value={variant} onChange={(e) => setVariant(Number(e.target.value))} data-testid="fc-variant">{variants.map((v, i) => <option key={v.kind} value={i}>{F(v.labelKey)}</option>)}</select>
         </label>
       )}
-      {mode === 'count' && <p className="hint" data-testid="fc-count-note">{F('fcCountNote')}</p>}
-      {mode === 'video' && <p className="hint" data-testid="fc-video-note">{F('fcVideoNote')}</p>}
+      {mode !== 'form' && <p className="hint" data-testid="fc-no-tips">{F('fcNoTips')}{mode === 'video' ? ` ${F('fcCantCount')}` : ''}</p>}
       {mode !== 'video' && kind && <p className="tiny">{F(VIEW_KEY[KINDS[kind].view])}</p>}
       {mode !== 'video' && (!hasConsent(patient) ? (
         <div className="card" data-testid="fc-consent">

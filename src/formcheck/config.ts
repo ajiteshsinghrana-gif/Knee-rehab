@@ -351,8 +351,8 @@ export const BORROWED: string[] = ['stairs-practice', 'walking-programme', 'walk
 /**
  * What the camera offers for one exercise:
  *   form   its own form rules, each with an automated test (tests/formcheck.test.ts): reps, pace and one cue per fault
- *   count  reps only, no form flags (the check is borrowed from another exercise)
- *   video  the camera cannot measure it: the patient can record a video for the physio instead
+ *   count  reps and pace only, no form tips (the check is borrowed from another exercise); a stumble still stops the set
+ *   video  the camera cannot measure or count it: the screen still opens, says form tips are not available yet, and offers a video
  */
 export type CheckMode = 'form' | 'count' | 'video';
 export const checkMode = (exerciseId: string): CheckMode => (!formKindFor(exerciseId) ? 'video' : BORROWED.includes(exerciseId) ? 'count' : 'form');

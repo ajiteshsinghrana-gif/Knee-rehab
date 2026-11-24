@@ -86,8 +86,7 @@ Patient screen: **Start my exercises**. Tap through one exercise (Rep done, rest
 
 ## Optional: camera check (1 min, no live camera needed)
 
-- **Physio, Ravi, History tab, Camera check**: it is **Off for this patient** by default. Press **Switch on**; it appears in the audit log. Under **Limits and pace**, set a tempo (for example 3 s a rep for squats) with a reason.
-- **Patient phone, Ravi**: **Use the camera for an exercise** now shows. Pick **Squats**: **Check my form**. Pick **Gait drills**: **Record a video for my physio** (the camera cannot measure it). On a total knee patient, **Stairs practice** shows **Count my reps**.
-- Say: the phone never says "correct" or "safe"; it counts, times the pace, and gives one plain tip per fault. After each set it asks about pain, dizziness, chest pain and breathlessness, and a yes goes to the warning signs.
-- Reset the demo afterwards so the camera is off again. Only show a live set if you have rehearsed it on that phone.
-
+- **Patient phone, Ravi**: under Your exercises, two options side by side: **Check my form with the camera** and **Send a video to my physio**.
+- **Check my form**: pick **Squats** (form tips) or **Gait drills** ("Form tips are not available for this exercise yet", with a video button). Say: during a set the phone shows and speaks one tip at a time, such as "Keep your knee straight" or "Slower"; afterwards it lists Things to work on. It never says the form is correct, good or safe, and after each set it asks about pain, dizziness, chest pain and breathlessness.
+- **Physio, Ravi, Plan tab**: the camera switch is at the top. It is on by default; turning it off is in the audit log.
+- Only show a live set if you have rehearsed it on that phone.

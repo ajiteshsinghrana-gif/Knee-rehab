@@ -29,7 +29,7 @@ import { curveOrigin } from '../engine/curves';
 import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
 import { SessionsCard } from './SessionsCard';
 import { FormReview } from './FormReview';
-import { FormCheckCard } from './FormCheckCard';
+import { CameraSwitch, FormCheckCard } from './FormCheckCard';
 import { PilotScreen } from './Pilot';
 import { pendingForms } from '../forms/model';
 import { optInWeeklyMeasures } from '../checkin';
@@ -501,6 +501,7 @@ function Detail({ patient: p, pack, r, now }: { patient: Patient; pack: Protocol
 
       {tab === 'plan' && (
         <div className="tabpanel" role="tabpanel" id={`${idBase}-panel-plan`} aria-labelledby={`${idBase}-tab-plan`}>
+          <CameraSwitch patient={p} pack={pack} now={now} />
           <VisitsCard patient={p} now={now} />
           <AdviceCard patient={p} pack={pack} now={now} />
           <PlanCard patient={p} pack={pack} now={now} onApply={apply} err={err} onAdjust={p.status !== 'completed' && !adjustOpen ? () => setAdjustOpen(true) : undefined} />
