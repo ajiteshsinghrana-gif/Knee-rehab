@@ -8,7 +8,11 @@
  */
 import type { FormFaultKind } from '../types';
 
-export type FormKind = 'slr' | 'squat' | 'shoulder-abduction';
+export type FormKind =
+  | 'slr' | 'squat' | 'shoulder-abduction'
+  | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise';
+/** Where the phone goes: side on lying down, side on standing, facing the person standing, or facing the person seated. */
+export type FormView = 'side' | 'sideStand' | 'front' | 'seated';
 export const SIGNOFF = 'NEEDS_PHYSIO_SIGNOFF' as const;
 
 /** MediaPipe Pose Landmarker point numbers (33 points). */
@@ -26,6 +30,14 @@ export const KIND_EXERCISES: Record<FormKind, string[]> = {
   slr: ['straight-leg-raise'],
   squat: ['squats', 'mini-squats'],
   'shoulder-abduction': ['shoulder-abduction'],
+  'knee-flex': ['heel-slides', 'gentle-rom'],
+  'sit-to-stand': ['sit-to-stand'],
+  lunge: ['lunges'],
+  'step-up': ['step-ups'],
+  'shoulder-flexion': ['assisted-arm-raise', 'wall-slide'],
+  'hip-abduction': ['hip-abduction'],
+  bridging: ['bridging'],
+  'calf-raise': ['calf-raises'],
 };
 export const formKindFor = (exerciseId: string): FormKind | null => {
   for (const k of Object.keys(KIND_EXERCISES) as FormKind[]) if (KIND_EXERCISES[k].includes(exerciseId)) return k;
@@ -36,7 +48,9 @@ export interface KindConfig {
   /** How the main movement number is read, and its unit for the physio's limits. */
   signal: 'deg' | 'pct';
   /** Camera view the patient is asked for. */
-  view: 'side' | 'front';
+  view: FormView;
+  /** What the main number means, shown to the physio next to the limit boxes. */
+  hint: string;
   /** Rep counting with a gap between the two thresholds, so a small wobble is not counted. */
   repUp: number;
   repDown: number;
@@ -78,7 +92,7 @@ export const FORM_CHECK = {
 export const KINDS: Record<FormKind, KindConfig> = {
   // Side-on, lying on the back. Signal: hip lift in degrees.
   slr: {
-    signal: 'deg', view: 'side', repUp: 20, repDown: 8, minFrames: 6,
+    signal: 'deg', view: 'side', hint: 'degrees the leg is lifted', repUp: 20, repDown: 8, minFrames: 6,
     faults: [
       { id: 'slr-knee-bent', kind: 'posture', limit: 20, unit: 'deg' },        // knee more than 20 degrees short of straight
       { id: 'slr-trunk-shift', kind: 'compensation', limit: 12, unit: 'deg' }, // trunk turns more than 12 degrees from where it started
@@ -87,7 +101,7 @@ export const KINDS: Record<FormKind, KindConfig> = {
   },
   // Facing the camera. Signal: how far the hips drop, as a share of leg length.
   squat: {
-    signal: 'pct', view: 'front', repUp: 12, repDown: 5, minFrames: 6,
+    signal: 'pct', view: 'front', hint: 'hip drop as % of leg length', repUp: 12, repDown: 5, minFrames: 6,
     faults: [
       { id: 'squat-knee-in', kind: 'posture', limit: 12, unit: 'pct' },        // knee falls inward by 12% of thigh length
       { id: 'squat-lean', kind: 'compensation', limit: 10, unit: 'deg' },      // trunk leans sideways more than 10 degrees
@@ -97,12 +111,84 @@ export const KINDS: Record<FormKind, KindConfig> = {
   },
   // Facing the camera. Signal: arm raise away from the side, in degrees.
   'shoulder-abduction': {
-    signal: 'deg', view: 'front', repUp: 40, repDown: 15, minFrames: 6,
+    signal: 'deg', view: 'front', hint: 'degrees the arm is raised', repUp: 40, repDown: 15, minFrames: 6,
     faults: [
       { id: 'abd-elbow-bent', kind: 'posture', limit: 30, unit: 'deg' },       // elbow more than 30 degrees short of straight
       { id: 'abd-lean', kind: 'compensation', limit: 8, unit: 'deg' },         // trunk leans sideways more than 8 degrees
       { id: 'abd-shrug', kind: 'compensation', limit: 15, unit: 'pct' },       // shoulder rises by 15% of its starting ear distance
       { id: 'abd-fast', kind: 'control', limit: 120, unit: 'degps', minFrames: 3 },
+    ],
+  },
+  // Side-on, lying or sitting. Signal: how far the knee bends, in degrees (0 = straight).
+  'knee-flex': {
+    signal: 'deg', view: 'side', hint: 'degrees of knee bend', repUp: 30, repDown: 10, minFrames: 6,
+    faults: [
+      { id: 'flex-trunk-shift', kind: 'compensation', limit: 12, unit: 'deg' },  // trunk rolls or turns more than 12 degrees from where it started
+      { id: 'flex-fast', kind: 'control', limit: 120, unit: 'degps', minFrames: 3 },
+    ],
+  },
+  // Facing the camera, starting seated. Signal: how far the hips rise, as a share of leg length.
+  'sit-to-stand': {
+    signal: 'pct', view: 'seated', hint: 'hip rise as % of leg length', repUp: 25, repDown: 8, minFrames: 6,
+    faults: [
+      { id: 'sit-knee-in', kind: 'posture', limit: 12, unit: 'pct' },
+      { id: 'sit-lean', kind: 'compensation', limit: 10, unit: 'deg' },
+      { id: 'sit-balance', kind: 'stability', limit: 15, unit: 'pct' },
+      { id: 'sit-fast', kind: 'control', limit: 60, unit: 'pctps', minFrames: 3 },
+    ],
+  },
+  // Facing the camera. The front foot moves, so only hip sway is judged, not the feet.
+  lunge: {
+    signal: 'pct', view: 'front', hint: 'hip drop as % of leg length', repUp: 12, repDown: 5, minFrames: 6,
+    faults: [
+      { id: 'lunge-knee-in', kind: 'posture', limit: 12, unit: 'pct' },
+      { id: 'lunge-lean', kind: 'compensation', limit: 10, unit: 'deg' },
+      { id: 'lunge-sway', kind: 'stability', limit: 15, unit: 'pct' },
+      { id: 'lunge-fast', kind: 'control', limit: 60, unit: 'pctps', minFrames: 3 },
+    ],
+  },
+  // Facing the camera. Signal: how far the hips rise onto the step, as a share of leg length.
+  'step-up': {
+    signal: 'pct', view: 'front', hint: 'hip rise as % of leg length', repUp: 8, repDown: 3, minFrames: 6,
+    faults: [
+      { id: 'step-knee-in', kind: 'posture', limit: 12, unit: 'pct' },
+      { id: 'step-lean', kind: 'compensation', limit: 10, unit: 'deg' },
+      { id: 'step-sway', kind: 'stability', limit: 15, unit: 'pct' },
+      { id: 'step-fast', kind: 'control', limit: 60, unit: 'pctps', minFrames: 3 },
+    ],
+  },
+  // Side-on, standing. Signal: arm raised forwards, in degrees.
+  'shoulder-flexion': {
+    signal: 'deg', view: 'sideStand', hint: 'degrees the arm is raised', repUp: 40, repDown: 15, minFrames: 6,
+    faults: [
+      { id: 'arm-lean', kind: 'compensation', limit: 10, unit: 'deg' },  // trunk leans more than 10 degrees from where it started
+      { id: 'arm-fast', kind: 'control', limit: 120, unit: 'degps', minFrames: 3 },
+    ],
+  },
+  // Facing the camera, standing. Signal: how far the lifted leg moves out from straight down, in degrees.
+  'hip-abduction': {
+    signal: 'deg', view: 'front', hint: 'degrees the leg moves out to the side', repUp: 15, repDown: 6, minFrames: 6,
+    faults: [
+      { id: 'hipabd-lean', kind: 'compensation', limit: 10, unit: 'deg' },
+      { id: 'hipabd-knee-bent', kind: 'posture', limit: 20, unit: 'deg' },
+      { id: 'hipabd-fast', kind: 'control', limit: 100, unit: 'degps', minFrames: 3 },
+    ],
+  },
+  // Side-on, lying on the back. Signal: how far the hips lift, as a share of thigh length.
+  bridging: {
+    signal: 'pct', view: 'side', hint: 'hip lift as % of thigh length', repUp: 25, repDown: 8, minFrames: 6,
+    faults: [
+      { id: 'bridge-feet', kind: 'stability', limit: 12, unit: 'pct' },  // a foot slides by 12% of thigh length
+      { id: 'bridge-fast', kind: 'control', limit: 60, unit: 'pctps', minFrames: 3 },
+    ],
+  },
+  // Facing the camera, standing. Signal: how far the heels rise, as a share of leg length.
+  'calf-raise': {
+    signal: 'pct', view: 'front', hint: 'heel rise as % of leg length', repUp: 4, repDown: 1.5, minFrames: 6,
+    faults: [
+      { id: 'calf-lean', kind: 'compensation', limit: 10, unit: 'deg' },
+      { id: 'calf-sway', kind: 'stability', limit: 10, unit: 'pct' },
+      { id: 'calf-fast', kind: 'control', limit: 40, unit: 'pctps', minFrames: 3 },
     ],
   },
 };

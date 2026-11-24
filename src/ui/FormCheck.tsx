@@ -15,7 +15,7 @@ import { FormAnalyzer, type FormEvent } from '../formcheck/analyze';
 import { BONES, FORM_CHECK, KINDS, formKindFor } from '../formcheck/config';
 import { assess, attachClip, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, requestForClip, withdrawConsent, type Assessment } from '../formcheck/model';
 import { loadPose, type Pose } from '../formcheck/pose';
-import { fcs } from '../formcheck/strings';
+import { VIEW_KEY, fcs } from '../formcheck/strings';
 
 type Stage = 'intro' | 'camera' | 'live' | 'result';
 interface Result { log: FormCheckLog; a: Assessment; requestId: string | null }
@@ -281,7 +281,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
         {paused && <div className="red" role="alert" data-testid="fc-pause"><strong>{F('fcPause')}</strong></div>}
         {stage === 'camera' && (
           <>
-            <p className="hint">{F(kind && KINDS[kind].view === 'side' ? 'fcViewSide' : 'fcViewFront')}</p>
+            <p className="hint">{F(kind ? VIEW_KEY[KINDS[kind].view] : 'fcViewFront')}</p>
             <button className="big primary" disabled={!ready} onClick={beginSet}>{F('fcBegin')}</button>
             <button className="link" onClick={() => void swap()}>{F('fcSwap')}</button>
             <button className="link" onClick={() => { stopCamera(); setStage('intro'); }}>← {F('fcTitle')}</button>
@@ -303,7 +303,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
           <select value={ex} onChange={(e) => setEx(e.target.value)}>{options.map((id) => <option key={id} value={id}>{exerciseName(id, lang)}</option>)}</select>
         </label>
       ) : <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>}
-      {kind && <p>{F(KINDS[kind].view === 'side' ? 'fcViewSide' : 'fcViewFront')}</p>}
+      {kind && <p>{F(VIEW_KEY[KINDS[kind].view])}</p>}
       {!hasConsent(patient) ? (
         <div className="card" data-testid="fc-consent">
           <h3>{F('fcConsentTitle')}</h3>

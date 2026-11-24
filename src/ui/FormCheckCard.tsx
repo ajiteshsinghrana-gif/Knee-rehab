@@ -76,7 +76,7 @@ function Limit({ p, id, now }: { p: Patient; id: string; now: number }) {
   const [min, setMin] = useState(cur?.min?.toString() ?? '');
   const [why, setWhy] = useState('');
   const num = (s: string) => (s.trim() === '' ? undefined : Number(s));
-  const hint = KINDS[kind].signal === 'deg' ? 'degrees of movement' : 'hip drop as % of leg length';
+  const hint = KINDS[kind].hint;
   const save = () => updatePatient(p.id, (q) => setFormLimit(q, id, { max: num(max), min: num(min) }, why, { nowMs: now || clockMs(getState()), today: getState().today }));
   const bad = (s: string) => s.trim() !== '' && !Number.isFinite(Number(s));
   return (

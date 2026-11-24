@@ -419,3 +419,125 @@ describe('safety and wording', () => {
     expect(() => newCheckLog({ id: 'x1', date: today, startedAt: 0, endedAt: 1, exerciseId: 'walking', summary, by: 'patient' })).toThrow();
   });
 });
+
+// ---------- the other exercises: each kind counts reps, stays quiet when clean and measures its own faults ----------
+/** Side view, lying: knee bends by `flex` degrees; `roll` turns the trunk. Left side visible. */
+function kneeFlex(flex: number, roll = 0): Frame {
+  const f = blank();
+  const H = { x: 0.45, y: 0.6 };
+  const S = { x: H.x - 0.25 * Math.cos(rad(roll)), y: H.y - 0.25 * Math.sin(rad(roll)) };
+  const K = { x: H.x + 0.2, y: H.y };
+  const A = { x: K.x + 0.2 * Math.cos(rad(flex)), y: K.y - 0.2 * Math.sin(rad(flex)) };
+  f[LM.lShoulder] = { ...S, v: 1 }; f[LM.lHip] = { ...H, v: 1 }; f[LM.lKnee] = { ...K, v: 1 }; f[LM.lAnkle] = { ...A, v: 1 };
+  for (const i of [LM.rShoulder, LM.rHip, LM.rKnee, LM.rAnkle]) f[i] = { x: 0.5, y: 0.5, v: 0 };
+  return f;
+}
+/** Side view, standing: left arm raised forwards by `lift` degrees, trunk leaning by `lean` degrees. */
+function armFwd(lift: number, lean = 0): Frame {
+  const f = blank();
+  const H = { x: 0.5, y: 0.6 };
+  const S = { x: H.x + 0.25 * Math.sin(rad(lean)), y: H.y - 0.25 * Math.cos(rad(lean)) };
+  const E = { x: S.x + 0.15 * Math.sin(rad(lift)), y: S.y + 0.15 * Math.cos(rad(lift)) };
+  f[LM.lShoulder] = { ...S, v: 1 }; f[LM.lHip] = { ...H, v: 1 }; f[LM.lElbow] = { ...E, v: 1 };
+  for (const i of [LM.rShoulder, LM.rHip, LM.rElbow]) f[i] = { x: 0.5, y: 0.5, v: 0 };
+  return f;
+}
+/** Front view, standing: left leg moves out by `out` degrees. */
+function legOut(out: number, o: { lean?: number; kneeBend?: number } = {}): Frame {
+  const f = blank();
+  const dx = Math.tan(rad(o.lean ?? 0)) * 0.25;
+  f[LM.lShoulder] = { x: 0.42 + dx, y: 0.3, v: 1 }; f[LM.rShoulder] = { x: 0.58 + dx, y: 0.3, v: 1 };
+  const H = { x: 0.45, y: 0.55 };
+  const K = { x: H.x - 0.2 * Math.sin(rad(out)), y: H.y + 0.2 * Math.cos(rad(out)) };
+  const a = out + (o.kneeBend ?? 0);
+  const A = { x: K.x - 0.2 * Math.sin(rad(a)), y: K.y + 0.2 * Math.cos(rad(a)) };
+  f[LM.lHip] = { ...H, v: 1 }; f[LM.lKnee] = { ...K, v: 1 }; f[LM.lAnkle] = { ...A, v: 1 };
+  f[LM.rHip] = { x: 0.55, y: 0.55, v: 1 }; f[LM.rKnee] = { x: 0.55, y: 0.75, v: 1 }; f[LM.rAnkle] = { x: 0.55, y: 0.95, v: 1 };
+  return f;
+}
+/** Side view, lying on the back: hips lift by `rise` (share of thigh length); a foot slides by `slide`. */
+function bridge(rise: number, slide = 0): Frame {
+  const f = blank();
+  const thigh = Math.hypot(0.1, 0.15);
+  f[LM.lHip] = { x: 0.45, y: 0.7 - rise * thigh, v: 1 }; f[LM.lKnee] = { x: 0.55, y: 0.55, v: 1 }; f[LM.lAnkle] = { x: 0.6 + slide * thigh, y: 0.7, v: 1 };
+  for (const i of [LM.rHip, LM.rKnee, LM.rAnkle]) f[i] = { x: 0.5, y: 0.5, v: 0 };
+  return f;
+}
+/** Front view, standing: heels rise by `rise` (share of leg length). */
+function heels(rise: number, o: { lean?: number; sway?: number } = {}): Frame {
+  const f = blank();
+  const leg = 0.4, sw = (o.sway ?? 0) * leg, dx = Math.tan(rad(o.lean ?? 0)) * 0.25;
+  const ay = 0.9 - rise * leg;
+  f[LM.lHip] = { x: 0.45 + sw, y: 0.5, v: 1 }; f[LM.rHip] = { x: 0.55 + sw, y: 0.5, v: 1 };
+  f[LM.lKnee] = { x: 0.44, y: 0.7, v: 1 }; f[LM.rKnee] = { x: 0.56, y: 0.7, v: 1 };
+  f[LM.lAnkle] = { x: 0.43, y: ay, v: 1 }; f[LM.rAnkle] = { x: 0.57, y: ay, v: 1 };
+  f[LM.lShoulder] = { x: 0.42 + sw + dx, y: 0.25, v: 1 }; f[LM.rShoulder] = { x: 0.58 + sw + dx, y: 0.25, v: 1 };
+  return f;
+}
+
+describe('camera form check: the other exercises', () => {
+  it('knee bend and straighten (heel slides, gentle knee movement): counts reps, flags a rolled trunk and a fast slide', () => {
+    const clean = run('knee-flex', (v) => kneeFlex(v), 70);
+    expect(clean.sum.reps).toBe(5);
+    expect(clean.sum.faults).toEqual([]);
+    expect(ids(run('knee-flex', (v) => kneeFlex(v, v > 10 ? 22 : 0), 70).sum)).toContain('flex-trunk-shift');
+    expect(ids(run('knee-flex', (v) => kneeFlex(v), 100, { frames: 10 }).sum)).toContain('flex-fast');
+  });
+  it('sit to stand counts rises from the seated position and flags a knee moving inwards and a lean', () => {
+    const clean = run('sit-to-stand', (v) => squat(-v / 100), 30);
+    expect(clean.sum.reps).toBe(5);
+    expect(clean.sum.faults).toEqual([]);
+    expect(ids(run('sit-to-stand', (v) => squat(-v / 100, { kneeIn: v > 8 ? 0.35 : 0 }), 30).sum)).toContain('sit-knee-in');
+    expect(ids(run('sit-to-stand', (v) => squat(-v / 100, { lean: v > 8 ? 18 : 0 }), 30).sum)).toContain('sit-lean');
+  });
+  it('lunges and step-ups move a foot on purpose, so a moved foot is not a balance fault there (but it is in a squat)', () => {
+    const shift = (v: number) => squat(v / 100, { footShift: v > 6 ? 0.25 : 0 });
+    expect(ids(run('lunge', shift, 25).sum)).not.toContain('lunge-sway');
+    expect(ids(run('squat', shift, 25).sum)).toContain('squat-balance');
+    const lunge = run('lunge', (v) => squat(v / 100, { kneeIn: v > 6 ? 0.35 : 0 }), 25);
+    expect(lunge.sum.reps).toBe(5);
+    expect(ids(lunge.sum)).toContain('lunge-knee-in');
+    const step = run('step-up', (v) => squat(-v / 100), 15);
+    expect(step.sum.reps).toBe(5);
+    expect(step.sum.faults).toEqual([]);
+  });
+  it('arm raise forwards (assisted arm raise, wall slide) counts reps, flags a leaning trunk, and a fast raise', () => {
+    const clean = run('shoulder-flexion', (v) => armFwd(v), 100);
+    expect(clean.sum.reps).toBe(5);
+    expect(clean.sum.faults).toEqual([]);
+    expect(ids(run('shoulder-flexion', (v) => armFwd(v, v > 20 ? 16 : 0), 100).sum)).toContain('arm-lean');
+    expect(ids(run('shoulder-flexion', (v) => armFwd(v), 120, { frames: 10 }).sum)).toContain('arm-fast');
+  });
+  it('hip abduction counts leg lifts to the side and flags a bent knee and a lean', () => {
+    const clean = run('hip-abduction', (v) => legOut(v), 30);
+    expect(clean.sum.reps).toBe(5);
+    expect(clean.sum.faults).toEqual([]);
+    expect(ids(run('hip-abduction', (v) => legOut(v, { kneeBend: v > 8 ? 40 : 0 }), 30).sum)).toContain('hipabd-knee-bent');
+    expect(ids(run('hip-abduction', (v) => legOut(v, { lean: v > 8 ? 16 : 0 }), 30).sum)).toContain('hipabd-lean');
+  });
+  it('bridging counts hip lifts and flags a sliding foot as a stability fault that asks for a pause', () => {
+    const clean = run('bridging', (v) => bridge(v / 100), 40);
+    expect(clean.sum.reps).toBe(5);
+    expect(clean.sum.faults).toEqual([]);
+    const slid = run('bridging', (v) => bridge(v / 100, v > 8 ? 0.3 : 0), 40);
+    expect(slid.sum.faults.find((x) => x.id === 'bridge-feet')?.kind).toBe('stability');
+    expect(slid.sum.paused).toBe(true);
+  });
+  it('calf raises count heel rises and flag a sway or a lean', () => {
+    const clean = run('calf-raise', (v) => heels(v / 100), 9);
+    expect(clean.sum.reps).toBe(5);
+    expect(clean.sum.faults).toEqual([]);
+    expect(ids(run('calf-raise', (v) => heels(v / 100, { sway: v > 3 ? 0.18 : 0 }), 9).sum)).toContain('calf-sway');
+    expect(ids(run('calf-raise', (v) => heels(v / 100, { lean: v > 3 ? 16 : 0 }), 9).sum)).toContain('calf-lean');
+  });
+  it('maps every covered library exercise to a kind, and leaves exercises a phone cannot judge out', () => {
+    for (const kind of Object.keys(KIND_EXERCISES) as FormKind[]) {
+      for (const id of KIND_EXERCISES[kind]) {
+        if (id !== 'shoulder-abduction') expect(getExercise(id)).toBeTruthy();
+        expect(formKindFor(id)).toBe(kind);
+      }
+      expect(KINDS[kind].faults.length).toBeGreaterThan(0);
+    }
+    for (const id of ['walking', 'cycling', 'swimming', 'ice-compression', 'quad-set', 'ankle-pumps']) expect(formKindFor(id)).toBeNull();
+  });
+});

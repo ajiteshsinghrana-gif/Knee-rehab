@@ -147,9 +147,43 @@ export class FormAnalyzer {
   private pt(f: Landmark[], i: number): Pt { return { x: f[i].x * this.aspect, y: f[i].y }; }
 
   private measure(f: Landmark[]): Measure | null {
-    if (this.kind === 'slr') return this.mSlr(f);
-    if (this.kind === 'squat') return this.mSquat(f);
-    return this.mAbd(f);
+    switch (this.kind) {
+      case 'slr': return this.mSlr(f);
+      case 'squat': return this.legs(f, 'squat', 1, true);
+      case 'sit-to-stand': return this.legs(f, 'sit', -1, true);
+      case 'lunge': return this.legs(f, 'lunge', 1, false);
+      case 'step-up': return this.legs(f, 'step', -1, false);
+      case 'shoulder-abduction': return this.mAbd(f);
+      case 'shoulder-flexion': return this.mFlex(f);
+      case 'knee-flex': return this.mKneeFlex(f);
+      case 'hip-abduction': return this.mHipAbd(f);
+      case 'bridging': return this.mBridge(f);
+      case 'calf-raise': return this.mCalf(f);
+    }
+  }
+
+  /** Learns the starting position, but only once the person has stopped moving (they may still be getting into position). */
+  private learn(c: Cand): boolean {
+    const b = this.base, N = FORM_CHECK.baselineFrames;
+    if (b.n >= N) return true;
+    this.cand.push(c);
+    if (this.cand.length > N) this.cand.shift();
+    if (this.cand.length < N) return false;
+    const span = (g: (c: Cand) => number) => Math.max(...this.cand.map(g)) - Math.min(...this.cand.map(g));
+    const leg = c.leg;
+    const still = span((x) => x.mh.x) < 0.03 * leg && span((x) => x.mh.y) < 0.03 * leg && span((x) => x.lA.x) < 0.04 * leg && span((x) => x.rA.x) < 0.04 * leg && span((x) => x.lA.y) < 0.04 * leg && span((x) => x.rA.y) < 0.04 * leg;
+    if (!still) return false;
+    const avg = (g: (c: Cand) => number) => this.cand.reduce((a, x) => a + g(x), 0) / N;
+    b.hipX = avg((x) => x.mh.x); b.hipY = avg((x) => x.mh.y); b.leg = avg((x) => x.leg); b.trunk = avg((x) => x.trunk);
+    b.ankles = [{ x: avg((x) => x.lA.x), y: avg((x) => x.lA.y) }, { x: avg((x) => x.rA.x), y: avg((x) => x.rA.y) }];
+    b.n = N;
+    return true;
+  }
+  /** Side on: the body side nearest the camera, judged by how clearly its points are seen. */
+  private nearSide(f: Landmark[], sets: { l: readonly number[]; r: readonly number[] }): 'l' | 'r' {
+    const vis = (k: 'l' | 'r') => sets[k].reduce((s, i) => s + (f[i]?.v ?? 0), 0);
+    if (!this.side || !this.seen(f, ...sets[this.side])) this.side = vis('l') >= vis('r') ? 'l' : 'r';
+    return this.side;
   }
 
   /** Side view, lying on the back: the leg nearest the camera is measured. */
@@ -174,8 +208,11 @@ export class FormAnalyzer {
     } };
   }
 
-  /** Front view: hips drop, knees, trunk, feet. */
-  private mSquat(f: Landmark[]): Measure {
+  /**
+   * Front view of the legs. `dir` 1: the hips go down (squat, lunge). -1: the hips go up (sit to stand, step up).
+   * `feet`: judge the feet too (squat, sit to stand); lunges and step-ups move a foot on purpose, so only hip sway is judged there.
+   */
+  private legs(f: Landmark[], p: string, dir: 1 | -1, feet: boolean): Measure {
     if (!this.seen(f, LM.lHip, LM.rHip, LM.lKnee, LM.rKnee, LM.lAnkle, LM.rAnkle)) return { ok: false, signal: 0, faults: {} };
     const lH = this.pt(f, LM.lHip), rH = this.pt(f, LM.rHip), lK = this.pt(f, LM.lKnee), rK = this.pt(f, LM.rKnee), lA = this.pt(f, LM.lAnkle), rA = this.pt(f, LM.rAnkle);
     const mh = mid(lH, rH);
@@ -185,40 +222,131 @@ export class FormAnalyzer {
     const ms = shoulders ? mid(this.pt(f, LM.lShoulder), this.pt(f, LM.rShoulder)) : null;
     const trunk = ms ? Math.atan2(ms.x - mh.x, -(ms.y - mh.y)) * RAD : 0;
     const b = this.base;
-    if (b.n < FORM_CHECK.baselineFrames) {
-      // Learn the standing position, but only once the person has stopped moving (they may still be stepping back from the phone).
-      const N = FORM_CHECK.baselineFrames;
-      this.cand.push({ mh, lA, rA, leg, trunk });
-      if (this.cand.length > N) this.cand.shift();
-      if (this.cand.length === N) {
-        const span = (f: (c: Cand) => number) => Math.max(...this.cand.map(f)) - Math.min(...this.cand.map(f));
-        const still = span((c) => c.mh.x) < 0.03 * leg && span((c) => c.mh.y) < 0.03 * leg && span((c) => c.lA.x) < 0.04 * leg && span((c) => c.rA.x) < 0.04 * leg && span((c) => c.lA.y) < 0.04 * leg && span((c) => c.rA.y) < 0.04 * leg;
-        if (still) {
-          const avg = (f: (c: Cand) => number) => this.cand.reduce((a, c) => a + f(c), 0) / N;
-          b.hipX = avg((c) => c.mh.x); b.hipY = avg((c) => c.mh.y); b.leg = avg((c) => c.leg); b.trunk = avg((c) => c.trunk);
-          b.ankles = [{ x: avg((c) => c.lA.x), y: avg((c) => c.lA.y) }, { x: avg((c) => c.rA.x), y: avg((c) => c.rA.y) }];
-          b.n = N;
-        }
-      }
-      return { ok: true, signal: 0, faults: {} };
-    }
-    const signal = ((mh.y - b.hipY) / b.leg) * 100;
+    if (!this.learn({ mh, lA, rA, leg, trunk })) return { ok: true, signal: 0, faults: {} };
+    const signal = dir * ((mh.y - b.hipY) / b.leg) * 100;
     const inward = (h: Pt, k: Pt, a: Pt): number => {
       const dy = a.y - h.y;
       if (Math.abs(dy) < 1e-6) return 0;
       const lineX = h.x + ((a.x - h.x) * (k.y - h.y)) / dy;
-      const dir = Math.sign(mh.x - h.x) || 1;
-      return (((k.x - lineX) * dir) / Math.max(dist(h, k), 1e-6)) * 100;
+      const d = Math.sign(mh.x - h.x) || 1;
+      return (((k.x - lineX) * d) / Math.max(dist(h, k), 1e-6)) * 100;
     };
     const knee = Math.max(inward(lH, lK, lA), inward(rH, rK, rA));
-    const foot = Math.max(dist(lA, b.ankles![0]), dist(rA, b.ankles![1])) / b.leg * 100;
     const sway = (Math.abs(mh.x - b.hipX) / b.leg) * 100;
+    const foot = feet ? Math.max(dist(lA, b.ankles![0]), dist(rA, b.ankles![1])) / b.leg * 100 : 0;
+    const spd = this.speed(signal);
+    const rest = KINDS[this.kind].repDown;
+    return { ok: true, signal, faults: {
+      [`${p}-knee-in`]: signal > rest ? knee : null,
+      [`${p}-lean`]: ms && signal > rest ? turn(trunk, b.trunk) : null,
+      [`${p}-${feet ? 'balance' : 'sway'}`]: signal > 3 ? Math.max(foot, sway) : null,
+      [`${p}-fast`]: signal > 3 ? spd : null,
+    } };
+  }
+
+  /** Side view, lying or sitting: the knee bends and straightens (heel slides, gentle knee movement). */
+  private mKneeFlex(f: Landmark[]): Measure {
+    const sets = { l: [LM.lShoulder, LM.lHip, LM.lKnee, LM.lAnkle], r: [LM.rShoulder, LM.rHip, LM.rKnee, LM.rAnkle] } as const;
+    const k = this.nearSide(f, sets);
+    const [sh, hip, kn, an] = sets[k];
+    if (!this.seen(f, sh, hip, kn, an)) return { ok: false, signal: 0, faults: {} };
+    const S = this.pt(f, sh), H = this.pt(f, hip), K = this.pt(f, kn), A = this.pt(f, an);
+    const flex = bend(H, K, A);
+    if (flex === null) return { ok: false, signal: 0, faults: {} };
+    const trunk = Math.atan2(H.y - S.y, H.x - S.x) * RAD;
+    const rest = KINDS['knee-flex'].repDown;
+    if (flex < rest && this.base.n < FORM_CHECK.baselineFrames) { this.base.trunk = (this.base.trunk * this.base.n + trunk) / (this.base.n + 1); this.base.n++; }
+    const hasBase = this.base.n >= FORM_CHECK.baselineFrames;
+    const speed = this.speed(flex);
+    return { ok: true, signal: flex, faults: {
+      'flex-trunk-shift': hasBase && flex > 5 ? turn(trunk, this.base.trunk) : null,
+      'flex-fast': flex > 5 ? speed : null,
+    } };
+  }
+
+  /** Side view, standing: the arm nearest the camera is raised forwards (assisted arm raise, wall slide). */
+  private mFlex(f: Landmark[]): Measure {
+    const sets = { l: [LM.lShoulder, LM.lHip, LM.lElbow], r: [LM.rShoulder, LM.rHip, LM.rElbow] } as const;
+    const k = this.nearSide(f, sets);
+    const [sh, hip, el] = sets[k];
+    if (!this.seen(f, sh, hip, el)) return { ok: false, signal: 0, faults: {} };
+    const S = this.pt(f, sh), H = this.pt(f, hip), E = this.pt(f, el);
+    const lift = angleAt(H, S, E);
+    if (lift === null) return { ok: false, signal: 0, faults: {} };
+    const trunk = Math.atan2(S.x - H.x, -(S.y - H.y)) * RAD;
+    const rest = KINDS['shoulder-flexion'].repDown;
+    if (lift < rest && this.base.n < FORM_CHECK.baselineFrames) { this.base.trunk = (this.base.trunk * this.base.n + trunk) / (this.base.n + 1); this.base.n++; }
+    const hasBase = this.base.n >= FORM_CHECK.baselineFrames;
+    const speed = this.speed(lift);
+    return { ok: true, signal: lift, faults: {
+      'arm-lean': hasBase && lift > rest ? turn(trunk, this.base.trunk) : null,
+      'arm-fast': lift > 5 ? speed : null,
+    } };
+  }
+
+  /** Front view, standing: the leg that moves further out from straight down is measured. */
+  private mHipAbd(f: Landmark[]): Measure {
+    if (!this.seen(f, LM.lShoulder, LM.rShoulder, LM.lHip, LM.rHip, LM.lKnee, LM.rKnee, LM.lAnkle, LM.rAnkle)) return { ok: false, signal: 0, faults: {} };
+    const hp = { l: this.pt(f, LM.lHip), r: this.pt(f, LM.rHip) };
+    const kn = { l: this.pt(f, LM.lKnee), r: this.pt(f, LM.rKnee) };
+    const an = { l: this.pt(f, LM.lAnkle), r: this.pt(f, LM.rAnkle) };
+    const out = (k: 'l' | 'r') => Math.atan2(Math.abs(an[k].x - hp[k].x), Math.max(an[k].y - hp[k].y, 1e-6)) * RAD;
+    const o = { l: out('l'), r: out('r') };
+    const k: 'l' | 'r' = o.l >= o.r ? 'l' : 'r';
+    const signal = o[k];
+    const ms = mid(this.pt(f, LM.lShoulder), this.pt(f, LM.rShoulder)), mh = mid(hp.l, hp.r);
+    const trunk = Math.atan2(ms.x - mh.x, -(ms.y - mh.y)) * RAD;
+    const rest = KINDS['hip-abduction'].repDown;
+    if (signal < rest && this.base.n < FORM_CHECK.baselineFrames) { this.base.trunk = (this.base.trunk * this.base.n + trunk) / (this.base.n + 1); this.base.n++; }
+    const hasBase = this.base.n >= FORM_CHECK.baselineFrames;
+    const knee = bend(hp[k], kn[k], an[k]);
+    const speed = this.speed(signal);
+    return { ok: true, signal, faults: {
+      'hipabd-lean': hasBase && signal > rest ? turn(trunk, this.base.trunk) : null,
+      'hipabd-knee-bent': signal > rest ? knee : null,
+      'hipabd-fast': signal > 5 ? speed : null,
+    } };
+  }
+
+  /** Side view, lying on the back: the hips lift. The resting hip height is learned while the person lies still. */
+  private mBridge(f: Landmark[]): Measure {
+    const sets = { l: [LM.lHip, LM.lKnee, LM.lAnkle], r: [LM.rHip, LM.rKnee, LM.rAnkle] } as const;
+    const k = this.nearSide(f, sets);
+    const [hip, kn, an] = sets[k];
+    if (!this.seen(f, hip, kn, an)) return { ok: false, signal: 0, faults: {} };
+    const H = this.pt(f, hip), K = this.pt(f, kn), A = this.pt(f, an);
+    const thigh = dist(H, K);
+    if (thigh < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const b = this.base;
+    if (!this.learn({ mh: H, lA: A, rA: A, leg: thigh, trunk: 0 })) return { ok: true, signal: 0, faults: {} };
+    const signal = ((b.hipY - H.y) / b.leg) * 100;
     const spd = this.speed(signal);
     return { ok: true, signal, faults: {
-      'squat-knee-in': signal > KINDS.squat.repDown ? knee : null,
-      'squat-lean': ms && signal > KINDS.squat.repDown ? turn(trunk, b.trunk) : null,
-      'squat-balance': signal > 3 ? Math.max(foot, sway) : null,
-      'squat-fast': signal > 3 ? spd : null,
+      'bridge-feet': signal > 3 ? (dist(A, b.ankles![0]) / b.leg) * 100 : null,
+      'bridge-fast': signal > 3 ? spd : null,
+    } };
+  }
+
+  /** Front view, standing: the heels rise. The resting position is learned while the person stands still. */
+  private mCalf(f: Landmark[]): Measure {
+    if (!this.seen(f, LM.lHip, LM.rHip, LM.lAnkle, LM.rAnkle)) return { ok: false, signal: 0, faults: {} };
+    const lH = this.pt(f, LM.lHip), rH = this.pt(f, LM.rHip), lA = this.pt(f, LM.lAnkle), rA = this.pt(f, LM.rAnkle);
+    const mh = mid(lH, rH);
+    const leg = (dist(lH, lA) + dist(rH, rA)) / 2;
+    if (leg < 1e-6) return { ok: false, signal: 0, faults: {} };
+    const shoulders = this.seen(f, LM.lShoulder, LM.rShoulder);
+    const ms = shoulders ? mid(this.pt(f, LM.lShoulder), this.pt(f, LM.rShoulder)) : null;
+    const trunk = ms ? Math.atan2(ms.x - mh.x, -(ms.y - mh.y)) * RAD : 0;
+    const b = this.base;
+    if (!this.learn({ mh, lA, rA, leg, trunk })) return { ok: true, signal: 0, faults: {} };
+    const rise = (b.ankles![0].y + b.ankles![1].y - lA.y - rA.y) / 2;
+    const signal = (rise / b.leg) * 100;
+    const spd = this.speed(signal);
+    const rest = KINDS['calf-raise'].repDown;
+    return { ok: true, signal, faults: {
+      'calf-lean': ms && signal > rest ? turn(trunk, b.trunk) : null,
+      'calf-sway': signal > rest ? (Math.abs(mh.x - b.hipX) / b.leg) * 100 : null,
+      'calf-fast': signal > rest ? spd : null,
     } };
   }
 
