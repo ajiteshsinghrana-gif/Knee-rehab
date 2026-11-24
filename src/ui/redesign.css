@@ -877,3 +877,7 @@ main.home { gap: var(--s3); padding-top: var(--s3); }
 .reportbtn { align-self: flex-start; padding: 0; font-size: 13px; margin-top: var(--s1); }
 .goalprog { display: flex; flex-direction: column; gap: var(--s1); margin-top: var(--s3); padding-top: var(--s2); border-top: 1px solid var(--line); }
 .keyval select { flex: 2 1 160px; } .keyval input { flex: 1 1 80px; }
+
+/* Camera pilot (physio, signed in): a wider dialog */
+.dialog.wide { width: min(760px, calc(100vw - var(--s4))); max-height: calc(100vh - var(--s5)); overflow: auto; }
+.gs-pain .stepbtn.sel { background: var(--teal); color: #fff; border-color: var(--teal); }

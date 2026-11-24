@@ -31,7 +31,7 @@ import { noticeText } from '../notices';
 import { GuidedSession } from './GuidedSession';
 import { FormRequestScreen } from './FormRequest';
 import { FormCheckScreen } from './FormCheck';
-import { formKindFor } from '../formcheck/config';
+import { cameraOn } from '../formcheck/model';
 import { fcs } from '../formcheck/strings';
 import { fs } from '../forms/strings';
 import { unreadReplies } from '../forms/model';
@@ -43,7 +43,7 @@ const SKIP_EMOJI: Record<string, string> = { pain: '😣', fear: '😨', time: '
 const EXS = [['all', '✅'], ['some', '🟡'], ['none', '❌']] as const;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-type Screen = 'home' | 'checkin' | 'problem' | 'weekly' | 'monthly' | 'done' | 'session' | 'forms' | 'progress' | 'formcheck';
+type Screen = 'home' | 'checkin' | 'problem' | 'problemcam' | 'weekly' | 'monthly' | 'done' | 'session' | 'forms' | 'progress' | 'formcheck';
 
 export function PatientView({ patient }: { patient: Patient }) {
   const pack = getPack(patient.packId);
@@ -65,11 +65,12 @@ export function PatientView({ patient }: { patient: Patient }) {
         </label>
       </header>
       {screen === 'home' && <Home patient={patient} pack={pack} lang={lang} go={(sc) => { if (sc === 'forms') setFormEx(null); if (sc === 'formcheck') setFcEx(null); setScreen(sc); }} />}
-      {screen === 'session' && <GuidedSession key={patient.id} patient={patient} pack={pack} lang={lang} onExit={(toCheckIn) => setScreen(toCheckIn ? 'checkin' : 'home')} onNeedHelp={(id) => { setFormEx(id); setScreen('forms'); }} onFormCheck={(id) => { setFcEx(id); setScreen('formcheck'); }} />}
-      {screen === 'formcheck' && <FormCheckScreen key={patient.id + (fcEx ?? '')} patient={patient} pack={pack} lang={lang} exerciseId={fcEx} onBack={() => { setFcEx(null); setScreen('home'); }} />}
+      {screen === 'session' && <GuidedSession key={patient.id} patient={patient} pack={pack} lang={lang} onExit={(toCheckIn) => setScreen(toCheckIn ? 'checkin' : 'home')} onNeedHelp={(id) => { setFormEx(id); setScreen('forms'); }} onFormCheck={cameraOn(patient) ? (id) => { setFcEx(id); setScreen('formcheck'); } : undefined} />}
+      {screen === 'formcheck' && <FormCheckScreen key={patient.id + (fcEx ?? '')} patient={patient} pack={pack} lang={lang} exerciseId={fcEx} onBack={() => { setFcEx(null); setScreen('home'); }} onVideo={(id) => { setFormEx(id); setScreen('forms'); }} onRedFlag={() => setScreen('problemcam')} />}
       {screen === 'forms' && <FormRequestScreen key={patient.id + (formEx ?? '')} patient={patient} pack={pack} lang={lang} exerciseId={formEx} onBack={() => { setFormEx(null); setScreen('home'); }} />}
       {screen === 'checkin' && <CheckIn key={patient.id} patient={patient} pack={pack} lang={lang} onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
       {screen === 'problem' && <CheckIn key={patient.id + 'p'} patient={patient} pack={pack} lang={lang} problem onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
+      {screen === 'problemcam' && <CheckIn key={patient.id + 'pc'} patient={patient} pack={pack} lang={lang} problem fromCamera onDone={() => setScreen('done')} onBack={() => setScreen('home')} />}
       {screen === 'progress' && <MyProgress patient={patient} pack={pack} lang={lang} today={getState().today} physioName={getState().clinic?.physioName} onBack={() => setScreen('home')} />}
       {screen === 'weekly' && <Weekly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
       {screen === 'monthly' && <Monthly patient={patient} pack={pack} lang={lang} onDone={() => setScreen('home')} onBack={() => setScreen('home')} />}
@@ -232,7 +233,7 @@ function Home({ patient, pack, lang, go }: { patient: Patient; pack: ProtocolPac
           {sheet && <ExerciseSheet patient={patient} id={sheet} lang={lang} onClose={() => setSheet(null)} />}
           {exs.length > 5 && <button type="button" className="linkbtn" aria-expanded={allEx} onClick={() => setAllEx(!allEx)}>{allEx ? T('showFewer') : T('showAll', { n: exs.length })}</button>}
           <div className="exbtns">
-            {exs.some((id) => formKindFor(id)) && <button className="btn" data-testid="open-formcheck" onClick={() => go('formcheck')}>{fcs(lang, 'fcHomeBtn')}</button>}
+            {cameraOn(patient) && exs.length > 0 && <button className="btn" data-testid="open-formcheck" onClick={() => go('formcheck')}>{fcs(lang, 'fcHomeBtn')}</button>}
             <button className="btn" data-testid="open-forms" onClick={() => go('forms')}>{(patient.formRequests ?? []).length ? fs(lang, 'fMine') : fs(lang, 'fHomeBtn')}{unreadReplies(patient).length > 0 && <span className="newtag">{fs(lang, 'fNew')}</span>}</button>
           </div>
         </section>
@@ -346,7 +347,7 @@ function StepHead({ i, n, lang, onBack }: { i: number; n: number; lang: Lang; on
  * The daily check-in. With `problem` ("I have a problem", any day) it opens on the warning signs; a Yes then leads on to the rest of
  * today's questions so the physio gets a full check-in, and the same rules apply as in a normal check-in.
  */
-function CheckIn({ patient, pack, lang, onDone, onBack, problem }: { patient: Patient; pack: ProtocolPack; lang: Lang; onDone: () => void; onBack: () => void; problem?: boolean }) {
+function CheckIn({ patient, pack, lang, onDone, onBack, problem, fromCamera }: { patient: Patient; pack: ProtocolPack; lang: Lang; onDone: () => void; onBack: () => void; problem?: boolean; /** Opened from a yes after a camera set. */ fromCamera?: boolean }) {
   const T = (k: string, p?: Record<string, string | number>) => t(lang, k, p);
   const s = getState();
   const existing = patient.daily.find((d) => d.date === s.today);
@@ -602,7 +603,8 @@ function CheckIn({ patient, pack, lang, onDone, onBack, problem }: { patient: Pa
         {step === 'warnings' && (
           <>
             <h2>{problem ? T('problemTitle') : T('q_safety')}</h2>
-            {R(`${problem ? T('problemTitle') : T('q_safety')} ${pack.warningSigns.map((w) => L(w.label, lang)).join('. ')}`)}
+            {fromCamera && <p className="hint" role="note" data-testid="from-camera">{fcs(lang, 'fcFromCamera')}</p>}
+            {R(`${fromCamera ? `${fcs(lang, 'fcFromCamera')} ` : ''}${problem ? T('problemTitle') : T('q_safety')} ${pack.warningSigns.map((w) => L(w.label, lang)).join('. ')}`)}
             {/* "I have a problem": a red-flag Yes shows what to do straight away, before anything else is asked. */}
             {problem && pack.warningSigns.some((w) => draft.warnings[w.id] && w.tier === 'SAFETY') && <SafetyBanner lang={lang} emergency={hasEmergencySign(draft.warnings as Record<string, boolean>)} />}
             <p className="hint">{T('warnStepIntro')}</p>

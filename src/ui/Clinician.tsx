@@ -30,6 +30,7 @@ import { exerciseName, getExercise, LIBRARY } from '../exercises/library';
 import { SessionsCard } from './SessionsCard';
 import { FormReview } from './FormReview';
 import { FormCheckCard } from './FormCheckCard';
+import { PilotScreen } from './Pilot';
 import { pendingForms } from '../forms/model';
 import { optInWeeklyMeasures } from '../checkin';
 import { doseLine } from '../exercises/dose';
@@ -218,6 +219,8 @@ export function Clinician({ state }: { state: AppState }) {
 export function PhysioHeaderControls({ state }: { state: AppState }) {
   const s = useSyncExternalStore(subscribeSync, getSyncStatus);
   const dlg = useRef<HTMLDialogElement>(null);
+  const pilot = useRef<HTMLDialogElement>(null);
+  const [pilotOpen, setPilotOpen] = useState(false);
   const showAuth = s.enabled && s.auth;
   return (
     <>
@@ -229,6 +232,15 @@ export function PhysioHeaderControls({ state }: { state: AppState }) {
           <dialog ref={dlg} className="dialog" aria-label="Physio account" onClick={(e) => { if (e.target === dlg.current) dlg.current.close(); }}>
             <div className="dialog-head"><h2>{s.user ? 'Physio account' : 'Physio sign-in'}</h2><button type="button" className="iconbtn" aria-label="Close" onClick={() => dlg.current?.close()}>✕</button></div>
             <LoginCard />
+          </dialog>
+        </>
+      )}
+      {/* Camera pilot: physio sign-in only, so it never appears on a patient screen or in the open demo. */}
+      {showAuth && s.user && (
+        <>
+          <button type="button" className="menubtn" data-testid="pilot-btn" onClick={() => { setPilotOpen(true); pilot.current?.showModal(); }} title="Camera pilot">Pilot</button>
+          <dialog ref={pilot} className="dialog wide" aria-label="Camera pilot" onClose={() => setPilotOpen(false)}>
+            {pilotOpen && <PilotScreen onClose={() => pilot.current?.close()} />}
           </dialog>
         </>
       )}

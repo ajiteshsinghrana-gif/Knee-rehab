@@ -6,10 +6,17 @@ import type { FormCheckLog, FormFault, FormRequest, Patient, ProtocolPack } from
 import { exerciseName } from '../exercises/library';
 import { currentExercises } from '../engine/plan';
 import { clockMs, getState, updatePatient } from '../store';
-import { FORM_CHECK, KINDS, formKindFor, unitOf } from '../formcheck/config';
-import { f1Faults, limitFor, setFormLimit } from '../formcheck/model';
+import { DEFAULT_TEMPO, FORM_CHECK, KINDS, PACE, checkMode, formKindFor, paceApplies, unitOf } from '../formcheck/config';
+import { cameraOn, f1Faults, limitFor, setCameraCheck, setFormLimit } from '../formcheck/model';
 import { COUNT_KEYS, FAULT_PHYSIO, KIND_LABEL, UNIT_LABEL } from '../formcheck/strings';
 
+const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+/** Pace, pain and the red-flag answer of one check, in one line for the physio. */
+const extras = (c: FormCheckLog): string[] => [
+  ...(c.mode === 'count' ? ['count only (no form rules for this exercise, nothing judged)'] : []),
+  ...(c.repSecs?.length && c.tempo ? [`reps took ${Math.min(...c.repSecs)}–${Math.max(...c.repSecs)} s (median ${median(c.repSecs)} s; tempo ${c.tempo} s)`] : []),
+  ...(c.after ? [`pain after the set ${c.after.pain ?? 'not given'}/10`, c.after.redFlag ? 'said YES to dizziness, chest pain or breathlessness (sent to the warning signs)' : 'no dizziness, chest pain or breathlessness'] : []),
+];
 const faultLine = (f: FormFault, reps: number) => `${FAULT_PHYSIO[f.id] ?? f.id} · ${KIND_LABEL[f.kind] ?? f.kind} · reps ${f.reps.join(', ')} of ${reps} · peak ${f.peak}${UNIT_LABEL[f.unit]}`;
 
 /** The measured numbers behind a request the camera check raised. Shown inside the review item. */
@@ -18,12 +25,13 @@ export function AutoSummary({ patient, r }: { patient: Patient; r: FormRequest }
   const c = (patient.formChecks ?? []).find((x) => x.id === r.auto!.checkId);
   return (
     <div className="reviewed" data-testid="auto-summary">
-      <b>Raised by the camera form check</b> ({r.auto.reason === 'PAUSE' ? 'the phone asked the patient to pause' : `rule F1: the same fault in ${FORM_CHECK.f1.checks} of the last ${FORM_CHECK.f1.window} checks`}).
+      <b>Raised by the camera check</b> ({r.auto.reason === 'PAUSE' ? 'the phone stopped the set: a stumble or your limit' : `rule F1: the same fault in ${FORM_CHECK.f1.checks} of the last ${FORM_CHECK.f1.window} checks`}).
       {c ? (
         <ul>
           <li>{c.repsCounted} {c.holds?.length ? 'holds' : COUNT_KEYS[c.kind]?.word ?? 'reps'} counted · camera saw the body in {Math.round(c.usable * 100)}% of frames</li>
           {c.holds?.length ? <li>Hold times: {c.holds.join(', ')} s</li> : null}
           {c.cadence ? <li>About {c.cadence} {c.kind === 'cycle' ? 'pedal turns' : 'steps'} a minute</li> : null}
+          {extras(c).map((x) => <li key={x}>{x}</li>)}
           {c.faults.map((f) => <li key={f.id}>{faultLine(f, c.repsCounted)}</li>)}
         </ul>
       ) : <p className="tiny">The measured numbers have not arrived yet.</p>}
@@ -34,18 +42,28 @@ export function AutoSummary({ patient, r }: { patient: Patient; r: FormRequest }
 
 export function FormCheckCard({ patient: p, pack, now }: { patient: Patient; pack: ProtocolPack; now: number }) {
   const checks = [...(p.formChecks ?? [])].reverse();
-  const measurable = [...new Set([...currentExercises(p, pack), ...(p.formChecks ?? []).map((c) => c.exerciseId)])].filter((id) => { const k = formKindFor(id); return !!k && !KINDS[k].noLimit; });
-  if (!checks.length && !measurable.length) return null;
+  const plan = currentExercises(p, pack);
+  // Limits and tempo only for exercises with form rules of their own (count-only exercises flag nothing).
+  const measurable = [...new Set([...plan, ...(p.formChecks ?? []).map((c) => c.exerciseId)])].filter((id) => { const k = formKindFor(id); return !!k && checkMode(id) === 'form' && (!KINDS[k].noLimit || paceApplies(k)); });
+  if (!checks.length && !plan.length) return null;
+  const on = cameraOn(p);
+  const modes = { form: plan.filter((id) => checkMode(id) === 'form').length, count: plan.filter((id) => checkMode(id) === 'count').length, video: plan.filter((id) => checkMode(id) === 'video').length };
+  const toggle = () => updatePatient(p.id, (q) => setCameraCheck(q, !on, { nowMs: now || clockMs(getState()), today: getState().today }));
   return (
     <div className="card" data-testid="formcheck-card">
-      <h3>Camera form checks <small>(measured on the patient's phone. Not a diagnosis, and it never changes a tier or a plan. {FORM_CHECK.minUsable * 100}% of frames must be clear or nothing is flagged.)</small></h3>
+      <h3>Camera check <small>(measured on the patient's phone. Not a diagnosis, and it never changes a tier or a plan. {FORM_CHECK.minUsable * 100}% of frames must be clear or nothing is flagged.)</small></h3>
+      <div className="btnrow">
+        <span>{on ? <b>On for this patient</b> : <b>Off for this patient</b>}{on && p.formCheckOn?.at ? <small> · since {p.formCheckOn.at.slice(0, 10)}</small> : null}</span>
+        <button className={`btn${on ? '' : ' primary'}`} data-testid="fc-switch" onClick={toggle}>{on ? 'Switch off' : 'Switch on'}</button>
+      </div>
+      <p className="tiny">Off by default. When on, the patient sees “Use the camera for an exercise”. In their current plan: {modes.form} with form checks, {modes.count} count only, {modes.video} video only. The switch is written to the audit log.</p>
       {checks.length === 0 && <p className="tiny">No camera checks yet.</p>}
       {checks.slice(0, 8).map((c) => <One key={c.id} c={c} p={p} />)}
       {measurable.length > 0 && (
         <details>
-          <summary>Limits for this patient ({measurable.length} measurable exercise{measurable.length === 1 ? '' : 's'})</summary>
+          <summary>Limits and pace for this patient ({measurable.length} measurable exercise{measurable.length === 1 ? '' : 's'})</summary>
           {measurable.map((id) => <Limit key={id} p={p} id={id} now={now} />)}
-          <p className="tiny">Without a limit the camera only checks the default form faults. A limit you set makes the phone ask the patient to pause when it is crossed. Every limit and reason is in the audit log. Default thresholds are placeholders (NEEDS_PHYSIO_SIGNOFF).</p>
+          <p className="tiny">Without a limit the camera only checks the default form faults. A maximum you set stops the set when it is crossed. Pace: a rep quicker than {PACE.fast * 100}% of the tempo or slower than {PACE.slow} times it is flagged. Every setting and reason is in the audit log. Default thresholds and tempos are placeholders (NEEDS_PHYSIO_SIGNOFF).</p>
         </details>
       )}
     </div>
@@ -61,10 +79,11 @@ function One({ c, p }: { c: FormCheckLog; p: Patient }) {
         {!c.reliable && ' · could not see enough (nothing flagged)'}
         {c.reliable && c.faults.length === 0 && ' · nothing measured above the limits'}
         {c.reliable && c.faults.length > 0 && ` · ${c.faults.length} fault${c.faults.length === 1 ? '' : 's'} measured`}
-        {c.paused && <b className="err"> · patient asked to pause</b>}
+        {c.paused && <b className="err"> · set stopped (stumble or your limit)</b>}
+        {c.after?.redFlag && <b className="err"> · red-flag yes after the set</b>}
         {f1.length > 0 && <b> · F1</b>}
       </summary>
-      {c.faults.length > 0 && <ul>{c.faults.map((f) => <li key={f.id}>{faultLine(f, c.repsCounted)}</li>)}</ul>}
+      {(c.faults.length > 0 || extras(c).length > 0) && <ul>{c.faults.map((f) => <li key={f.id}>{faultLine(f, c.repsCounted)}</li>)}{extras(c).map((x) => <li key={x}>{x}</li>)}</ul>}
       <p className="tiny">Camera saw the body in {Math.round(c.usable * 100)}% of frames{c.limit ? ` · your limit then: ${c.limit.min !== undefined ? `min ${c.limit.min}` : ''}${c.limit.min !== undefined && c.limit.max !== undefined ? ', ' : ''}${c.limit.max !== undefined ? `max ${c.limit.max}` : ''}` : ''}{c.answeredBy === 'caregiver' ? ' · answered by a carer' : ''}.</p>
     </details>
   );
@@ -76,18 +95,22 @@ function Limit({ p, id, now }: { p: Patient; id: string; now: number }) {
   const cur = limitFor(p, id);
   const [max, setMax] = useState(cur?.max?.toString() ?? '');
   const [min, setMin] = useState(cur?.min?.toString() ?? '');
+  const [tempo, setTempo] = useState(cur?.tempo?.toString() ?? '');
+  const hasRange = !KINDS[kind].noLimit, hasPace = paceApplies(kind);
   const [why, setWhy] = useState('');
   const num = (s: string) => (s.trim() === '' ? undefined : Number(s));
   const hint = KINDS[kind].hint;
-  const save = () => updatePatient(p.id, (q) => setFormLimit(q, id, { max: num(max), min: num(min) }, why, { nowMs: now || clockMs(getState()), today: getState().today }));
+  const save = () => updatePatient(p.id, (q) => setFormLimit(q, id, { max: hasRange ? num(max) : undefined, min: hasRange ? num(min) : undefined, tempo: hasPace ? num(tempo) : undefined }, why, { nowMs: now || clockMs(getState()), today: getState().today }));
   const bad = (s: string) => s.trim() !== '' && !Number.isFinite(Number(s));
+  const badTempo = tempo.trim() !== '' && (!Number.isFinite(Number(tempo)) || Number(tempo) < PACE.minSec || Number(tempo) > PACE.maxSec);
   return (
     <div className="modify" data-testid="fc-limit">
       <b>{exerciseName(id, 'en')}</b> <small>({hint})</small>
-      <label>Do not go past (max) <input type="number" inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} aria-label={`Maximum for ${id}`} /> {unit}</label>
-      <label>At least reach (min) <input type="number" inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} aria-label={`Minimum for ${id}`} /> {unit}</label>
+      {hasRange && <label>Do not go past (max) <input type="number" inputMode="decimal" value={max} onChange={(e) => setMax(e.target.value)} aria-label={`Maximum for ${id}`} /> {unit}</label>}
+      {hasRange && <label>At least reach (min) <input type="number" inputMode="decimal" value={min} onChange={(e) => setMin(e.target.value)} aria-label={`Minimum for ${id}`} /> {unit}</label>}
+      {hasPace && <label>Tempo <input type="number" inputMode="decimal" min={PACE.minSec} max={PACE.maxSec} step="0.5" value={tempo} placeholder={String(DEFAULT_TEMPO[kind])} onChange={(e) => setTempo(e.target.value)} aria-label={`Tempo for ${id}`} data-testid="fc-tempo" /> seconds a rep <small>(default {DEFAULT_TEMPO[kind]} s)</small></label>}
       <textarea placeholder="Reason (required, goes in the audit log)" value={why} onChange={(e) => setWhy(e.target.value)} aria-label="Reason" />
-      <div className="btnrow"><button className="btn primary" data-testid="fc-limit-save" disabled={!why.trim() || bad(max) || bad(min)} onClick={save}>{max === '' && min === '' ? 'Remove limit' : 'Save limit'}</button></div>
+      <div className="btnrow"><button className="btn primary" data-testid="fc-limit-save" disabled={!why.trim() || bad(max) || bad(min) || badTempo} onClick={save}>{max === '' && min === '' && tempo === '' ? 'Remove settings' : 'Save'}</button></div>
     </div>
   );
 }

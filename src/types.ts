@@ -369,9 +369,19 @@ export interface FormCheckLog {
   requestId?: string;
   /** Limit in force when the check was done. */
   limit?: FormLimit;
+  /** 'count': reps only, nothing judged (an exercise without rules of its own). Missing means a form check. */
+  mode?: 'form' | 'count';
+  /** How long each rep took (seconds) and the tempo it was compared with. */
+  repSecs?: number[];
+  tempo?: number;
+  /** The patient's answers after the set: pain 0 to 10, and dizziness, chest pain or breathlessness (a yes opens the warning signs). */
+  after?: { pain: number | null; redFlag: boolean };
 }
-/** The physio's own range limit for an exercise in the camera check. `max` crossing makes the phone ask the patient to pause. */
-export interface FormLimit { max?: number; min?: number; at: string; by: string }
+/**
+ * The physio's own settings for an exercise in the camera check. `max` crossing makes the phone stop the set; `min` flags a
+ * set that stays short of it; `tempo` is the pace in seconds per rep (otherwise the default for the exercise).
+ */
+export interface FormLimit { max?: number; min?: number; tempo?: number; at: string; by: string }
 
 // ---------- patient data ----------
 export type AnsweredBy = 'patient' | 'caregiver';
@@ -452,6 +462,10 @@ export interface Patient {
   formCheckConsent?: { by: AnsweredBy; at: string; version: string };
   /** Limits the physio set per exercise for the camera form check, in the unit of that exercise (see formcheck/config.ts). Physio-owned. */
   formLimits?: Record<string, FormLimit>;
+  /** The camera check is off until the physio switches it on for this patient. Physio-owned; travels to the patient's phone. */
+  formCheckOn?: { at: string; by: string } | null;
+  /** Patient's phone only: the carer's name and number from the physio's record, for "Call my carer" after a stumble. */
+  carerContact?: { name?: string; phone: string };
   anchorDate: string; // surgery date
   currentPhase: string; // phase id
   phaseStartDate: string;

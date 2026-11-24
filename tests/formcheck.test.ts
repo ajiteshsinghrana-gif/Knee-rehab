@@ -6,11 +6,13 @@ import { triage } from '../src/engine/triage';
 import { addDays } from '../src/engine/dates';
 import { getExercise } from '../src/exercises/library';
 import { FormAnalyzer, type Frame, type FormEvent } from '../src/formcheck/analyze';
-import { FORM_CHECK, HAND, HAND_KINDS, KINDS, KIND_EXERCISES, LM, SET_FAULTS, VARIANTS, formKindFor, type FormKind } from '../src/formcheck/config';
+import { DEFAULT_TEMPO, FORM_CHECK, HAND, HAND_KINDS, KINDS, KIND_EXERCISES, LM, SET_FAULTS, VARIANTS, checkMode, formKindFor, paceApplies, type FormKind } from '../src/formcheck/config';
 import { FAULT_PHYSIO, FC_STRINGS } from '../src/formcheck/strings';
 import { requestForClip } from '../src/formcheck/model';
-import { PILOT_MIN, loadPilot, newPilotRecord, rate, savePilot, suggest, summarise, toCsv, upsert, type PilotRecord, type PilotStore } from '../src/formcheck/pilot';
-import { assess, attachClip, f1Faults, giveConsent, hasConsent, newCheckLog, pendingChecks, recordCheck, setFormLimit, withdrawConsent } from '../src/formcheck/model';
+import { PILOT_MIN, countPct, counts, faultsFor, judge, loadPilot, newPilotRecord, putParticipant, repAgreement, savePilot, suggest, summarise, toCsv, upsert, type PilotParticipant, type PilotRecord, type PilotStore } from '../src/formcheck/pilot';
+import { setupHint, lumaOf } from '../src/formcheck/setup';
+import { FORM_CONFIG, consentText } from '../src/forms/model';
+import { assess, attachClip, cameraOn, carerOf, f1Faults, giveConsent, hasConsent, newCheckLog, pendingChecks, recordCheck, setAfterAnswers, setCameraCheck, setFormLimit, withdrawConsent } from '../src/formcheck/model';
 import { isPending, replyToForm } from '../src/forms/model';
 import { applyDown, applyUp, downSlice, upSlice } from '../src/sync/slices';
 import { exportMyData } from '../src/lifecycle';
@@ -116,8 +118,8 @@ describe('camera form check: counting and measuring', () => {
     expect(sum.faults.find((x) => x.id === 'slr-trunk-shift')!.kind).toBe('compensation');
   });
   it('measures a fast lift but not a slow one', () => {
-    expect(ids(run('slr', (v) => slr(v), 60, { frames: 10 }).sum)).toContain('slr-fast');
-    expect(ids(run('slr', (v) => slr(v), 35, { frames: 40 }).sum)).not.toContain('slr-fast');
+    expect(ids(run('slr', (v) => slr(v), 60, { frames: 10 }).sum)).toContain('pace-fast');
+    expect(ids(run('slr', (v) => slr(v), 35, { frames: 40 }).sum)).not.toContain('pace-fast');
   });
   it('counts squats from the hip drop and measures knees moving inwards', () => {
     const clean = run('squat', (v) => squat(v / 100), 25);
@@ -405,8 +407,7 @@ describe('safety and wording', () => {
   it('the patient wording never claims a diagnosis or that anything is safe', () => {
     const en = Object.values(FC_STRINGS.en).join(' ').toLowerCase();
     expect(en).not.toMatch(/you are injured|you have injured|you will (get|be) hurt|dangerous|diagnos(is|ed) you/);
-    expect(FC_STRINGS.en.fcNot).toMatch(/never says an exercise is safe/);
-    expect(FC_STRINGS.en.fcNone).toMatch(/does not mean/);
+    expect(FC_STRINGS.en.fcNone).toBe('Nothing was flagged. This does not mean your form is correct. Your physio decides.');
   });
   it('exercise mapping: squats and straight leg raise exist in the library; shoulder abduction needs a physio-written exercise', () => {
     for (const id of [...KIND_EXERCISES.slr, ...KIND_EXERCISES.squat]) expect(getExercise(id)).toBeTruthy();
@@ -548,7 +549,7 @@ describe('camera form check: the other exercises', () => {
     expect(clean.sum.reps).toBe(5);
     expect(clean.sum.faults).toEqual([]);
     expect(ids(run('knee-flex', (v) => kneeFlex(v, v > 10 ? 22 : 0), 70).sum)).toContain('flex-trunk-shift');
-    expect(ids(run('knee-flex', (v) => kneeFlex(v), 100, { frames: 10 }).sum)).toContain('flex-fast');
+    expect(ids(run('knee-flex', (v) => kneeFlex(v), 100, { frames: 10 }).sum)).toContain('pace-fast');
   });
   it('sit to stand counts rises from the seated position and flags a knee moving inwards and a lean', () => {
     const clean = run('sit-to-stand', (v) => squat(-v / 100), 30);
@@ -573,7 +574,7 @@ describe('camera form check: the other exercises', () => {
     expect(clean.sum.reps).toBe(5);
     expect(clean.sum.faults).toEqual([]);
     expect(ids(run('shoulder-flexion', (v) => armFwd(v, v > 20 ? 16 : 0), 100).sum)).toContain('arm-lean');
-    expect(ids(run('shoulder-flexion', (v) => armFwd(v), 120, { frames: 10 }).sum)).toContain('arm-fast');
+    expect(ids(run('shoulder-flexion', (v) => armFwd(v), 120, { frames: 10 }).sum)).toContain('pace-fast');
   });
   it('hip abduction counts leg lifts to the side and flags a bent knee and a lean', () => {
     const clean = run('hip-abduction', (v) => legOut(v), 30);
@@ -726,10 +727,9 @@ describe('camera form check: pendulum', () => {
     expect(sum.reps).toBe(10);
     expect(sum.faults).toEqual([]);
   });
-  it('flags a very wide swing and a fast swing', () => {
+  it('flags a very wide swing; a loose swing has no pace, so a quick one is not flagged', () => {
     expect(ids(feed('pendulum', swings(5, 60, 30)))).toContain('pend-wide');
-    expect(ids(feed('pendulum', swings(5, 45, 14)))).toContain('pend-fast');
-    expect(ids(feed('pendulum', swings(5, 20, 30)))).not.toContain('pend-fast');
+    expect(ids(feed('pendulum', swings(5, 45, 14)))).not.toContain('pace-fast');
   });
   it("the physio's maximum applies to the swing size", () => {
     const a = new FormAnalyzer('pendulum', { max: 25 });
@@ -921,7 +921,7 @@ describe('camera form check: hand, wrist and elbow', () => {
   });
   it('flags a hand that wanders and a fist closed very fast', () => {
     expect(ids(run('hand-fist', (v) => fist(v, { shift: 1.2 }), 70).sum)).toContain('fist-wrist-moves');
-    expect(ids(run('hand-fist', (v) => fist(v), 100, { frames: 8 }).sum)).toContain('fist-fast');
+    expect(ids(run('hand-fist', (v) => fist(v), 100, { frames: 8 }).sum)).toContain('pace-fast');
   });
   it('says it could not see enough, and flags nothing, when the hand is not found', () => {
     const r = run('hand-fist', (v) => fist(v, { seen: false, shift: 1.5 }), 70);
@@ -937,7 +937,7 @@ describe('camera form check: hand, wrist and elbow', () => {
     expect(clean.sum.reps).toBe(5);
     expect(clean.sum.faults).toEqual([]);
     expect(ids(run('wrist', (v) => wristF(v, { elbow: 0.3 }), 40).sum)).toContain('wrist-elbow-moves');
-    expect(ids(run('wrist', (v) => wristF(v), 60, { frames: 8 }).sum)).toContain('wrist-fast');
+    expect(ids(run('wrist', (v) => wristF(v), 60, { frames: 8 }).sum)).toContain('pace-fast');
   });
   it('wrist: nothing is flagged when the hand is not seen', () => {
     const r = run('wrist', (v) => wristF(v, { seen: false, elbow: 0.5 }), 40);
@@ -949,7 +949,7 @@ describe('camera form check: hand, wrist and elbow', () => {
     expect(clean.sum.reps).toBe(5);
     expect(clean.sum.faults).toEqual([]);
     expect(ids(run('elbow', (v) => elbowF(v, { arm: 28 }), 100).sum)).toContain('elbow-arm-moves');
-    expect(ids(run('elbow', (v) => elbowF(v), 100, { frames: 10 }).sum)).toContain('elbow-fast');
+    expect(ids(run('elbow', (v) => elbowF(v), 100, { frames: 10 }).sum)).toContain('pace-fast');
   });
 });
 
@@ -963,7 +963,7 @@ describe('camera form check: shoulder blade squeeze', () => {
   it('flags shoulders that rise, a lean, and a very fast squeeze', () => {
     expect(ids(run('scap', (v) => scapF(v, { shrug: 0.25 }), 8).sum)).toContain('scap-shrug');
     expect(ids(run('scap', (v) => scapF(v, { lean: 16 }), 8).sum)).toContain('scap-lean');
-    expect(ids(run('scap', (v) => scapF(v), 15, { frames: 8 }).sum)).toContain('scap-fast');
+    expect(ids(run('scap', (v) => scapF(v), 15, { frames: 8 }).sum)).toContain('pace-fast');
   });
   it('does not count a squeeze that is too small to tell from camera noise', () => {
     expect(run('scap', (v) => scapF(v), 2.5).sum.reps).toBe(0);
@@ -986,7 +986,7 @@ describe('camera form check: band rotation', () => {
   it('flags an elbow that leaves the side, a lean, and a fast turn', () => {
     expect(ids(run('band-rot', (v) => rotF(v, { away: 0.4 }), 80).sum)).toContain('rot-elbow-away');
     expect(ids(run('band-rot', (v) => rotF(v, { lean: 16 }), 80).sum)).toContain('rot-lean');
-    expect(ids(run('band-rot', (v) => rotF(v), 80, { frames: 10 }).sum)).toContain('rot-fast');
+    expect(ids(run('band-rot', (v) => rotF(v), 80, { frames: 10 }).sum)).toContain('pace-fast');
   });
   it('turning inwards is not counted', () => {
     expect(run('band-rot', (v) => rotF(-v), 80).sum.reps).toBe(0);
@@ -1000,14 +1000,16 @@ describe('camera form check: band rotation', () => {
 
 // ---------- pilot mode ----------
 const memStore = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); } } as unknown as Storage; };
-/** A rated set of the hand check where the wrist-wander measure held at `level`, flagged against the limit of 80. */
-const pilotSet = (n: number, level: number, verdict: 'real' | 'none', o: { reliable?: boolean } = {}): PilotRecord => {
+const P_TUNE: PilotParticipant = { label: 'P01', type: 'volunteer', group: 'tune' };
+const P_TEST: PilotParticipant = { label: 'P02', type: 'patient', group: 'test' };
+/** A judged set of the hand check where the wrist-wander measure held at `level`, flagged against the limit of 80. */
+const pilotSet = (n: number, level: number, verdict: 'real' | 'none', o: { reliable?: boolean; who?: PilotParticipant } = {}): PilotRecord => {
   const flagged = level > 80;
   const rec = newPilotRecord({
-    id: `s${n}`, at: '2026-11-24T10:00:00Z', participant: 'P01', kind: 'hand-fist', exerciseId: 'hand-wrist-elbow',
+    id: `s${n}`, at: '2026-11-24T10:00:00Z', participant: o.who ?? P_TUNE, kind: 'hand-fist', exerciseId: 'hand-wrist-elbow',
     summary: { reps: 5, faults: flagged ? [{ id: 'fist-wrist-moves', kind: 'compensation', reps: [1, 2], peak: level, unit: 'pct', firstSec: 3 }] : [], usable: 0.95, reliable: o.reliable ?? true, paused: false, seconds: 20, held: { 'fist-wrist-moves': level } },
   });
-  return rate(rec, { marks: flagged ? { 'fist-wrist-moves': verdict === 'real' ? 'real' : 'false' } : {}, missed: !flagged && verdict === 'real' ? ['fist-wrist-moves'] : [], observerReps: 5, note: '' });
+  return judge(rec, { faults: verdict === 'real' ? ['fist-wrist-moves'] : [], reps: 5, note: '' });
 };
 describe('camera form check: pilot mode', () => {
   it('the analyzer reports how high each fault measure got, flagged or not, and a trace only when asked', () => {
@@ -1020,7 +1022,7 @@ describe('camera form check: pilot mode', () => {
     let t = 0; for (let i = 0; i < 60; i++) a.push(fist(i % 20 < 10 ? 0 : 70), (t += DT), 1);
     expect(a.finish().trace!.length > 5).toBe(true);
   });
-  it('suggests a lower limit when real faults sit below the current one, and says how it would have done', () => {
+  it('suggests a lower limit from the tuning group when real faults sit below the current one', () => {
     const recs: PilotRecord[] = [];
     [55, 60, 65, 70].forEach((l, i) => recs.push(pilotSet(i, l, 'real')));
     [5, 10, 15, 20, 25, 30, 35, 40, 12, 22].forEach((l, i) => recs.push(pilotSet(10 + i, l, 'none')));
@@ -1028,66 +1030,255 @@ describe('camera form check: pilot mode', () => {
     expect(s.enough).toBe(true);
     expect(s.limit! > 40 && s.limit! < 55).toBe(true);
     expect(s.recall).toBe(1);
-    expect(s.precision).toBe(1);
     expect(s.currentRecall).toBe(0);
   });
-  it('keeps the limit where it is useful when the current one already separates real faults from the rest', () => {
+  it('limits are tuned on the tuning group only: the same sets in the test group give no suggestion', () => {
     const recs: PilotRecord[] = [];
-    [90, 100, 120, 95].forEach((l, i) => recs.push(pilotSet(i, l, 'real')));
-    [5, 10, 15, 20, 25, 30, 35, 40, 12, 22].forEach((l, i) => recs.push(pilotSet(10 + i, l, 'none')));
+    [55, 60, 65, 70].forEach((l, i) => recs.push(pilotSet(i, l, 'real', { who: P_TEST })));
+    [5, 10, 15, 20, 25, 30, 35, 40, 12, 22].forEach((l, i) => recs.push(pilotSet(10 + i, l, 'none', { who: P_TEST })));
     const s = suggest(recs, 'hand-fist', 'fist-wrist-moves');
-    expect(s.limit! > 40 && s.limit! < 90).toBe(true);
-    expect(s.currentRecall).toBe(1);
-    expect(s.currentPrecision).toBe(1);
+    expect(s.enough).toBe(false);
+    expect(s.positives + s.negatives).toBe(0);
   });
-  it('a flag marked as a false alarm counts against the limit, and a flag nobody rated is left out', () => {
-    const recs: PilotRecord[] = [];
-    for (let i = 0; i < 4; i++) recs.push(pilotSet(i, 100 + i, 'real'));
-    for (let i = 0; i < 4; i++) recs.push(pilotSet(10 + i, 85 + i, 'none')); // flagged, but a false alarm
-    for (let i = 0; i < 4; i++) recs.push(pilotSet(20 + i, 10 * i, 'none'));
-    const s = suggest(recs, 'hand-fist', 'fist-wrist-moves');
-    expect(s.enough).toBe(true);
-    expect(s.limit! > 88 && s.limit! < 100).toBe(true);
-    const unrated = { ...recs[0], marks: {} };
-    expect(suggest([unrated, ...recs.slice(1)], 'hand-fist', 'fist-wrist-moves').positives).toBe(3);
-  });
-  it('gives no suggestion from too few rated sets, and ignores sets the camera could not see', () => {
-    const few = [pilotSet(1, 100, 'real'), pilotSet(2, 10, 'none'), pilotSet(3, 20, 'none')];
-    expect(suggest(few, 'hand-fist', 'fist-wrist-moves').enough).toBe(false);
-    const recs: PilotRecord[] = [];
-    for (let i = 0; i < 6; i++) recs.push(pilotSet(i, 100, 'real', { reliable: false }));
-    for (let i = 0; i < 6; i++) recs.push(pilotSet(10 + i, 10, 'none'));
-    expect(suggest(recs, 'hand-fist', 'fist-wrist-moves').positives).toBe(0);
-    expect(PILOT_MIN.total).toBe(10);
-  });
-  it('rating keeps only verdicts for faults the phone flagged, and misses only for faults it did not', () => {
-    const base = pilotSet(1, 100, 'real');
-    const r = rate(base, { marks: { 'fist-wrist-moves': 'false', 'fist-fast': 'real' }, missed: ['fist-wrist-moves', 'fist-fast', 'not-a-fault'], observerReps: 4, note: 'x' });
-    expect(r.marks).toEqual({ 'fist-wrist-moves': 'false' });
-    expect(r.missed).toEqual(['fist-fast']);
-    expect(r.observerReps).toBe(4);
-  });
-  it('summarises per fault and exports one spreadsheet row per set per fault', () => {
-    const recs = [pilotSet(1, 100, 'real'), pilotSet(2, 90, 'none'), pilotSet(3, 20, 'real')];
+  it('accuracy is counted on the test group only, and the tuning group is kept apart', () => {
+    const recs = [pilotSet(1, 100, 'real', { who: P_TEST }), pilotSet(2, 90, 'none', { who: P_TEST }), pilotSet(3, 20, 'real', { who: P_TEST }), pilotSet(4, 100, 'real')];
     const st = summarise(recs).find((x) => x.id === 'fist-wrist-moves')!;
-    expect([st.sets, st.real, st.falseAlarm, st.missed]).toEqual([3, 1, 1, 1]);
+    expect(st.test).toEqual({ sets: 3, tp: 1, fp: 1, fn: 1, tn: 0 });
+    expect(st.tune).toEqual({ sets: 1, tp: 1, fp: 0, fn: 0, tn: 0 });
+    expect(counts(recs, 'hand-fist', 'fist-wrist-moves', 'test').sets).toBe(3);
+  });
+  it('every percentage comes with its counts', () => {
+    expect(countPct(8, 10)).toBe('8 of 10 (80%)');
+    expect(countPct(0, 0)).toBe('0 of 0 (no data)');
+    expect(readFileSync('src/ui/Pilot.tsx', 'utf8')).not.toMatch(/Math\.round\([^)]*\* 100\)\s*}%/);
+  });
+  it("the observer's verdict decides real and false alarm, and cannot be changed once the phone's flags were shown", () => {
+    const rec = newPilotRecord({ id: 'v1', at: '2026-11-24T10:00:00Z', participant: P_TUNE, kind: 'hand-fist', exerciseId: 'hand-wrist-elbow',
+      summary: { reps: 5, faults: [{ id: 'fist-wrist-moves', kind: 'compensation', reps: [1, 2], peak: 90, unit: 'pct', firstSec: 3 }], usable: 0.95, reliable: true, paused: false, seconds: 20, held: {} } });
+    expect(rec.observer).toBeNull();
+    const r = judge(rec, { faults: ['pace-fast', 'not-a-fault'], reps: 4, note: 'x' });
+    expect(r.marks).toEqual({ 'fist-wrist-moves': 'false' });
+    expect(r.missed).toEqual(['pace-fast']);
+    expect(r.observer!.reps).toBe(4);
+    expect(judge(r, { faults: ['fist-wrist-moves'], reps: 5, note: '' })).toBe(r);
+  });
+  it('reps agreement on the test group', () => {
+    const a = judge(newPilotRecord({ id: 'r1', at: 'x', participant: P_TEST, kind: 'squat', exerciseId: 'squats', summary: { reps: 5, faults: [], usable: 1, reliable: true, paused: false, seconds: 10 } }), { faults: [], reps: 5, note: '' });
+    const b = judge(newPilotRecord({ id: 'r2', at: 'x', participant: P_TEST, kind: 'squat', exerciseId: 'squats', summary: { reps: 4, faults: [], usable: 1, reliable: true, paused: false, seconds: 10 } }), { faults: [], reps: 6, note: '' });
+    expect(repAgreement([a, b], 'test')).toEqual({ sets: 2, exact: 1, within1: 1 });
+    expect(repAgreement([a, b], 'tune').sets).toBe(0);
+  });
+  it('exports one row per set per fault, with participant type and group', () => {
+    const recs = [pilotSet(1, 100, 'real'), pilotSet(2, 90, 'none', { who: P_TEST })];
     const lines = toCsv(recs).split('\n');
-    expect(lines.length).toBe(1 + recs.length * KINDS['hand-fist'].faults.length);
-    expect(lines[0].startsWith('participant,')).toBe(true);
+    expect(lines.length).toBe(1 + recs.length * faultsFor('hand-fist').length);
+    expect(lines[0].startsWith('participant,participant_type,group,')).toBe(true);
+    expect(lines[1]).toContain('volunteer,tune');
+    expect(lines.join('\n')).toContain('patient,test');
     expect(lines.join('\n')).not.toContain('video');
   });
-  it('is off by default, survives a reload, and drops damaged records', () => {
+  it('participants and sets survive a reload; old records without a type or group are dropped', () => {
     const st = memStore();
-    expect(loadPilot(st).on).toBe(false);
-    const s: PilotStore = upsert({ on: true, participant: 'P03', records: [] }, pilotSet(1, 50, 'none'));
+    expect(loadPilot(st)).toEqual({ participants: [], records: [] });
+    let s: PilotStore = putParticipant(loadPilot(st), P_TUNE);
+    s = putParticipant(s, { label: '  ', type: 'patient', group: 'test' });
+    s = upsert(s, pilotSet(1, 50, 'none'));
     savePilot(s, st);
     const back = loadPilot(st);
-    expect(back.on).toBe(true);
-    expect(back.participant).toBe('P03');
+    expect(back.participants).toEqual([P_TUNE]);
     expect(back.records.length).toBe(1);
-    st.setItem('rehabpath-pilot', '{"on":true,"records":[{"id":"a","kind":"nonsense"},5,null]}');
+    st.setItem('rehabpath-pilot', '{"on":true,"records":[{"id":"a","kind":"hand-fist"},{"id":"b","kind":"nonsense"},5,null]}');
     expect(loadPilot(st).records).toEqual([]);
     st.setItem('rehabpath-pilot', 'not json');
-    expect(loadPilot(st).on).toBe(false);
+    expect(loadPilot(st).records).toEqual([]);
+  });
+  it('pilot mode is a physio screen: not on the patient camera screen, behind physio sign-in, never writing to a patient', () => {
+    const patientUi = readFileSync('src/ui/FormCheck.tsx', 'utf8');
+    expect(patientUi).not.toMatch(/loadPilot|savePilot|PilotScreen|PilotRating|PilotSetup/);
+    const clin = readFileSync('src/ui/Clinician.tsx', 'utf8');
+    expect(clin).toMatch(/showAuth && s\.user && \(/);
+    expect(readFileSync('src/ui/Pilot.tsx', 'utf8')).not.toMatch(/updatePatient|recordCheck/);
+  });
+});
+
+// ---------- camera check safety round ----------
+const swayed = (f: Frame, dx: number): Frame => f.map((p, i) => ([LM.lHip, LM.rHip, LM.lKnee, LM.rKnee, LM.lShoulder, LM.rShoulder] as number[]).includes(i) ? { ...p, x: p.x + dx } : p);
+describe('camera check: what is offered for each exercise', () => {
+  it('form check only for exercises with rules of their own; count only for borrowed checks; video for the rest', () => {
+    for (const id of ['straight-leg-raise', 'squats', 'mini-squats', 'heel-slides', 'gentle-rom', 'sit-to-stand', 'lunges', 'step-ups', 'assisted-arm-raise', 'wall-slide', 'hip-abduction', 'bridging', 'calf-raises', 'balance', 'walking', 'ankle-pumps', 'pendulum', 'stationary-cycling', 'core', 'hand-wrist-elbow', 'shoulder-blade-squeeze', 'band-rotation']) expect(checkMode(id)).toBe('form');
+    for (const id of ['stairs-practice', 'walking-programme', 'walking-aid']) expect(checkMode(id)).toBe('count');
+    for (const id of ['quad-set', 'ice-compression', 'ice-elevation', 'cycling', 'swimming', 'gait-drills']) expect(checkMode(id)).toBe('video');
+  });
+  it('every fault a form-check exercise can raise has its own test in this file', () => {
+    const me = readFileSync('tests/formcheck.test.ts', 'utf8');
+    const kinds = new Set<FormKind>();
+    for (const k of Object.keys(KIND_EXERCISES) as FormKind[]) if (KIND_EXERCISES[k].some((id) => checkMode(id) === 'form')) kinds.add(k);
+    for (const vs of Object.values(VARIANTS)) for (const v of vs) kinds.add(v.kind);
+    const missing: string[] = [];
+    // A fault counts as tested when an expect(...) line, or the fault lookup an expect checks, names it (this test's own lines are skipped).
+    const lines = me.split('\n').filter((l) => (l.includes('expect(') || l.includes('.find((x) => x.id ===')) && !l.includes('faultsFor(') && !l.includes('missing'));
+    for (const k of kinds) for (const id of faultsFor(k)) if (!lines.some((l) => l.includes(`'${id}'`))) missing.push(id);
+    expect(missing, missing.join(', ')).toEqual([]);
+  });
+  it('count only: reps are counted, nothing is flagged, nothing pauses, and the log says so', () => {
+    const a = new FormAnalyzer('step-up', { max: 5 }, { countOnly: true });
+    let t = 1000;
+    for (let i = 0; i < 10; i++) a.push(squat(0), (t += DT), 1);
+    for (let r = 0; r < 5; r++) { for (let i = 0; i <= 10; i++) { const v = 15 * Math.sin((Math.PI * i) / 10); a.push(swayed(squat(-v / 100, { kneeIn: 0.4, lean: 20 }), 0.1), (t += DT), 1); } for (let i = 0; i < 4; i++) a.push(squat(0), (t += DT), 1); }
+    const sum = a.finish();
+    expect(sum.reps).toBe(5);
+    expect(sum.faults).toEqual([]);
+    expect(sum.paused).toBe(false);
+    expect(sum.countOnly).toBe(true);
+    expect(sum.repSecs).toBeUndefined();
+    const log = newCheckLog({ id: 'k1', date: today, startedAt: 0, endedAt: 1, exerciseId: 'stairs-practice', summary: sum, by: 'patient' });
+    expect(log.mode).toBe('count');
+    expect(setFormLimit(base, 'stairs-practice', { max: 20 }, 'why', { nowMs: 0, today })).toEqual(base);
+  });
+  it('the flags that had no test before: lunge lean, sit-to-stand balance, step-up knee, lean and sway, walking lean, arm raise lean and shrug', () => {
+    expect(ids(run('lunge', (v) => squat(v / 100, { lean: v > 6 ? 18 : 0 }), 25).sum)).toContain('lunge-lean');
+    expect(ids(run('sit-to-stand', (v) => squat(-v / 100, { footShift: v > 8 ? 0.25 : 0 }), 30).sum)).toContain('sit-balance');
+    expect(ids(run('step-up', (v) => squat(-v / 100, { kneeIn: v > 4 ? 0.35 : 0 }), 15).sum)).toContain('step-knee-in');
+    expect(ids(run('step-up', (v) => squat(-v / 100, { lean: v > 4 ? 18 : 0 }), 15).sum)).toContain('step-lean');
+    expect(ids(run('step-up', (v) => swayed(squat(-v / 100), v > 4 ? 0.1 : 0), 15).sum)).toContain('step-sway');
+    const walk = walkFrames([8, 8]).map((f, i) => (i > 12 ? f.map((p, k) => (k === LM.lShoulder ? { ...p, x: p.x + 0.1 } : p)) : f));
+    expect(ids(feed('walking', walk))).toContain('walk-lean');
+    expect(ids(feed('walking', walkFrames([8, 8])))).not.toContain('walk-lean');
+    const lean = (f: Frame, dx: number) => f.map((p, k) => ([LM.lShoulder, LM.rShoulder, LM.lEar, LM.rEar, LM.lElbow, LM.lWrist, LM.rElbow, LM.rWrist] as number[]).includes(k) ? { ...p, x: p.x + dx } : p);
+    expect(ids(run('shoulder-abduction', (v) => lean(abd(v), v > 20 ? 0.08 : 0), 90).sum)).toContain('abd-lean');
+    const shrug = (f: Frame, up: number) => f.map((p, k) => (k === LM.lShoulder ? { ...p, y: p.y - up } : p));
+    expect(ids(run('shoulder-abduction', (v) => shrug(abd(v), v > 20 ? 0.03 : 0), 90).sum)).toContain('abd-shrug');
+  });
+});
+
+describe('camera check: pace', () => {
+  it('flags reps quicker than half the tempo and slower than 2.5 times it, and not reps near it', () => {
+    expect(ids(run('squat', (v) => squat(v / 100), 25).sum)).not.toContain('pace-fast');
+    expect(ids(run('squat', (v) => squat(v / 100), 25, { frames: 12 }).sum)).toContain('pace-fast');
+    expect(ids(run('squat', (v) => squat(v / 100), 25, { frames: 200 }).sum)).toContain('pace-slow');
+    const s = run('squat', (v) => squat(v / 100), 25).sum;
+    expect(s.tempo).toBe(DEFAULT_TEMPO.squat);
+    expect(s.repSecs!.length).toBe(5);
+  });
+  it("the physio's tempo replaces the default", () => {
+    const a = new FormAnalyzer('squat', undefined, { tempoSec: 1 });
+    let t = 1000;
+    for (let i = 0; i < 10; i++) a.push(squat(0), (t += DT), 1);
+    for (let r = 0; r < 5; r++) { for (let i = 0; i <= 60; i++) a.push(squat((25 * Math.sin((Math.PI * i) / 60)) / 100), (t += DT), 1); for (let i = 0; i < 4; i++) a.push(squat(0), (t += DT), 1); }
+    const sum = a.finish();
+    expect(sum.tempo).toBe(1);
+    expect(ids(sum)).toContain('pace-slow');
+  });
+  it('no pace for holds, walking, cycling or the pendulum', () => {
+    for (const k of ['balance', 'balance-line', 'plank', 'bird-dog', 'walking', 'cycle', 'pendulum'] as FormKind[]) expect(paceApplies(k)).toBe(false);
+  });
+  it('the physio sets the tempo with a reason, within 1 to 20 seconds, written to the audit log and sent to the phone', () => {
+    const p = base;
+    expect(setFormLimit(p, 'squats', { tempo: 3 }, '', ctx)).toBe(p);
+    expect(setFormLimit(p, 'squats', { tempo: 0.5 }, 'too quick', ctx)).toBe(p);
+    expect(setFormLimit(p, 'stationary-cycling', { tempo: 3 }, 'no pace here', ctx)).toBe(p);
+    const q = setFormLimit(p, 'squats', { tempo: 3 }, 'slow and controlled', ctx);
+    expect(q.formLimits!.squats.tempo).toBe(3);
+    expect(q.audit[q.audit.length - 1].summary).toContain('tempo 3 s a rep');
+    const down = applyDown(base, JSON.parse(JSON.stringify(downSlice(q))));
+    expect(down.formLimits!.squats.tempo).toBe(3);
+  });
+});
+
+describe('camera check: setup prompts before a set', () => {
+  const side = (o: { facing?: boolean } = {}): Frame => { const f = slr(0); if (o.facing) { f[LM.rShoulder] = { x: f[LM.lShoulder].x, y: f[LM.lShoulder].y - 0.15, v: 1 }; f[LM.rHip] = { x: f[LM.lHip].x, y: f[LM.lHip].y - 0.15, v: 1 }; } return f; };
+  it('"I can see you" only when the needed body points are all in the picture', () => {
+    expect(setupHint('squat', squat(0), 120)).toBe('fcSetOk');
+    expect(setupHint('slr', side(), 120)).toBe('fcSetOk');
+  });
+  it('too dark comes first; step back when points are missing or cut off; no body at all is step back', () => {
+    expect(setupHint('squat', squat(0), 20)).toBe('fcSetDark');
+    const cut = squat(0); cut[LM.lAnkle] = { x: 0.43, y: 1.0, v: 1 };
+    expect(setupHint('squat', cut, 120)).toBe('fcSetStepBack');
+    const hidden = squat(0); hidden[LM.rKnee] = { ...hidden[LM.rKnee], v: 0.1 };
+    expect(setupHint('squat', hidden, 120)).toBe('fcSetStepBack');
+    expect(setupHint('squat', null, 120)).toBe('fcSetStepBack');
+  });
+  it('turn sideways for a side view when the person faces the phone, and turn to face it for a front view', () => {
+    expect(setupHint('slr', side({ facing: true }), 120)).toBe('fcSetSide');
+    const turned = squat(0); turned[LM.rShoulder] = { x: 0.43, y: turned[LM.lShoulder].y, v: 1 }; turned[LM.lShoulder] = { ...turned[LM.lShoulder], x: 0.42 };
+    expect(setupHint('squat', turned, 120)).toBe('fcSetFront');
+  });
+  it('the hand check asks for the hand', () => {
+    expect(setupHint('hand-fist', blank(), 120)).toBe('fcSetHand');
+    expect(setupHint('hand-fist', fist(0), 120)).toBe('fcSetOk');
+  });
+  it('brightness is read from the picture', () => {
+    expect(lumaOf(new Uint8ClampedArray(64).fill(0))).toBe(0);
+    expect(Math.round(lumaOf(new Uint8ClampedArray(64).fill(200)))).toBe(200);
+  });
+});
+
+describe('camera check: off until the physio switches it on', () => {
+  it('no patient has it on by default, including the demo patients', () => {
+    for (const p of makeAllPatients()) expect(cameraOn(p)).toBe(false);
+  });
+  it('the physio switches it on and off, written to the audit log; it changes no tier', () => {
+        const p = base;
+    const on = setCameraCheck(p, true, ctx);
+    expect(cameraOn(on)).toBe(true);
+    expect(on.audit[on.audit.length - 1].action).toBe('form-check-switch');
+    expect(triage(on, pack)).toEqual(triage(p, pack));
+    expect(cameraOn(setCameraCheck(on, false, ctx))).toBe(false);
+    expect(setCameraCheck(on, true, ctx)).toBe(on);
+  });
+  it('the switch and the carer travel to the phone; the phone cannot switch itself on', () => {
+    const phys = { ...setCameraCheck(base, true, ctx), details: { carerName: 'Asha', carerPhone: '+91 98000 00000' } } as Patient;
+    const phone = applyDown(base, JSON.parse(JSON.stringify(downSlice(phys))));
+    expect(cameraOn(phone)).toBe(true);
+    expect(carerOf(phone)).toEqual({ name: 'Asha', phone: '+91 98000 00000' });
+    const off = applyDown(phone, JSON.parse(JSON.stringify(downSlice(base))));
+    expect(cameraOn(off)).toBe(false);
+    const up = { ...upSlice(base), formCheckOn: true } as unknown;
+    expect(cameraOn(applyUp(base, up))).toBe(false);
+  });
+});
+
+describe('camera check: after the set', () => {
+  it('pain and the red-flag answer are kept on the check, travel to the physio, and never feed triage', () => {
+        const before = recordCheck(base, check(1), at(1)).patient;
+    const id = before.formChecks![0].id;
+    const p = setAfterAnswers(before, id, { pain: 14, redFlag: true });
+    expect(p.formChecks![0].after).toEqual({ pain: 10, redFlag: true });
+    expect(triage(p, pack)).toEqual(triage(before, pack));
+    const got = applyUp({ ...base, formChecks: undefined }, JSON.parse(JSON.stringify(upSlice(p))));
+    expect(got.formChecks![0].after).toEqual({ pain: 10, redFlag: true });
+  });
+  it('a yes opens the warning signs: the existing red-flag pathway, which every pack has for chest pain or breathlessness', () => {
+    const ui = readFileSync('src/ui/Patient.tsx', 'utf8');
+    expect(ui).toMatch(/onRedFlag=\{\(\) => setScreen\('problemcam'\)\}/);
+    expect(ui).toMatch(/screen === 'problemcam' && <CheckIn [^>]*problem fromCamera/);
+    for (const id of ['total-knee-replacement', 'acl-reconstruction', 'rotator-cuff-repair', 'general']) expect(getPack(id).warningSigns.some((w) => w.id === 'chestPainBreathless' && w.tier === 'SAFETY')).toBe(true);
+  });
+  it('a stumble stops the set; a physio limit stops it too; pace never does', () => {
+    expect(FORM_CHECK.pauseOn).toEqual(['stability', 'precaution']);
+    const ui = readFileSync('src/ui/FormCheck.tsx', 'utf8');
+    expect(ui).toMatch(/e\.kind === 'stability' \? 'stumble' : 'limit'/);
+    expect(ui).toMatch(/fc-call-carer/);
+  });
+});
+
+describe('camera check: wording and video', () => {
+  const BANNED: Record<'en' | 'hi' | 'bn', RegExp> = { en: /\bsafe(ly|ty)?\b|\bcorrect(ly)?\b|good form/i, hi: /सुरक्षित|सही/, bn: /নিরাপদ|সঠিক/ };
+  it('patient wording never says correct, good form or safe, in any language; only the fixed "nothing was flagged" sentence mentions correct', () => {
+    for (const l of ['en', 'hi', 'bn'] as const) {
+      for (const [k, v] of Object.entries(FC_STRINGS[l])) if (k !== 'fcNone') expect(`${k}: ${v}`).not.toMatch(BANNED[l]);
+    }
+    expect(FC_STRINGS.hi.fcNone).toMatch(/सही/);
+    expect(FC_STRINGS.bn.fcNone).toMatch(/সঠিক/);
+  });
+  it('each fault is one plain cue', () => {
+    for (const [k, v] of Object.entries(FC_STRINGS.en)) if (k.startsWith('fault-')) expect(v).toMatch(/^(Try|Keep)[^.]*\.( Only your foot moves\.)?$/);
+  });
+  it('videos are capped at 30 seconds and the warning about other people is in the consent', () => {
+    expect(FORM_CONFIG.maxClipSec).toBe(30);
+    for (const l of ['en', 'hi', 'bn'] as const) expect(consentText(l).points.join(' ')).toMatch(/no one else|कोई और|আর কেউ/);
+    expect(readFileSync('src/ui/FormCheck.tsx', 'utf8')).toMatch(/FORM_CONFIG\.maxClipSec \* 1000/);
+    expect(readFileSync('src/ui/FormRequest.tsx', 'utf8')).toMatch(/FORM_CONFIG\.maxClipSec \+ 0\.5/);
   });
 });

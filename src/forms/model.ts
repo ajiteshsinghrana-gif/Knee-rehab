@@ -16,6 +16,8 @@ export const FORM_CONFIG = {
   /** After the physio replies, the clip is deleted this many days later. */
   afterReplyDays: 7,
   maxBytes: 25 * 1024 * 1024,
+  /** Longest video a patient can send, in seconds (camera check safety round). */
+  maxClipSec: 30,
   maxNote: 500,
   maxReply: 1000,
   mimeOk: ['video/mp4', 'video/webm', 'video/quicktime'] as string[],
@@ -28,7 +30,7 @@ export const CONSENT_TEXT: Record<Lang, { title: string; points: string[]; agree
     points: [
       'Your physio will watch this clip to help with your exercise. Nobody else on the team sees it unless your physio decides to ask them.',
       'It is stored privately, and deleted automatically {days} days after you send it (or {after} days after your physio replies). You can delete it yourself at any time.',
-      'Try to keep your face out of the picture and record only the exercise.',
+      'Make sure no one else is in the picture. Your face may be in it; record only the exercise.',
       'Sending a video is optional. You can still do your check-in without it.',
       'This is not for emergencies. If you have chest pain, trouble breathing, or something frightening, call 112 or go to the nearest hospital.',
     ],
@@ -40,7 +42,7 @@ export const CONSENT_TEXT: Record<Lang, { title: string; points: string[]; agree
     points: [
       'आपके फ़िज़ियो आपके व्यायाम में मदद के लिए यह क्लिप देखेंगे। जब तक फ़िज़ियो न चाहें, टीम में कोई और इसे नहीं देखेगा।',
       'यह निजी तौर पर रखा जाता है और भेजने के {days} दिन बाद (या फ़िज़ियो के जवाब के {after} दिन बाद) अपने आप मिट जाता है। आप कभी भी इसे खुद मिटा सकते हैं।',
-      'कोशिश करें कि चेहरा फ़्रेम में न आए, सिर्फ़ व्यायाम रिकॉर्ड करें।',
+      'ध्यान रखें कि तस्वीर में कोई और न हो। आपका चेहरा दिख सकता है; सिर्फ़ व्यायाम रिकॉर्ड करें।',
       'वीडियो भेजना ज़रूरी नहीं है। इसके बिना भी आप चेक-इन कर सकते हैं।',
       'यह आपातकाल के लिए नहीं है। सीने में दर्द, साँस में तकलीफ़ या कुछ डरावना हो तो 112 पर कॉल करें या नज़दीकी अस्पताल जाएँ।',
     ],
@@ -52,7 +54,7 @@ export const CONSENT_TEXT: Record<Lang, { title: string; points: string[]; agree
     points: [
       'আপনার ব্যায়ামে সাহায্য করতে আপনার ফিজিও এই ক্লিপ দেখবেন। ফিজিও না চাইলে দলের আর কেউ এটি দেখবেন না।',
       'এটি গোপনে রাখা হয় এবং পাঠানোর {days} দিন পরে (বা ফিজিওর উত্তরের {after} দিন পরে) নিজে থেকেই মুছে যায়। আপনি যেকোনো সময় নিজেই মুছতে পারেন।',
-      'চেষ্টা করুন মুখ ফ্রেমে না আনতে, শুধু ব্যায়াম রেকর্ড করুন।',
+      'খেয়াল রাখুন ছবিতে যেন আর কেউ না থাকে। আপনার মুখ দেখা যেতে পারে; শুধু ব্যায়ামটি রেকর্ড করুন।',
       'ভিডিও পাঠানো ঐচ্ছিক। এটি ছাড়াও আপনি চেক-ইন করতে পারেন।',
       'এটি জরুরি অবস্থার জন্য নয়। বুকে ব্যথা, শ্বাসকষ্ট বা ভয়ের কিছু হলে 112-এ ফোন করুন বা কাছের হাসপাতালে যান।',
     ],

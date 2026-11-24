@@ -114,7 +114,7 @@ export const FORM_CHECK = {
   holdMinSec: 10,
   /** Set ends on its own after this many seconds (also caps the clip size). */
   maxSeconds: 90,
-  /** The phone asks the patient to pause for these fault kinds (loss of balance, a physio-set limit). Can be switched off. */
+  /** The phone stops the set for these fault kinds: a loss of balance ("Sit down and rest") or a limit the physio set. Can be switched off. */
   pauseOn: ['stability', 'precaution'] as FormFaultKind[],
   pauseEnabled: true,
   /** Rule F1: the same fault in this many of the last `window` reliable checks of the same exercise raises a review item. */
@@ -135,7 +135,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     faults: [
       { id: 'slr-knee-bent', kind: 'posture', limit: 20, unit: 'deg' },        // knee more than 20 degrees short of straight
       { id: 'slr-trunk-shift', kind: 'compensation', limit: 12, unit: 'deg' }, // trunk turns more than 12 degrees from where it started
-      { id: 'slr-fast', kind: 'control', limit: 120, unit: 'degps', minFrames: 3 },  // lift faster than 120 degrees a second for about 0.2 s
     ],
   },
   // Facing the camera. Signal: how far the hips drop, as a share of leg length.
@@ -145,7 +144,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
       { id: 'squat-knee-in', kind: 'posture', limit: 12, unit: 'pct' },        // knee falls inward by 12% of thigh length
       { id: 'squat-lean', kind: 'compensation', limit: 10, unit: 'deg' },      // trunk leans sideways more than 10 degrees
       { id: 'squat-balance', kind: 'stability', limit: 15, unit: 'pct' },      // a foot moves, or the hips sway, by 15% of leg length
-      { id: 'squat-fast', kind: 'control', limit: 60, unit: 'pctps', minFrames: 3 },  // hips move faster than 60% of leg length a second
     ],
   },
   // Facing the camera. Signal: arm raise away from the side, in degrees.
@@ -155,7 +153,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
       { id: 'abd-elbow-bent', kind: 'posture', limit: 30, unit: 'deg' },       // elbow more than 30 degrees short of straight
       { id: 'abd-lean', kind: 'compensation', limit: 8, unit: 'deg' },         // trunk leans sideways more than 8 degrees
       { id: 'abd-shrug', kind: 'compensation', limit: 15, unit: 'pct' },       // shoulder rises by 15% of its starting ear distance
-      { id: 'abd-fast', kind: 'control', limit: 120, unit: 'degps', minFrames: 3 },
     ],
   },
   // Side-on, lying or sitting. Signal: how far the knee bends, in degrees (0 = straight).
@@ -163,7 +160,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     signal: 'deg', view: 'side', hint: 'degrees of knee bend', repUp: 30, repDown: 10, minFrames: 6,
     faults: [
       { id: 'flex-trunk-shift', kind: 'compensation', limit: 12, unit: 'deg' },  // trunk rolls or turns more than 12 degrees from where it started
-      { id: 'flex-fast', kind: 'control', limit: 120, unit: 'degps', minFrames: 3 },
     ],
   },
   // Facing the camera, starting seated. Signal: how far the hips rise, as a share of leg length.
@@ -173,7 +169,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
       { id: 'sit-knee-in', kind: 'posture', limit: 12, unit: 'pct' },
       { id: 'sit-lean', kind: 'compensation', limit: 10, unit: 'deg' },
       { id: 'sit-balance', kind: 'stability', limit: 15, unit: 'pct' },
-      { id: 'sit-fast', kind: 'control', limit: 60, unit: 'pctps', minFrames: 3 },
     ],
   },
   // Facing the camera. The front foot moves, so only hip sway is judged, not the feet.
@@ -183,7 +178,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
       { id: 'lunge-knee-in', kind: 'posture', limit: 12, unit: 'pct' },
       { id: 'lunge-lean', kind: 'compensation', limit: 10, unit: 'deg' },
       { id: 'lunge-sway', kind: 'stability', limit: 15, unit: 'pct' },
-      { id: 'lunge-fast', kind: 'control', limit: 60, unit: 'pctps', minFrames: 3 },
     ],
   },
   // Facing the camera. Signal: how far the hips rise onto the step, as a share of leg length.
@@ -193,7 +187,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
       { id: 'step-knee-in', kind: 'posture', limit: 12, unit: 'pct' },
       { id: 'step-lean', kind: 'compensation', limit: 10, unit: 'deg' },
       { id: 'step-sway', kind: 'stability', limit: 15, unit: 'pct' },
-      { id: 'step-fast', kind: 'control', limit: 60, unit: 'pctps', minFrames: 3 },
     ],
   },
   // Side-on, standing. Signal: arm raised forwards, in degrees.
@@ -201,7 +194,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     signal: 'deg', view: 'sideStand', hint: 'degrees the arm is raised', repUp: 40, repDown: 15, minFrames: 6,
     faults: [
       { id: 'arm-lean', kind: 'compensation', limit: 10, unit: 'deg' },  // trunk leans more than 10 degrees from where it started
-      { id: 'arm-fast', kind: 'control', limit: 120, unit: 'degps', minFrames: 3 },
     ],
   },
   // Facing the camera, standing. Signal: how far the lifted leg moves out from straight down, in degrees.
@@ -210,7 +202,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     faults: [
       { id: 'hipabd-lean', kind: 'compensation', limit: 10, unit: 'deg' },
       { id: 'hipabd-knee-bent', kind: 'posture', limit: 20, unit: 'deg' },
-      { id: 'hipabd-fast', kind: 'control', limit: 100, unit: 'degps', minFrames: 3 },
     ],
   },
   // Side-on, lying on the back. Signal: how far the hips lift, as a share of thigh length.
@@ -218,7 +209,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     signal: 'pct', view: 'side', hint: 'hip lift as % of thigh length', repUp: 25, repDown: 8, minFrames: 6,
     faults: [
       { id: 'bridge-feet', kind: 'stability', limit: 12, unit: 'pct' },  // a foot slides by 12% of thigh length
-      { id: 'bridge-fast', kind: 'control', limit: 60, unit: 'pctps', minFrames: 3 },
     ],
   },
   // Facing the camera, standing. Signal: how far the heels rise, as a share of leg length.
@@ -227,7 +217,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     faults: [
       { id: 'calf-lean', kind: 'compensation', limit: 10, unit: 'deg' },
       { id: 'calf-sway', kind: 'stability', limit: 10, unit: 'pct' },
-      { id: 'calf-fast', kind: 'control', limit: 40, unit: 'pctps', minFrames: 3 },
     ],
   },
   // Facing the camera, standing near a support. One foot is lifted and held. Signal: how high the lifted foot comes off the floor, as a share of leg length.
@@ -268,7 +257,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     signal: 'deg', view: 'pendulum', hint: 'degrees the arm swings from hanging', repUp: 8, repDown: 3, minFrames: 4,
     faults: [
       { id: 'pend-wide', kind: 'control', limit: 45, unit: 'deg' },
-      { id: 'pend-fast', kind: 'control', limit: 150, unit: 'degps', minFrames: 3 },
     ],
   },
   // Side-on to a stationary bike. Signal: where the knee is in its bend and straighten, 0 to 100 (one rep is one pedal turn).
@@ -299,7 +287,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     signal: 'pct', view: 'hand', hint: 'how closed the fist is (0 open, 100 tight fist)', repUp: 50, repDown: 20, minFrames: 6,
     faults: [
       { id: 'fist-wrist-moves', kind: 'compensation', limit: 80, unit: 'pct' },  // the wrist travels by 80% of the palm length from where it started
-      { id: 'fist-fast', kind: 'control', limit: 250, unit: 'pctps', minFrames: 3 },
     ],
   },
   // Side-on, forearm resting, upper body in view (hand model for the hand). Signal: how far the wrist bends from straight, either way.
@@ -307,7 +294,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     signal: 'deg', view: 'forearm', hint: 'degrees the wrist is bent (up or down)', repUp: 25, repDown: 10, minFrames: 6,
     faults: [
       { id: 'wrist-elbow-moves', kind: 'compensation', limit: 15, unit: 'pct' },  // the elbow moves by 15% of forearm length
-      { id: 'wrist-fast', kind: 'control', limit: 150, unit: 'degps', minFrames: 3 },
     ],
   },
   // Side-on, seated. Signal: how far the elbow bends, in degrees (0 = straight).
@@ -315,7 +301,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     signal: 'deg', view: 'armSide', hint: 'degrees the elbow is bent', repUp: 60, repDown: 20, minFrames: 6,
     faults: [
       { id: 'elbow-arm-moves', kind: 'compensation', limit: 20, unit: 'deg' },  // the upper arm swings 20 degrees from where it started
-      { id: 'elbow-fast', kind: 'control', limit: 150, unit: 'degps', minFrames: 3 },
     ],
   },
   // From behind. Signal: how much the shoulder points pull in, as a share of their starting width. The least accurate check: the squeeze moves the points only a little.
@@ -324,7 +309,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     faults: [
       { id: 'scap-shrug', kind: 'compensation', limit: 10, unit: 'pct' },  // shoulders rise by 10% of hip width
       { id: 'scap-lean', kind: 'compensation', limit: 10, unit: 'deg' },
-      { id: 'scap-fast', kind: 'control', limit: 30, unit: 'pctps', minFrames: 3 },
     ],
   },
   // Facing the camera, elbow at the side. Signal: how far the forearm turns outwards, as a share of upper-arm length. Turning inwards is not counted.
@@ -333,7 +317,6 @@ export const KINDS: Record<FormKind, KindConfig> = {
     faults: [
       { id: 'rot-elbow-away', kind: 'compensation', limit: 25, unit: 'pct' },  // the elbow leaves the side by 25% of upper-arm length
       { id: 'rot-lean', kind: 'compensation', limit: 10, unit: 'deg' },
-      { id: 'rot-fast', kind: 'control', limit: 150, unit: 'pctps', minFrames: 3 },
     ],
   },
 };
@@ -350,7 +333,7 @@ export const STEP_FAULT = { id: 'walk-uneven', kind: 'compensation' as FormFault
 /** Ankle pumps: the toes did not come up far enough between pumps. */
 export const PUMP_FAULT = { id: 'pump-short-dorsi', kind: 'range' as FormFaultKind };
 /** Faults judged per hold, step or pump rather than per camera frame: they are not in a kind's fault list. */
-export const SET_FAULTS = [HOLD_FAULT, STEP_FAULT, PUMP_FAULT] as const;
+export const SET_FAULTS = [HOLD_FAULT, STEP_FAULT, PUMP_FAULT, { id: 'pace-fast', kind: 'control' as FormFaultKind }, { id: 'pace-slow', kind: 'control' as FormFaultKind }] as const;
 
 /** Faults the physio's own limits can raise. Not placeholders: they use the number the physio typed. */
 export const LIMIT_FAULTS: Record<'max' | 'min', { id: string; kind: FormFaultKind }> = {
@@ -358,3 +341,39 @@ export const LIMIT_FAULTS: Record<'max' | 'min', { id: string; kind: FormFaultKi
   min: { id: 'limit-min', kind: 'range' },
 };
 export const unitOf = (k: FormKind): 'deg' | 'pct' => KINDS[k].signal;
+
+// ---------- what the camera offers for each exercise (camera check safety round) ----------
+/**
+ * Exercises that reuse another exercise's check instead of having rules of their own. The camera only counts for these:
+ * stairs practice is a staircase, not one step; a walking programme or a walk with an aid is judged on one pass at most.
+ */
+export const BORROWED: string[] = ['stairs-practice', 'walking-programme', 'walking-aid'];
+/**
+ * What the camera offers for one exercise:
+ *   form   its own form rules, each with an automated test (tests/formcheck.test.ts): reps, pace and one cue per fault
+ *   count  reps only, no form flags (the check is borrowed from another exercise)
+ *   video  the camera cannot measure it: the patient can record a video for the physio instead
+ */
+export type CheckMode = 'form' | 'count' | 'video';
+export const checkMode = (exerciseId: string): CheckMode => (!formKindFor(exerciseId) ? 'video' : BORROWED.includes(exerciseId) ? 'count' : 'form');
+
+/**
+ * Pace: each rep is timed (from when the movement starts to when it is back at rest) and compared with a tempo, in seconds per
+ * rep. The physio can set the tempo per exercise for one patient; otherwise the default below is used. Placeholders: NEEDS_PHYSIO_SIGNOFF.
+ * Too fast: shorter than `fast` x tempo. Too slow: longer than `slow` x tempo.
+ */
+export const PACE = { fast: 0.5, slow: 2.5, minSec: 1, maxSec: 20 } as const;
+/** No pace for timed holds, walking, cycling (they have their own rates) or the pendulum (a loose swing has no set speed). */
+export const DEFAULT_TEMPO: Partial<Record<FormKind, number>> = {
+  slr: 4, squat: 4, 'shoulder-abduction': 4, 'knee-flex': 4, 'sit-to-stand': 4, lunge: 4, 'step-up': 4, 'shoulder-flexion': 4, 'hip-abduction': 4,
+  bridging: 4, 'calf-raise': 3, 'ankle-pump': 2, 'hand-fist': 3, wrist: 3, elbow: 3, scap: 3, 'band-rot': 3,
+};
+export const paceApplies = (k: FormKind): boolean => DEFAULT_TEMPO[k] !== undefined;
+export const PACE_FAULTS = { fast: { id: 'pace-fast', kind: 'control' as FormFaultKind }, slow: { id: 'pace-slow', kind: 'control' as FormFaultKind } } as const;
+
+/**
+ * Setup check before a set (live prompts: step back, too dark, turn sideways). Placeholders: NEEDS_PHYSIO_SIGNOFF.
+ * `darkLuma`: average brightness (0 to 255) below which the picture is too dark. `slowFps`: fewer measured frames a second
+ * than this while setting up means the phone is too slow to measure, so the screen offers a video for the physio instead.
+ */
+export const SETUP = { darkLuma: 45, slowFps: 7, slowAfterMs: 3000, okFrames: 8 } as const;

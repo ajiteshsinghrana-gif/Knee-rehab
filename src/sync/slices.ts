@@ -31,6 +31,10 @@ export interface DownSlice {
   clinicReadings?: PeriodicEntry[];
   /** The physio's range limits for the camera form check, keyed by exercise. The patient's phone uses them; they are physio-owned. */
   formLimits?: Record<string, FormLimit>;
+  /** The physio switched the camera check on for this patient (off when missing or false). */
+  formCheckOn?: boolean;
+  /** The patient's carer, so the phone can offer to call them if the patient stumbles during a camera check. */
+  carer?: { name?: string; phone?: string };
 }
 
 const isDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -183,8 +187,9 @@ const FAULT_UNITS = ['deg', 'pct', 'degps', 'pctps', 's'] as const;
 const cleanLimit = (raw: unknown): FormLimit | undefined => {
   if (!isObj(raw) || !str(raw.at, 40) || !str(raw.by, 80)) return undefined;
   const max = num(raw.max) ? raw.max : undefined, min = num(raw.min) ? raw.min : undefined;
-  if (max === undefined && min === undefined) return undefined;
-  return { ...(max !== undefined ? { max: Math.max(0, Math.min(180, max)) } : {}), ...(min !== undefined ? { min: Math.max(0, Math.min(180, min)) } : {}), at: raw.at, by: raw.by };
+  const tempo = num(raw.tempo) && raw.tempo >= 1 && raw.tempo <= 20 ? raw.tempo : undefined;
+  if (max === undefined && min === undefined && tempo === undefined) return undefined;
+  return { ...(max !== undefined ? { max: Math.max(0, Math.min(180, max)) } : {}), ...(min !== undefined ? { min: Math.max(0, Math.min(180, min)) } : {}), ...(tempo !== undefined ? { tempo } : {}), at: raw.at, by: raw.by };
 };
 const cleanFault = (raw: unknown): FormFault | null => {
   if (!isObj(raw) || !str(raw.id, 40) || !FAULT_KINDS.includes(raw.kind as FormFaultKind) || !Array.isArray(raw.reps) || !num(raw.peak) || !num(raw.firstSec)) return null;
@@ -200,7 +205,10 @@ const cleanCheck = (raw: unknown): FormCheckLog | null => {
     ...(num(raw.cadence) && raw.cadence >= 0 && raw.cadence <= 400 ? { cadence: Math.round(raw.cadence) } : {}),
     ...(Array.isArray(raw.holds) && raw.holds.length ? { holds: raw.holds.filter((h): h is number => num(h) && h >= 0 && h <= 3600).slice(0, 30) } : {}),
     faults: raw.faults.slice(0, 12).map(cleanFault).filter((x): x is FormFault => !!x), usable: Math.max(0, Math.min(1, raw.usable)), reliable: raw.reliable, paused: raw.paused,
-    ...(raw.answeredBy === 'patient' || raw.answeredBy === 'caregiver' ? { answeredBy: raw.answeredBy } : {}), ...(str(raw.requestId, 60) ? { requestId: raw.requestId } : {}), ...(limit ? { limit } : {}) };
+    ...(raw.answeredBy === 'patient' || raw.answeredBy === 'caregiver' ? { answeredBy: raw.answeredBy } : {}), ...(str(raw.requestId, 60) ? { requestId: raw.requestId } : {}), ...(limit ? { limit } : {}),
+    ...(raw.mode === 'count' ? { mode: 'count' as const } : {}),
+    ...(Array.isArray(raw.repSecs) && num(raw.tempo) ? { repSecs: raw.repSecs.filter((x): x is number => num(x) && x >= 0 && x <= 600).slice(0, 60), tempo: Math.max(1, Math.min(20, raw.tempo)) } : {}),
+    ...(isObj(raw.after) && typeof raw.after.redFlag === 'boolean' ? { after: { pain: num(raw.after.pain) ? Math.max(0, Math.min(10, Math.round(raw.after.pain))) : null, redFlag: raw.after.redFlag } } : {}) };
 };
 const mergeChecks = (local: FormCheckLog[] | undefined, raw: unknown): FormCheckLog[] | undefined => {
   const incoming = (Array.isArray(raw) ? raw : []).slice(0, 60).map(cleanCheck).filter((x): x is FormCheckLog => !!x);
@@ -238,6 +246,8 @@ export function downSlice(p: Patient, clinicDemos?: Record<string, ExerciseDemo>
     ...(p.details?.goal ? { goal: p.details.goal } : {}),
     ...(p.goalProgress?.length ? { goalProgress: p.goalProgress.map((g) => ({ date: g.date, pct: g.pct })) } : {}),
     ...(p.formLimits ? { formLimits: p.formLimits } : {}),
+    formCheckOn: !!p.formCheckOn,
+    ...(p.details?.carerPhone?.trim() ? { carer: { ...(p.details.carerName?.trim() ? { name: p.details.carerName.trim().slice(0, 80) } : {}), phone: p.details.carerPhone.trim().slice(0, 30) } } : {}),
     ...(p.periodic.some((e) => e.where === 'clinic') ? { clinicReadings: p.periodic.filter((e) => e.where === 'clinic').map(cleanPeriodic) } : {}),
   };
 }
@@ -275,6 +285,9 @@ export function applyDown(p: Patient, raw: unknown): Patient {
     ...(() => { const ff = applyForms(p.formRequests, raw.forms); return ff ? { formRequests: ff } : {}; })(),
     // The physio's limits replace this phone's copy (an older physio build sends none: keep what is here). Removing the last one sends an empty object.
     ...(raw.formLimits !== undefined ? { formLimits: cleanLimits(raw.formLimits) } : {}),
+    // The camera switch is the physio's: an older physio build sends nothing, so the phone keeps what it has.
+    ...(typeof raw.formCheckOn === 'boolean' ? { formCheckOn: raw.formCheckOn ? (p.formCheckOn ?? { at: '', by: 'physio' }) : null } : {}),
+    ...(isObj(raw.carer) && str(raw.carer.phone, 30) ? { carerContact: { ...(str(raw.carer.name, 80) ? { name: raw.carer.name } : {}), phone: raw.carer.phone } } : {}),
   };
 }
 

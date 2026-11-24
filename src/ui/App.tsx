@@ -16,12 +16,16 @@ import { recoveryTokenFromHash } from '../sync/auth';
 import { WhatsAppSim } from './WhatsAppSim';
 import { WhatsAppSetup } from './WhatsAppSetup';
 import { Menu, StepLine, SyncDot, TopBar, ViewSwitch } from './TopBar';
+import { purgeExpired } from '../forms/purge';
 
 const route = (): 'patient' | 'clinician' => (window.location.hash === '#clinician' ? 'clinician' : 'patient');
 
 export function App() {
   const [recovery, setRecovery] = useState<string | null>(() => recoveryTokenFromHash(window.location.hash));
   useEffect(() => { if (recovery) window.history.replaceState(null, '', window.location.pathname + window.location.search); }, [recovery]);
+  // Video clips past their delete-by date are removed when the app opens, not only when someone opens the video screens.
+  // A cloud clip the server cannot be reached for (offline, or signed out) is kept and tried again next time.
+  useEffect(() => { const t = setTimeout(() => { for (const p of getState().patients) void purgeExpired(p).catch(() => { /* tried again next time */ }); }, 4000); return () => clearTimeout(t); }, []);
   if (recovery) return <ResetPassword token={recovery} onDone={() => setRecovery(null)} />;
   // The device kind is fixed when the page loads (main.tsx). A patient's phone never reaches the physio dashboard code path.
   return isPatientDevice() ? <PatientApp /> : getMode() === 'live' ? <LiveApp /> : <DemoApp />;

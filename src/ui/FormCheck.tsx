@@ -1,75 +1,107 @@
-// Patient side of the camera form check: consent, camera, a live set with rep count, and a plain result.
-// The phone measures; it never says a movement is safe or correct and never changes the plan. Video stays on the phone unless the patient
-// chooses to send the clip of a flagged set. See src/formcheck/ for the logic and README "Camera form check".
-import { useEffect, useRef, useState } from 'react';
+// The camera check (camera check safety round).
+//   CameraSet: setup check (live prompts), a 5 second get-ready, the set with rep count and cues, recording of at most 30 seconds.
+//              Shared by the patient's screen and the physio's pilot screen (Pilot.tsx).
+//   FormCheckScreen: the patient's side. Off until the physio switches it on. Per exercise it offers what the camera can honestly do:
+//              check form (own rules, each tested), count reps (borrowed check, no flags) or record a video for the physio.
+// The phone measures; it never says a movement is correct, good or safe, and it never changes a plan or a tier.
+// Video stays on the phone unless the patient previews it and ticks consent for that clip. See src/formcheck/ and README.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ExPicture } from './ExPicture';
 import type { FormCheckLog, Lang, Patient, ProtocolPack } from '../types';
 import { clockMs, getState, updatePatient } from '../store';
 import { exerciseName, getExercise } from '../exercises/library';
 import { currentExercises } from '../engine/plan';
+import { t } from '../i18n';
 import { speak, speakSupported } from '../voice/speak';
-import { CONSENT_TEXT, consentText, reviewHours, validClip } from '../forms/model';
+import { CONSENT_TEXT, FORM_CONFIG, consentText, reviewHours, validClip } from '../forms/model';
 import { newLocalId, saveLocalVideo } from '../exercises/deviceVideos';
 import { clipCloudReady, patientUploadClip } from '../sync/engine';
-import { FormAnalyzer, type FormEvent } from '../formcheck/analyze';
-import { BONES, FORM_CHECK, HAND, HAND_BONES, HAND_KINDS, KINDS, VARIANTS, formKindFor } from '../formcheck/config';
-import { assess, attachClip, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, requestForClip, withdrawConsent, type Assessment } from '../formcheck/model';
+import { FormAnalyzer, type FormEvent, type FormSummary } from '../formcheck/analyze';
+import { BONES, FORM_CHECK, HAND, HAND_BONES, HAND_KINDS, KINDS, SETUP, VARIANTS, checkMode, formKindFor, type FormKind } from '../formcheck/config';
+import { assess, attachClip, cameraOn, carerOf, giveConsent, hasConsent, limitFor, newCheckLog, recordCheck, requestForClip, setAfterAnswers, withdrawConsent, type Assessment } from '../formcheck/model';
 import { loadPose, type Pose } from '../formcheck/pose';
-import { loadPilot, newPilotRecord, savePilot, upsert, type PilotRecord } from '../formcheck/pilot';
-import { PilotRating, PilotSetup } from './Pilot';
-import { isPatientDevice } from '../device';
+import { lumaOf, setupHint, type SetupHint } from '../formcheck/setup';
 import { COUNT_KEYS, VIEW_KEY, fcs } from '../formcheck/strings';
-
-type Stage = 'intro' | 'camera' | 'live' | 'result';
-interface Result { log: FormCheckLog; a: Assessment; requestId: string | null }
+import { hasPhone, telHref } from '../contact';
 
 const pickMime = (): string => {
   const ok = (m: string) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m);
   return ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(ok) ?? '';
 };
 
-export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { patient: Patient; pack: ProtocolPack; lang: Lang; exerciseId: string | null; onBack: () => void }) {
+/** A small read-aloud button. Stops when the screen closes. */
+export function Speak({ text, lang }: { text: string; lang: Lang }) {
+  const [on, setOn] = useState(false);
+  const stop = useRef<null | (() => void)>(null);
+  useEffect(() => () => { stop.current?.(); }, []);
+  if (!speakSupported(lang)) return null;
+  return (
+    <button type="button" className="readaloud icon" aria-pressed={on} aria-label={t(lang, on ? 'stopReading' : 'readAloud')}
+      onClick={() => { if (on) { stop.current?.(); setOn(false); return; } setOn(true); stop.current = speak(text, lang, () => setOn(false)); }}>🔊</button>
+  );
+}
+
+export interface SetOutcome {
+  summary: FormSummary;
+  clip: Blob | null;
+  /** Length of the clip in seconds (at most FORM_CONFIG.maxClipSec). */
+  clipSec: number;
+  /** How the set ended: the patient tapped Finish (or time ran out), a stumble, or a limit the physio set. */
+  stop: 'finish' | 'stumble' | 'limit';
+}
+
+/**
+ * One set with the camera. `countOnly`: reps only, nothing judged. `blind` (pilot mode): the rep count and cues are hidden during
+ * the set, so the observer's own verdict is not led by the phone.
+ */
+export function CameraSet({ kind, lang, limit, tempo, countOnly, blind, trace, onDone, onCancel, onTooSlow }: {
+  kind: FormKind; lang: Lang; limit?: { max?: number; min?: number }; tempo?: number; countOnly: boolean; blind?: boolean; trace?: boolean;
+  onDone: (o: SetOutcome) => void; onCancel: () => void; onTooSlow?: () => void;
+}) {
   const F = (k: string, p?: Record<string, string | number>) => fcs(lang, k, p);
-  const options = currentExercises(patient, pack).filter((id) => formKindFor(id));
-  const [ex, setEx] = useState<string>(exerciseId && formKindFor(exerciseId) ? exerciseId : options[0] ?? '');
-  const variants = VARIANTS[ex];
-  const [variant, setVariant] = useState(0);
-  const kind = variants ? variants[Math.min(variant, variants.length - 1)].kind : formKindFor(ex);
-  const [stage, setStage] = useState<Stage>('intro');
-  const [agreed, setAgreed] = useState(hasConsent(patient));
+  const [phase, setPhase] = useState<'setup' | 'countdown' | 'live'>('setup');
   const [facing, setFacing] = useState<'user' | 'environment'>('user');
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState('');
+  const [hint, setHint] = useState<SetupHint>('fcSetStepBack');
+  const [okRun, setOkRun] = useState(0);
   const [reps, setReps] = useState(0);
   const [unseen, setUnseen] = useState(false);
-  const [paused, setPaused] = useState(false);
   const [getReady, setGetReady] = useState<number | null>(null);
-  const [noticed, setNoticed] = useState('');
-  const [result, setResult] = useState<Result | null>(null);
-  const [clip, setClip] = useState<Blob | null>(null);
-  const [clipAgree, setClipAgree] = useState(false);
-  const [pilotRec, setPilotRec] = useState<PilotRecord | null>(null);
-  const [clipState, setClipState] = useState<'idle' | 'sending' | 'cloud' | 'device' | 'deleted'>('idle');
+  const [cue, setCue] = useState('');
 
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const small = useRef<HTMLCanvasElement | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const pose = useRef<Pose | null>(null);
   const analyzer = useRef<FormAnalyzer | null>(null);
   const raf = useRef(0);
   const lastT = useRef(0);
   const live = useRef(false);
+  const phaseRef = useRef<'setup' | 'countdown' | 'live'>('setup');
   const startedAt = useRef(0);
   const rec = useRef<MediaRecorder | null>(null);
+  const recStop = useRef<Promise<void> | null>(null);
+  const recTimer = useRef(0);
   const chunks = useRef<Blob[]>([]);
   const recMime = useRef('');
+  const luma = useRef<number | null>(null);
+  const fps = useRef({ t0: 0, n: 0, warned: false });
+  const okRunRef = useRef(0);
+  const cueTimer = useRef(0);
 
   const stopCamera = () => {
     cancelAnimationFrame(raf.current);
-    stream.current?.getTracks().forEach((t) => t.stop());
+    stream.current?.getTracks().forEach((x) => x.stop());
     stream.current = null;
   };
-  useEffect(() => () => { stopCamera(); pose.current?.close(); pose.current = null; try { rec.current?.stop(); } catch { /* not recording */ } }, []);
+  useEffect(() => () => {
+    stopCamera(); pose.current?.close(); pose.current = null; clearTimeout(recTimer.current); clearTimeout(cueTimer.current);
+    try { rec.current?.stop(); } catch { /* not recording */ }
+  }, []);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { void openCamera(facing); }, []);
 
   const draw = (frame: ReturnType<Pose['detect']>) => {
     const c = canvas.current, v = video.current;
@@ -79,7 +111,7 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     if (!g) return;
     g.clearRect(0, 0, c.width, c.height);
     if (!frame) return;
-    g.lineWidth = 4; g.strokeStyle = '#2ec4b6'; g.fillStyle = '#ffb703';
+    g.lineWidth = 4; g.strokeStyle = '#2ec4b6';
     for (const [a, b] of BONES) {
       const p = frame[a], q = frame[b];
       if (!p || !q || (p.v ?? 0) < FORM_CHECK.minVisibility || (q.v ?? 0) < FORM_CHECK.minVisibility) continue;
@@ -93,17 +125,30 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
       }
     }
   };
+  /** Brightness from a tiny copy of the picture, every few frames. */
+  const readLuma = (v: HTMLVideoElement) => {
+    try {
+      const c = small.current ?? (small.current = document.createElement('canvas'));
+      c.width = 32; c.height = 24;
+      const g = c.getContext('2d', { willReadFrequently: true } as CanvasRenderingContext2DSettings);
+      if (!g) return;
+      g.drawImage(v, 0, 0, 32, 24);
+      luma.current = lumaOf(g.getImageData(0, 0, 32, 24).data);
+    } catch { luma.current = null; }
+  };
 
   const onEvents = (evs: FormEvent[]) => {
     for (const e of evs) {
       if (e.type === 'rep') setReps(e.n);
       else if (e.type === 'unseen') setUnseen(true);
       else if (e.type === 'seen') setUnseen(false);
-      else if (e.type === 'fault') { setNoticed(`${F('fcNoticed')} ${F(`fault-${e.id}`)}`); setTimeout(() => setNoticed(''), 4000); }
-      else if (e.type === 'pause') {
-        setPaused(true);
-        try { navigator.vibrate?.(300); } catch { /* not supported */ }
-        if (speakSupported(lang)) speak(F('fcPause'), lang);
+      else if (e.type === 'fault' && !blind) {
+        clearTimeout(cueTimer.current);
+        setCue(F(`fault-${e.id}`));
+        cueTimer.current = window.setTimeout(() => setCue(''), 4000);
+      } else if (e.type === 'pause') {
+        void end(e.kind === 'stability' ? 'stumble' : 'limit');
+        return;
       }
     }
   };
@@ -116,18 +161,32 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
         lastT.current = now;
         const frame = p.detect(v, now);
         draw(frame);
+        if (phaseRef.current === 'setup') {
+          const f = fps.current;
+          if (!f.t0 || document.hidden) { f.t0 = now; f.n = 0; }
+          f.n++;
+          if (f.n % 5 === 1) readLuma(v);
+          const h = setupHint(kind, frame, luma.current);
+          setHint(h);
+          okRunRef.current = h === 'fcSetOk' ? okRunRef.current + 1 : 0;
+          setOkRun(okRunRef.current);
+          // Too slow to measure: offer a video for the physio instead.
+          const el = now - f.t0;
+          if (!f.warned && el > SETUP.slowAfterMs && (f.n * 1000) / el < SETUP.slowFps) { f.warned = true; stopCamera(); onTooSlow?.(); return; }
+        }
         if (live.current && analyzer.current) {
           const evs = frame ? analyzer.current.push(frame, now, v.videoWidth / v.videoHeight) : analyzer.current.push([], now);
           onEvents(evs);
-          if (now - startedAt.current > FORM_CHECK.maxSeconds * 1000) { void finish(); return; }
+          if (!live.current) return;
+          if (now - startedAt.current > FORM_CHECK.maxSeconds * 1000) { void end('finish'); return; }
         }
       }
     }
     raf.current = requestAnimationFrame(loop);
   };
 
-  const openCamera = async (face: 'user' | 'environment') => {
-    setErr(''); setReady(false);
+  async function openCamera(face: 'user' | 'environment') {
+    setErr(''); setReady(false); okRunRef.current = 0; setOkRun(0); fps.current = { t0: 0, n: 0, warned: false };
     stopCamera();
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: face, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
@@ -135,31 +194,16 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
       if (video.current) { video.current.srcObject = s; await video.current.play(); }
     } catch { setErr(F('fcNoCamera')); return; }
     try {
-      const needHand = !!kind && HAND_KINDS.includes(kind);
+      const needHand = HAND_KINDS.includes(kind);
       if (pose.current && needHand && !pose.current.hand) { pose.current.close(); pose.current = null; }
       if (!pose.current) pose.current = await loadPose(needHand);
     } catch { stopCamera(); setErr(F('fcNoModel')); return; }
     setReady(true);
     raf.current = requestAnimationFrame(loop);
-  };
-
-  const start = async () => {
-    if (!kind) return;
-    if (!hasConsent(patient)) {
-      const at = new Date(clockMs(getState())).toISOString();
-      updatePatient(patient.id, (p) => giveConsent(p, patient.caregiverMode ? 'caregiver' : 'patient', at));
-    }
-    setStage('camera');
-    await openCamera(facing);
-  };
+  }
   const swap = async () => { const f = facing === 'user' ? 'environment' : 'user'; setFacing(f); await openCamera(f); };
 
-  const beginSet = () => {
-    if (!kind || !ready) return;
-    setStage('live');
-    setGetReady(FORM_CHECK.getReadySec);
-  };
-  // Count down so the patient can step back and get into position before anything is measured.
+  // Count down so the patient can get into position before anything is measured.
   useEffect(() => {
     if (getReady === null) return;
     if (getReady <= 0) { setGetReady(null); startSet(); return; }
@@ -168,117 +212,247 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
   }, [getReady]);
 
   const startSet = () => {
-    if (!kind) return;
-    // A physio limit is for the main movement of the exercise; the heel-to-toe variant has no such number.
-    const lim = kind === 'balance-line' || (kind && KINDS[kind].noLimit) ? undefined : limitFor(patient, ex);
-    analyzer.current = new FormAnalyzer(kind, lim ? { max: lim.max, min: lim.min } : undefined);
-    analyzer.current.recordTrace = !isPatientDevice() && loadPilot().on;
-    setReps(0); setUnseen(false); setPaused(false); setNoticed('');
-    chunks.current = []; recMime.current = '';
+    analyzer.current = new FormAnalyzer(kind, countOnly ? undefined : limit, { countOnly, tempoSec: tempo });
+    analyzer.current.recordTrace = !!trace;
+    setReps(0); setUnseen(false); setCue('');
+    chunks.current = []; recMime.current = ''; recStop.current = null;
     if (stream.current && typeof MediaRecorder !== 'undefined') {
       try {
         const mime = pickMime();
         const r = new MediaRecorder(stream.current, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: 800_000 });
         r.ondataavailable = (e) => { if (e.data.size) chunks.current.push(e.data); };
+        recStop.current = new Promise<void>((res) => { r.onstop = () => res(); });
         r.start(1000);
         rec.current = r; recMime.current = r.mimeType || mime;
+        // The clip is capped: recording stops after 30 seconds while the set carries on being measured.
+        recTimer.current = window.setTimeout(() => { try { if (r.state !== 'inactive') r.stop(); } catch { /* already stopped */ } }, FORM_CONFIG.maxClipSec * 1000);
       } catch { rec.current = null; }
     }
     startedAt.current = performance.now();
     live.current = true;
+    setPhase('live');
   };
 
-  const stopRecording = (): Promise<Blob | null> => new Promise((resolve) => {
+  const stopRecording = async (): Promise<Blob | null> => {
+    clearTimeout(recTimer.current);
     const r = rec.current;
     rec.current = null;
-    if (!r || r.state === 'inactive') { resolve(null); return; }
-    r.onstop = () => resolve(chunks.current.length ? new Blob(chunks.current, { type: recMime.current || 'video/webm' }) : null);
-    try { r.stop(); } catch { resolve(null); }
-  });
+    if (r && r.state !== 'inactive') { try { r.stop(); } catch { /* already stopped */ } }
+    if (recStop.current) await recStop.current;
+    return chunks.current.length ? new Blob(chunks.current, { type: recMime.current || 'video/webm' }) : null;
+  };
 
-  const finish = async () => {
-    if (!live.current || !analyzer.current || !kind) return;
+  async function end(stop: SetOutcome['stop']) {
+    if (!live.current || !analyzer.current) return;
     live.current = false;
     const summary = analyzer.current.finish();
-    const blob = await stopRecording();
+    if (stop === 'stumble') {
+      try { navigator.vibrate?.(300); } catch { /* not supported */ }
+      if (speakSupported(lang)) speak(F('fcStumble'), lang);
+    }
+    const clip = await stopRecording();
     stopCamera();
+    onDone({ summary, clip, clipSec: Math.min(summary.seconds, FORM_CONFIG.maxClipSec), stop });
+  }
+
+  const mirror = facing === 'user' ? 'scaleX(-1)' : undefined;
+  const okToStart = ready && okRun >= SETUP.okFrames;
+  return (
+    <main data-testid="formcheck-live" data-stage={phase === 'setup' ? 'camera' : 'live'}>
+      <div className="fc-stage" style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 12, overflow: 'hidden' }}>
+        <video ref={video} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-label={F('fcTitle')} />
+        <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: mirror }} aria-hidden="true" />
+      </div>
+      {err && <p className="err" role="alert">{err}</p>}
+      {!err && !ready && <p>{F('fcLoading')}</p>}
+      {phase === 'setup' && ready && (
+        <p className={hint === 'fcSetOk' ? 'okline' : 'hint'} role="status" aria-live="polite" data-testid="fc-setup">{F(hint)} {hint !== 'fcSetOk' && <Speak key={hint} text={F(hint)} lang={lang} />}</p>
+      )}
+      {phase === 'countdown' && getReady !== null && <p className="gs-count" role="timer" aria-live="polite">{F('fcGetReady', { n: getReady })}</p>}
+      {phase === 'live' && (blind
+        ? <p className="gs-count" aria-live="polite">Recording. The phone's results are shown after you enter yours.</p>
+        : <p className="gs-count" aria-live="polite">{F(COUNT_KEYS[kind]?.live || 'fcReps', { n: reps })}</p>)}
+      {phase === 'live' && unseen && <p className="hint" role="status">{F('fcUnseen')}</p>}
+      {phase === 'live' && cue && <p className="gs-msg" role="status">{cue}</p>}
+      {phase === 'setup' && (
+        <>
+          <p className="tiny">{F(VIEW_KEY[KINDS[kind].view])}</p>
+          <p className="tiny">{F('fcRecWarn')}</p>
+          <button className="big primary" data-testid="fc-begin" disabled={!okToStart} onClick={() => { setPhase('countdown'); setGetReady(FORM_CHECK.getReadySec); }}>{F('fcBegin')}</button>
+          <button className="link" onClick={() => void swap()}>{F('fcSwap')}</button>
+          <button className="link" onClick={() => { stopCamera(); onCancel(); }}>← {F('fcCancel')}</button>
+        </>
+      )}
+      {phase === 'countdown' && <button className="big secondary" onClick={() => { setGetReady(null); setPhase('setup'); }}>{F('fcCancel')}</button>}
+      {phase === 'live' && <button className="big primary" data-testid="fc-finish" onClick={() => void end('finish')}>{F('fcFinish')}</button>}
+    </main>
+  );
+}
+
+type Stage = 'intro' | 'set' | 'stumble' | 'after' | 'result';
+interface Result { log: FormCheckLog; a: Assessment; requestId: string | null; stop: SetOutcome['stop'] }
+
+const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+
+export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack, onVideo, onRedFlag }: {
+  patient: Patient; pack: ProtocolPack; lang: Lang; exerciseId: string | null; onBack: () => void;
+  /** Opens the video request for an exercise (the camera cannot measure it, or the phone is too slow). */
+  onVideo: (exerciseId: string) => void;
+  /** A yes to dizziness, chest pain or breathlessness after a set: opens the warning signs (the existing red-flag pathway). */
+  onRedFlag: () => void;
+}) {
+  const F = (k: string, p?: Record<string, string | number>) => fcs(lang, k, p);
+  const T = (k: string, p?: Record<string, string | number>) => t(lang, k, p);
+  const options = currentExercises(patient, pack);
+  const [ex, setEx] = useState<string>(exerciseId && options.includes(exerciseId) ? exerciseId : options.find((id) => checkMode(id) === 'form') ?? options[0] ?? '');
+  const mode = checkMode(ex);
+  const variants = mode === 'form' ? VARIANTS[ex] : undefined;
+  const [variant, setVariant] = useState(0);
+  const kind = variants ? variants[Math.min(variant, variants.length - 1)].kind : formKindFor(ex);
+  const [stage, setStage] = useState<Stage>('intro');
+  const [agreed, setAgreed] = useState(hasConsent(patient));
+  const [err, setErr] = useState('');
+  const [result, setResult] = useState<Result | null>(null);
+  const [clip, setClip] = useState<{ blob: Blob; sec: number; setSec: number } | null>(null);
+  const [clipAgree, setClipAgree] = useState(false);
+  const [clipState, setClipState] = useState<'idle' | 'sending' | 'cloud' | 'device' | 'deleted'>('idle');
+  const [pain, setPain] = useState<number | null>(null);
+  const [flag, setFlag] = useState<boolean | null>(null);
+  const clipUrl = useMemo(() => (clip ? URL.createObjectURL(clip.blob) : ''), [clip]);
+  useEffect(() => () => { if (clipUrl) URL.revokeObjectURL(clipUrl); }, [clipUrl]);
+  const carer = carerOf(patient);
+
+  if (!cameraOn(patient)) {
+    return <main data-testid="formcheck"><button className="back" onClick={onBack}>← {F('fcHome')}</button><h2>{F('fcTitle')}</h2><p>{F('fcOff')}</p></main>;
+  }
+
+  const begin = () => {
+    if (!kind) return;
+    if (!hasConsent(patient)) {
+      const at = new Date(clockMs(getState())).toISOString();
+      updatePatient(patient.id, (p) => giveConsent(p, patient.caregiverMode ? 'caregiver' : 'patient', at));
+    }
+    setErr(''); setStage('set');
+  };
+
+  const onDone = (o: SetOutcome) => {
+    if (!kind) return;
     const now = clockMs(getState());
     const iso = new Date(now).toISOString();
-    const lim = limitFor(patient, ex);
-    const log = newCheckLog({ id: `c${Date.now().toString(36)}`, date: getState().today, startedAt: now - Math.round(summary.seconds * 1000), endedAt: now, exerciseId: ex, kind: kind ?? undefined, summary, by: patient.caregiverMode ? 'caregiver' : 'patient', limit: lim });
+    const lim = mode === 'form' ? limitFor(patient, ex) : undefined;
+    const log = newCheckLog({ id: `c${Date.now().toString(36)}`, date: getState().today, startedAt: now - Math.round(o.summary.seconds * 1000), endedAt: now, exerciseId: ex, kind, summary: o.summary, by: patient.caregiverMode ? 'caregiver' : 'patient', limit: lim });
     const cur = getState().patients.find((x) => x.id === patient.id) ?? patient;
     const out = recordCheck(cur, log, iso);
     updatePatient(patient.id, (q) => recordCheck(q, log, iso).patient);
-    setResult({ log: out.patient.formChecks?.find((x) => x.id === log.id) ?? log, a: assess(cur, log), requestId: out.requestId });
-    // The video stays in memory only so the patient can choose to send it. Nothing is uploaded unless they tick the consent box.
-    setClip(blob ?? null);
-    // Pilot mode (a physio testing on volunteers, never on a patient's own phone): keep the measurements and ask for a rating.
-    const pilot = !isPatientDevice() ? loadPilot() : null;
-    if (pilot?.on) {
-      const rec = newPilotRecord({ id: log.id, at: iso, participant: pilot.participant, kind, exerciseId: ex, summary });
-      savePilot(upsert(pilot, rec));
-      setPilotRec(rec);
-    } else setPilotRec(null);
+    setResult({ log: out.patient.formChecks?.find((x) => x.id === log.id) ?? log, a: assess(cur, log), requestId: out.requestId, stop: o.stop });
+    // The video stays in memory only so the patient can choose to send it. Nothing is uploaded unless they watch it and tick consent.
+    setClip(o.clip ? { blob: o.clip, sec: o.clipSec, setSec: o.summary.seconds } : null);
+    setClipAgree(false); setClipState('idle'); setPain(null); setFlag(null);
+    setStage(o.stop === 'stumble' ? 'stumble' : 'after');
+  };
+
+  const saveAfter = () => {
+    if (!result || flag === null) return;
+    updatePatient(patient.id, (q) => setAfterAnswers(q, result.log.id, { pain, redFlag: flag }));
+    if (flag) { onRedFlag(); return; }
     setStage('result');
   };
 
   const sendClip = async () => {
-    if (!clip || !result) return;
+    if (!clip || !result || !clipAgree) return;
     setClipState('sending'); setErr('');
     try {
-      const mime = (clip.type || 'video/webm').split(';')[0];
-      const bad = validClip(mime, clip.size);
-      if (bad) { setErr(bad === 'size' ? fcs(lang, 'fcClipSize') : fcs(lang, 'fcClipType')); setClipState('idle'); return; }
+      const mime = (clip.blob.type || 'video/webm').split(';')[0];
+      const bad = validClip(mime, clip.blob.size);
+      if (bad) { setErr(bad === 'size' ? F('fcClipSize') : F('fcClipType')); setClipState('idle'); return; }
       const iso = new Date(clockMs(getState())).toISOString();
-      // No new item was raised for this set (the physio has one open): the video gets its own item.
+      // No new item was raised for this set (nothing flagged, or the physio has one open): the video gets its own item.
       let id = result.requestId ?? '';
       if (!id) {
         const cur = getState().patients.find((x) => x.id === patient.id) ?? patient;
-        const made = requestForClip(cur, result.log, result.a, iso);
-        id = made.requestId;
+        id = requestForClip(cur, result.log, result.a, iso).requestId;
         if (!id) { setClipState('idle'); return; }
         updatePatient(patient.id, (q) => requestForClip(q, result.log, result.a, iso).patient);
       }
-      const path = clipCloudReady(patient) ? await patientUploadClip(patient, id, clip, mime) : null;
-      if (path) { updatePatient(patient.id, (p) => attachClip(p, id, { where: 'cloud', ref: path, mime, size: clip.size, durationSec: null }, iso)); setClipState('cloud'); }
-      else { const lid = newLocalId(); await saveLocalVideo(lid, clip); updatePatient(patient.id, (p) => attachClip(p, id, { where: 'device', ref: lid, mime, size: clip.size, durationSec: null }, iso)); setClipState('device'); }
+      const durationSec = Math.round(clip.sec);
+      const path = clipCloudReady(patient) ? await patientUploadClip(patient, id, clip.blob, mime) : null;
+      if (path) { updatePatient(patient.id, (p) => attachClip(p, id, { where: 'cloud', ref: path, mime, size: clip.blob.size, durationSec }, iso)); setClipState('cloud'); }
+      else { const lid = newLocalId(); await saveLocalVideo(lid, clip.blob); updatePatient(patient.id, (p) => attachClip(p, id, { where: 'device', ref: lid, mime, size: clip.blob.size, durationSec }, iso)); setClipState('device'); }
       setClip(null);
     } catch (e) { setErr((e as Error).message); setClipState('idle'); }
   };
 
-  const reset = () => { setStage('intro'); setResult(null); setPilotRec(null); setClip(null); setClipAgree(false); setClipState('idle'); setReps(0); setReady(false); setErr(''); };
+  const reset = () => { setStage('intro'); setResult(null); setClip(null); setClipAgree(false); setClipState('idle'); setErr(''); };
   const hours = reviewHours(pack);
   const consent = consentText(lang);
 
-  if (!options.length && !kind) {
-    return <main data-testid="formcheck"><button className="back" onClick={onBack}>← {F('fcHome')}</button><h2>{F('fcTitle')}</h2><p>{F('fcNoEx')}</p></main>;
+  if (stage === 'set' && kind) {
+    return <CameraSet key={kind} kind={kind} lang={lang} countOnly={mode === 'count'} limit={mode === 'form' && kind !== 'balance-line' && !KINDS[kind].noLimit ? limitFor(patient, ex) : undefined}
+      tempo={mode === 'form' ? limitFor(patient, ex)?.tempo : undefined} onDone={onDone} onCancel={() => setStage('intro')} onTooSlow={() => onVideo(ex)} />;
+  }
+
+  if (stage === 'stumble') {
+    const say = `${F('fcStumble')} ${F('fcStumbleMore')}`;
+    return (
+      <main data-testid="fc-stumble">
+        <div className="red" role="alert"><strong style={{ fontSize: '1.3em' }}>{F('fcStumble')}</strong></div>
+        <p>{F('fcStumbleMore')} <Speak text={say} lang={lang} /></p>
+        {carer && hasPhone(carer.phone) && <a className="big primary" href={telHref(carer.phone)} data-testid="fc-call-carer">{carer.name ? F('fcCallCarer', { name: carer.name }) : F('fcCallCarerAny')}</a>}
+        <a className="big secondary" href="tel:112">{F('fcCall112')}</a>
+        <button className="big secondary" data-testid="fc-sat-down" onClick={() => setStage('after')}>{F('fcSatDown')}</button>
+      </main>
+    );
+  }
+
+  if (stage === 'after') {
+    return (
+      <main data-testid="fc-after">
+        <h3>{F('fcAfterPain')} <Speak text={F('fcAfterPain')} lang={lang} /></h3>
+        <div className="gs-pain" role="group" aria-label={F('fcAfterPain')}>{Array.from({ length: 11 }, (_, n) => (
+          <button key={n} type="button" className={`stepbtn${pain === n ? ' sel' : ''}`} aria-pressed={pain === n} data-testid={`fc-pain-${n}`} onClick={() => setPain(n)}>{n}</button>))}</div>
+        <h3>{F('fcAfterFlags')} <Speak text={F('fcAfterFlags')} lang={lang} /></h3>
+        <div className="yn">
+          <button className={flag === false ? 'sel no' : ''} aria-pressed={flag === false} data-testid="fc-flag-no" onClick={() => setFlag(false)}>{T('no')}</button>
+          <button className={flag === true ? 'sel yes' : ''} aria-pressed={flag === true} data-testid="fc-flag-yes" onClick={() => setFlag(true)}>{T('yes')}</button>
+        </div>
+        <button className="big primary" data-testid="fc-after-next" disabled={pain === null || flag === null} onClick={saveAfter}>{F('fcAfterNext')}</button>
+      </main>
+    );
   }
 
   if (stage === 'result' && result) {
     const { log, a } = result;
+    const lines: string[] = [];
+    lines.push(log.repsCounted > 0 ? F(COUNT_KEYS[log.kind]?.done ?? 'fcRepsDone', { n: log.repsCounted }) : F('fcNoReps'));
+    if (log.cadence) lines.push(F(COUNT_KEYS[log.kind]?.rate ?? 'fcCadence', { n: log.cadence }));
+    if (log.holds?.length) lines.push(F('fcHolds', { list: log.holds.join(', ') }));
+    if (log.repSecs?.length && log.tempo) lines.push(F('fcPaceLine', { sec: median(log.repSecs), tempo: log.tempo }));
+    const cues = log.faults.map((f) => F('fcLine', { what: F(`fault-${f.id}`), n: f.reps.length, total: Math.max(log.repsCounted, f.reps.length) }));
+    const verdict = log.mode === 'count' ? F('fcCountNote') : a.unreliable ? F('fcUnreliable') : cues.length ? `${F('fcHead')} ${cues.join(' ')}` : F('fcNone');
     return (
       <main data-testid="formcheck-result">
-        <h2>{F('fcResult')}</h2>
+        <h2>{F('fcResult')} <Speak text={[...lines, verdict].join(' ')} lang={lang} /></h2>
         <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
-        <p>{log.repsCounted > 0 ? F(COUNT_KEYS[log.kind]?.done ?? 'fcRepsDone', { n: log.repsCounted }) : F('fcNoReps')}</p>
-        {log.cadence ? <p>{F(COUNT_KEYS[log.kind]?.rate ?? 'fcCadence', { n: log.cadence })}</p> : null}
-        {log.holds?.length ? <p>{F('fcHolds', { list: log.holds.join(', ') })}</p> : null}
-        {a.unreliable ? <p className="hint">{F('fcUnreliable')}</p> : log.faults.length ? (
+        {result.stop === 'limit' && <p className="red" role="alert"><strong>{F('fcPause')}</strong></p>}
+        {lines.map((x) => <p key={x}>{x}</p>)}
+        {log.mode === 'count' ? <p className="hint">{F('fcCountNote')}</p> : a.unreliable ? <p className="hint">{F('fcUnreliable')}</p> : cues.length ? (
           <div className="card">
             <b>{F('fcHead')}</b>
-            <ul className="exlist">{log.faults.map((f) => <li key={f.id}>{F('fcLine', { what: F(`fault-${f.id}`), n: f.reps.length, total: Math.max(log.repsCounted, f.reps.length) })}</li>)}</ul>
+            <ul className="exlist">{cues.map((c) => <li key={c}>{c}</li>)}</ul>
           </div>
-        ) : <p>{F('fcNone')}</p>}
-        {pilotRec && <PilotRating record={pilotRec} onSaved={setPilotRec} />}
+        ) : <p data-testid="fc-none">{F('fcNone')}</p>}
         {(a.raise || log.paused) && <p className="okline" data-testid="fc-told">{F('fcTold', { hours })}</p>}
         {a.raise && !clip && clipState === 'idle' && <p className="tiny">{F('fcToldNoClip')}</p>}
         {clip && clipState !== 'deleted' && (
           <div className="card" data-testid="fc-clip">
+            <b>{F('fcSendClip')}</b>
+            <p className="tiny">{F('fcClipPreview')}{clip.setSec > FORM_CONFIG.maxClipSec ? ` ${F('fcClipFirst', { n: FORM_CONFIG.maxClipSec })}` : ''}</p>
+            {clipUrl && <video src={clipUrl} controls playsInline preload="metadata" data-testid="fc-clip-preview" style={{ width: '100%', maxWidth: 480, borderRadius: 12 }} />}
             <ul className="exlist">{consent.points.map((x) => <li key={x}>{x}</li>)}</ul>
             <small className="tiny">{CONSENT_TEXT[lang].draft}</small>
             <label className="caregivertoggle"><input type="checkbox" checked={clipAgree} onChange={(e) => setClipAgree(e.target.checked)} data-testid="fc-clip-consent" /><span><b>{CONSENT_TEXT[lang].agree}</b></span></label>
             <p className="tiny">{F('fcClipHint')}</p>
-            <button className="big primary" disabled={!clipAgree || clipState === 'sending'} onClick={() => void sendClip()}>{clipState === 'sending' ? F('fcSending') : F('fcSendClip')}</button>
+            <button className="big primary" data-testid="fc-send-clip" disabled={!clipAgree || clipState === 'sending'} onClick={() => void sendClip()}>{clipState === 'sending' ? F('fcSending') : F('fcSendClip')}</button>
             <button className="link" onClick={() => { setClip(null); setClipState('deleted'); }}>{F('fcDiscard')}</button>
           </div>
         )}
@@ -292,61 +466,38 @@ export function FormCheckScreen({ patient, pack, lang, exerciseId, onBack }: { p
     );
   }
 
-  if (stage === 'camera' || stage === 'live') {
-    return (
-      <main data-testid="formcheck-live" data-stage={stage}>
-        <div className="fc-stage" style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', borderRadius: 12, overflow: 'hidden' }}>
-          <video ref={video} muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: facing === 'user' ? 'scaleX(-1)' : undefined }} aria-label={F('fcTitle')} />
-          <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: facing === 'user' ? 'scaleX(-1)' : undefined }} aria-hidden="true" />
-        </div>
-        {err && <p className="err" role="alert">{err}</p>}
-        {!err && !ready && <p>{F('fcLoading')}</p>}
-        {stage === 'live' && getReady !== null && <p className="gs-count" role="timer" aria-live="polite">{F('fcGetReady', { n: getReady })}</p>}
-        {stage === 'live' && getReady === null && <p className="gs-count" aria-live="polite">{F((kind && COUNT_KEYS[kind]?.live) || 'fcReps', { n: reps })}</p>}
-        {stage === 'live' && unseen && <p className="hint" role="status">{F('fcUnseen')}</p>}
-        {stage === 'live' && noticed && <p className="gs-msg" role="status">{noticed}</p>}
-        {paused && <div className="red" role="alert" data-testid="fc-pause"><strong>{F('fcPause')}</strong></div>}
-        {stage === 'camera' && (
-          <>
-            <p className="hint">{F(kind ? VIEW_KEY[KINDS[kind].view] : 'fcViewFront')}</p>
-            <button className="big primary" disabled={!ready} onClick={beginSet}>{F('fcBegin')}</button>
-            <button className="link" onClick={() => void swap()}>{F('fcSwap')}</button>
-            <button className="link" onClick={() => { stopCamera(); setStage('intro'); }}>← {F('fcTitle')}</button>
-          </>
-        )}
-        {stage === 'live' && <button className="big primary" onClick={() => (getReady !== null ? (setGetReady(null), setStage('camera')) : void finish())}>{getReady !== null ? F('fcCancel') : F('fcFinish')}</button>}
-      </main>
-    );
-  }
-
   return (
     <main data-testid="formcheck">
       <button className="back" onClick={onBack}>← {F('fcHome')}</button>
       <h2>{F('fcTitle')}</h2>
-      <p className="hint">{F('fcNot')}</p>
+      <p className="hint">{F('fcNot')} <Speak text={`${F('fcNot')} ${F('fcNoEmergency')}`} lang={lang} /></p>
       <p className="tiny">{F('fcNoEmergency')}</p>
-      {options.length > 1 && !exerciseId ? (
+      {options.length > 1 ? (
         <label className="field"><b>{F('fcPickEx')}</b>
-          <select value={ex} onChange={(e) => { setEx(e.target.value); setVariant(0); }}>{options.map((id) => <option key={id} value={id}>{exerciseName(id, lang)}</option>)}</select>
+          <select value={ex} data-testid="fc-exercise" onChange={(e) => { setEx(e.target.value); setVariant(0); }}>{options.map((id) => <option key={id} value={id}>{exerciseName(id, lang)}</option>)}</select>
         </label>
-      ) : <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>}
+      ) : null}
+      <div className="card exhead"><ExPicture src={getExercise(ex)?.picture} size={56} /><b>{exerciseName(ex, lang)}</b></div>
       {variants && (
         <label className="field"><b>{F('fcPickVar')}</b>
           <select value={variant} onChange={(e) => setVariant(Number(e.target.value))} data-testid="fc-variant">{variants.map((v, i) => <option key={v.kind} value={i}>{F(v.labelKey)}</option>)}</select>
         </label>
       )}
-      {kind && <p>{F(VIEW_KEY[KINDS[kind].view])}</p>}
-      {!hasConsent(patient) ? (
+      {mode === 'count' && <p className="hint" data-testid="fc-count-note">{F('fcCountNote')}</p>}
+      {mode === 'video' && <p className="hint" data-testid="fc-video-note">{F('fcVideoNote')}</p>}
+      {mode !== 'video' && kind && <p className="tiny">{F(VIEW_KEY[KINDS[kind].view])}</p>}
+      {mode !== 'video' && (!hasConsent(patient) ? (
         <div className="card" data-testid="fc-consent">
           <h3>{F('fcConsentTitle')}</h3>
           <ul className="exlist">{['fcConsent1', 'fcConsent2', 'fcConsent3', 'fcConsent4'].map((k) => <li key={k}>{F(k)}</li>)}</ul>
           <small className="tiny">{F('fcConsentDraft')}</small>
           <label className="caregivertoggle"><input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} data-testid="fc-consent-check" /><span><b>{F('fcConsentAgree')}</b></span></label>
         </div>
-      ) : <button className="link" onClick={() => { setAgreed(false); updatePatient(patient.id, withdrawConsent); }}>{F('fcWithdraw')}</button>}
-      {!isPatientDevice() && <PilotSetup />}
+      ) : <button className="link" onClick={() => { setAgreed(false); updatePatient(patient.id, withdrawConsent); }}>{F('fcWithdraw')}</button>)}
       {err && <p className="err" role="alert">{err}</p>}
-      <button className="big primary" data-testid="fc-start" disabled={!kind || (!hasConsent(patient) && !agreed)} onClick={() => void start()}>{F('fcStart')}</button>
+      {mode === 'form' && <button className="big primary" data-testid="fc-start" disabled={!kind || (!hasConsent(patient) && !agreed)} onClick={begin}>{F('fcModeForm')}</button>}
+      {mode === 'count' && <button className="big primary" data-testid="fc-start" disabled={!kind || (!hasConsent(patient) && !agreed)} onClick={begin}>{F('fcModeCount')}</button>}
+      {mode !== 'form' && <button className={`big ${mode === 'video' ? 'primary' : 'secondary'}`} data-testid="fc-video" onClick={() => onVideo(ex)}>{F('fcModeVideo')}</button>}
     </main>
   );
 }

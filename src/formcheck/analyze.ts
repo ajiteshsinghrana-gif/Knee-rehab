@@ -9,7 +9,7 @@
  */
 import { angleAt, type Pt } from '../angle';
 import type { FormFault, FormFaultKind, FormLimit } from '../types';
-import { FORM_CHECK, HAND, HL, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, PUMP, PUMP_FAULT, STEP_FAULT, WALK, type FormKind } from './config';
+import { DEFAULT_TEMPO, FORM_CHECK, HAND, HL, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, PACE, PACE_FAULTS, PUMP, PUMP_FAULT, STEP_FAULT, WALK, paceApplies, type FormKind } from './config';
 
 export interface Landmark { x: number; y: number; /** 0 to 1: how sure the model is that the point is in view */ v?: number }
 export type Frame = Landmark[];
@@ -17,7 +17,7 @@ export type Frame = Landmark[];
 export type FormEvent =
   | { type: 'rep'; n: number }
   | { type: 'fault'; id: string; kind: FormFaultKind; rep: number }
-  | { type: 'pause'; id: string }
+  | { type: 'pause'; id: string; kind: FormFaultKind }
   | { type: 'unseen' }
   | { type: 'seen' };
 
@@ -36,6 +36,17 @@ export interface FormSummary {
   held?: Record<string, number>;
   /** Pilot mode only: the main movement number about 4 times a second, as [seconds, value]. */
   trace?: [number, number][];
+  /** Exercises with a pace: how long each rep took, in seconds, and the tempo it was compared with. */
+  repSecs?: number[];
+  tempo?: number;
+  /** Count only: nothing was judged, only reps counted. */
+  countOnly?: true;
+}
+export interface AnalyzerOptions {
+  /** Count reps only: no form flags, no pace flags and no pause (exercises without rules of their own). */
+  countOnly?: boolean;
+  /** Seconds per rep the physio set for this patient; otherwise the default tempo for the kind. */
+  tempoSec?: number;
 }
 
 const RAD = 180 / Math.PI;
@@ -88,10 +99,29 @@ export class FormAnalyzer {
   private bufs = new Map<string, number[]>();
   private heldMax = new Map<string, number>();
   private traceOut: [number, number][] = [];
+  private moveT0 = 0;
+  private wasMoving = false;
+  private repSecs: number[] = [];
   /** Pilot mode: keep a thin trace of the main movement number. */
   recordTrace = false;
 
-  constructor(readonly kind: FormKind, private limit?: Pick<FormLimit, 'max' | 'min'>) {}
+  constructor(readonly kind: FormKind, private limit?: Pick<FormLimit, 'max' | 'min'>, private opts: AnalyzerOptions = {}) {}
+
+  /** The tempo in force (seconds per rep), or null when this kind has no pace. */
+  get tempo(): number | null {
+    if (!paceApplies(this.kind)) return null;
+    const t = this.opts.tempoSec;
+    return t !== undefined && Number.isFinite(t) && t >= PACE.minSec && t <= PACE.maxSec ? t : DEFAULT_TEMPO[this.kind]!;
+  }
+  /** One rep ended: time it and compare with the tempo. */
+  private pace(tMs: number, ev: FormEvent[]) {
+    const tempo = this.tempo;
+    if (tempo === null || !this.moveT0) return;
+    const sec = Math.max(0, (tMs - this.moveT0) / 1000);
+    this.repSecs.push(Math.round(sec * 10) / 10);
+    if (sec < tempo * PACE.fast) this.record(PACE_FAULTS.fast.id, PACE_FAULTS.fast.kind, this.reps, Math.round((tempo - sec) * 10) / 10, 's', tMs, ev);
+    else if (sec > tempo * PACE.slow) this.record(PACE_FAULTS.slow.id, PACE_FAULTS.slow.kind, this.reps, Math.round((sec - tempo) * 10) / 10, 's', tMs, ev);
+  }
 
   get repCount(): number { return this.reps; }
   /** Share of recent frames in which the body was visible. */
@@ -136,10 +166,13 @@ export class FormAnalyzer {
           this.steps.push({ len: this.peak, lead: dir === 0 ? 0 : this.peakSign * dir, t: tMs });
         }
         if (this.kind === 'ankle-pump') this.endPump(tMs, ev);
+        this.pace(tMs, ev);
         if (this.limit?.min !== undefined && this.peak < this.limit.min) this.record(LIMIT_FAULTS.min.id, LIMIT_FAULTS.min.kind, this.reps, this.limit.min - this.peak, cfg.signal, tMs, ev);
       }
     }
     const moving = this.inRep || s > cfg.repDown;
+    if (moving && !this.wasMoving) this.moveT0 = tMs;
+    this.wasMoving = moving;
     const rep = this.reps + 1;
     if (this.recordTrace && this.total % 4 === 0 && this.traceOut.length < 600) this.traceOut.push([Math.round(((tMs - (this.t0 ?? tMs)) / 1000) * 10) / 10, Math.round(s * 10) / 10]);
     if (moving) {
@@ -207,6 +240,8 @@ export class FormAnalyzer {
       ...(this.isRate && this.cadence() !== null ? { cadence: this.cadence()! } : {}),
       ...(this.heldMax.size ? { held: Object.fromEntries([...this.heldMax.entries()].map(([k, v]) => [k, Math.round(v * 10) / 10])) } : {}),
       ...(this.recordTrace ? { trace: this.traceOut } : {}),
+      ...(this.tempo !== null && !this.opts.countOnly ? { repSecs: this.repSecs.slice(0, 60), tempo: this.tempo } : {}),
+      ...(this.opts.countOnly ? { countOnly: true as const } : {}),
     };
   }
 
@@ -817,6 +852,7 @@ export class FormAnalyzer {
   }
 
   private record(id: string, kind: FormFaultKind, rep: number, value: number, unit: FormFault['unit'], tMs: number, ev: FormEvent[]) {
+    if (this.opts.countOnly) return; // count only: nothing is judged
     let f = this.found.get(id);
     if (!f) { f = { kind, reps: new Set(), peak: value, unit, firstSec: ((tMs - (this.t0 ?? tMs)) / 1000) }; this.found.set(id, f); }
     f.peak = Math.max(f.peak, value);
@@ -825,7 +861,7 @@ export class FormAnalyzer {
     if (FORM_CHECK.pauseEnabled && FORM_CHECK.pauseOn.includes(kind) && this.recentUsable >= 0.8 && tMs - this.lastPauseMs > 5000) {
       this.lastPauseMs = tMs;
       this.pausedIds.add(id);
-      ev.push({ type: 'pause', id });
+      ev.push({ type: 'pause', id, kind });
     }
   }
 }

@@ -14,7 +14,7 @@ import type { AnsweredBy, FormCheckLog, FormClip, FormLimit, FormRequest, Patien
 import { addDays } from '../engine/dates';
 import { withAuditNote, type Ctx } from '../engine/plan';
 import { FORM_CONFIG, newFormRequest } from '../forms/model';
-import { FORM_CHECK, KINDS, formKindFor, unitOf } from './config';
+import { FORM_CHECK, KINDS, PACE, checkMode, formKindFor, paceApplies, unitOf } from './config';
 import type { FormSummary } from './analyze';
 
 export const hasConsent = (p: Patient): boolean => p.formCheckConsent?.version === FORM_CHECK.consentVersion;
@@ -22,6 +22,23 @@ export const giveConsent = (p: Patient, by: AnsweredBy, at: string): Patient => 
 export const withdrawConsent = (p: Patient): Patient => { const { formCheckConsent: _c, ...rest } = p; return rest; };
 
 export const limitFor = (p: Patient, exerciseId: string): FormLimit | undefined => p.formLimits?.[exerciseId];
+
+/** The camera check is off for every patient until the physio switches it on. */
+export const cameraOn = (p: Patient): boolean => !!p.formCheckOn;
+/** The physio switches the camera check on or off for one patient. Written to the audit log. Changes no plan and no tier. */
+export function setCameraCheck(p: Patient, on: boolean, ctx: Ctx): Patient {
+  if (on === cameraOn(p)) return p;
+  const at = new Date(ctx.nowMs).toISOString();
+  const next: Patient = { ...p, formCheckOn: on ? { at, by: ctx.who ?? 'physio' } : null };
+  return withAuditNote(next, 'form-check-switch', `Camera check switched ${on ? 'on' : 'off'} for this patient`, cameraOn(p), on, on ? 'Physio switched the camera check on' : 'Physio switched the camera check off', ctx);
+}
+/** The carer to offer a call to after a stumble: the copy synced to the patient's phone, or the physio's record on a shared device. */
+export const carerOf = (p: Patient): { name?: string; phone: string } | null =>
+  p.carerContact?.phone ? p.carerContact : p.details?.carerPhone ? { ...(p.details.carerName ? { name: p.details.carerName } : {}), phone: p.details.carerPhone } : null;
+/** The patient's answers after a set (pain, and dizziness, chest pain or breathlessness). Kept on the check for the physio; never feeds triage. */
+export const setAfterAnswers = (p: Patient, checkId: string, after: { pain: number | null; redFlag: boolean }): Patient => ({
+  ...p, formChecks: (p.formChecks ?? []).map((c) => (c.id === checkId ? { ...c, after: { pain: after.pain === null ? null : Math.max(0, Math.min(10, Math.round(after.pain))), redFlag: after.redFlag } } : c)),
+});
 
 export function newCheckLog(a: { kind?: string; id: string; date: string; startedAt: number; endedAt: number; exerciseId: string; summary: FormSummary; by: AnsweredBy; limit?: FormLimit }): FormCheckLog {
   const kind = formKindFor(a.exerciseId);
@@ -31,6 +48,7 @@ export function newCheckLog(a: { kind?: string; id: string; date: string; starte
     id: a.id, date: a.date, startedAt: a.startedAt, endedAt: a.endedAt, exerciseId: a.exerciseId, kind: used,
     repsCounted: a.summary.reps, ...(a.summary.holds?.length ? { holds: a.summary.holds } : {}), ...(a.summary.cadence ? { cadence: a.summary.cadence } : {}), faults: a.summary.faults, usable: a.summary.usable, reliable: a.summary.reliable, paused: a.summary.paused,
     answeredBy: a.by, ...(a.limit ? { limit: a.limit } : {}),
+    ...(a.summary.countOnly ? { mode: 'count' as const } : {}), ...(a.summary.repSecs ? { repSecs: a.summary.repSecs, tempo: a.summary.tempo } : {}),
   };
 }
 
@@ -97,9 +115,12 @@ export const attachClip = (p: Patient, requestId: string, clip: Omit<FormClip, '
 export const pendingChecks = (p: Patient): FormRequest[] => (p.formRequests ?? []).filter((r) => r.auto && !r.reply);
 
 /** The physio sets a limit for one patient and one exercise, with a reason. Recorded in the audit log. */
-export function setFormLimit(p: Patient, exerciseId: string, v: { max?: number; min?: number }, reason: string, ctx: Ctx): Patient {
+export function setFormLimit(p: Patient, exerciseId: string, v: { max?: number; min?: number; tempo?: number }, reason: string, ctx: Ctx): Patient {
   const kind = formKindFor(exerciseId);
-  if (!kind || KINDS[kind].noLimit || !reason.trim()) return p;
+  // Only exercises with a form check of their own have limits; a count-only exercise flags nothing.
+  if (!kind || checkMode(exerciseId) !== 'form' || !reason.trim()) return p;
+  if (KINDS[kind].noLimit && (v.max !== undefined || v.min !== undefined)) return p;
+  if (v.tempo !== undefined && (!paceApplies(kind) || !Number.isFinite(v.tempo) || v.tempo < PACE.minSec || v.tempo > PACE.maxSec)) return p;
   const top = unitOf(kind) === 'deg' ? 180 : 100;
   const ok = (n: number | undefined) => n === undefined || (Number.isFinite(n) && n >= 0 && n <= top);
   if (!ok(v.max) || !ok(v.min)) return p;
@@ -107,11 +128,13 @@ export function setFormLimit(p: Patient, exerciseId: string, v: { max?: number; 
   const before = p.formLimits?.[exerciseId] ?? null;
   const limits = { ...(p.formLimits ?? {}) };
   const who = ctx.who ?? 'physio';
-  if (v.max === undefined && v.min === undefined) delete limits[exerciseId];
-  else limits[exerciseId] = { ...(v.max !== undefined ? { max: v.max } : {}), ...(v.min !== undefined ? { min: v.min } : {}), at: new Date(ctx.nowMs).toISOString(), by: who };
+  const none = v.max === undefined && v.min === undefined && v.tempo === undefined;
+  if (none) delete limits[exerciseId];
+  else limits[exerciseId] = { ...(v.max !== undefined ? { max: v.max } : {}), ...(v.min !== undefined ? { min: v.min } : {}), ...(v.tempo !== undefined ? { tempo: Math.round(v.tempo * 10) / 10 } : {}), at: new Date(ctx.nowMs).toISOString(), by: who };
   // An empty object (not undefined) is kept after the last limit is removed, so the removal travels to the patient's phone.
   const next: Patient = { ...p, formLimits: limits };
-  return withAuditNote(next, 'form-limit', `Camera form check limit for ${exerciseId}: ${v.max === undefined && v.min === undefined ? 'removed' : `${v.min !== undefined ? `min ${v.min}` : ''}${v.min !== undefined && v.max !== undefined ? ', ' : ''}${v.max !== undefined ? `max ${v.max}` : ''}`}`, before, limits[exerciseId] ?? null, reason.trim().slice(0, 300), ctx);
+  const parts = [v.min !== undefined ? `min ${v.min}` : '', v.max !== undefined ? `max ${v.max}` : '', v.tempo !== undefined ? `tempo ${v.tempo} s a rep` : ''].filter(Boolean).join(', ');
+  return withAuditNote(next, 'form-limit', `Camera form check settings for ${exerciseId}: ${none ? 'removed' : parts}`, before, limits[exerciseId] ?? null, reason.trim().slice(0, 300), ctx);
 }
 
 /**

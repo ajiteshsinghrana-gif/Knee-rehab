@@ -1,13 +1,14 @@
 // Patient side of a form-check request: consent, record or choose a short video, add a note, send. Then "My videos" with the physio's replies.
 // The video is sent only after the patient ticks the consent. It never carries a warning sign and never changes the plan or tier.
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ExPicture } from './ExPicture';
 import type { Lang, Patient, ProtocolPack } from '../types';
 import { t } from '../i18n';
 import { clockMs, getState, updatePatient } from '../store';
 import { exerciseName, getExercise } from '../exercises/library';
 import { currentExercises } from '../engine/plan';
-import { CONSENT_TEXT, addFormRequest, consentText, cueText, markReplySeen, newFormRequest, reviewHours, validClip } from '../forms/model';
+import { CONSENT_TEXT, FORM_CONFIG, addFormRequest, consentText, cueText, markReplySeen, newFormRequest, reviewHours, validClip } from '../forms/model';
+import { Speak } from './FormCheck';
 import { fmtSize, fs } from '../forms/strings';
 import { newLocalId, saveLocalVideo, loadLocalVideo } from '../exercises/deviceVideos';
 import { clipCloudReady, patientUploadClip } from '../sync/engine';
@@ -26,6 +27,9 @@ export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [done, setDone] = useState<'cloud' | 'device' | 'note' | null>(null);
+  const [dur, setDur] = useState<number | null>(null);
+  const preview = useMemo(() => (file ? URL.createObjectURL(file) : ''), [file]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const hours = reviewHours(pack);
   const consent = consentText(lang);
 
@@ -37,7 +41,18 @@ export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: {
     const bad = validClip(f.type || 'video/mp4', f.size);
     if (bad === 'size') { setErr(F('fTooBig')); return; }
     if (bad) { setErr(F('fBadType')); return; }
-    setFile(f);
+    // Videos are capped at 30 seconds: read the length before accepting it. A length the browser cannot tell is allowed.
+    const u = URL.createObjectURL(f);
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    const accept = (sec: number | null) => {
+      URL.revokeObjectURL(u);
+      if (sec !== null && sec > FORM_CONFIG.maxClipSec + 0.5) { setErr(F('fTooLong')); setFile(null); return; }
+      setDur(sec); setFile(f);
+    };
+    v.onloadedmetadata = () => accept(Number.isFinite(v.duration) ? v.duration : null);
+    v.onerror = () => accept(null);
+    v.src = u;
   };
   const send = async (withClip = true) => {
     setBusy(true); setErr('');
@@ -49,8 +64,8 @@ export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: {
       if (file && withClip) {
         const mime = (file.type || 'video/mp4').split(';')[0];
         const path = clipCloudReady(patient) ? await patientUploadClip(patient, id, file, mime) : null;
-        if (path) { clip = { where: 'cloud', ref: path, mime, size: file.size, durationSec: null }; how = 'cloud'; }
-        else { const lid = newLocalId(); await saveLocalVideo(lid, file); clip = { where: 'device', ref: lid, mime, size: file.size, durationSec: null }; how = 'device'; }
+        if (path) { clip = { where: 'cloud', ref: path, mime, size: file.size, durationSec: dur === null ? null : Math.round(dur) }; how = 'cloud'; }
+        else { const lid = newLocalId(); await saveLocalVideo(lid, file); clip = { where: 'device', ref: lid, mime, size: file.size, durationSec: dur === null ? null : Math.round(dur) }; how = 'device'; }
       }
       const req = newFormRequest({ id, exerciseId: ex, at: nowIso, note, by: patient.caregiverMode ? 'caregiver' : 'patient', clip, via: 'app' });
       updatePatient(patient.id, (p) => addFormRequest(p, req));
@@ -81,7 +96,7 @@ export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: {
             {r.auto && <p className="tiny">{fcs(lang, 'fcAuto')}</p>}
             {r.reply ? (
               <div className="notice-card">
-                <b>{F('fReply')}</b>
+                <b>{F('fReply')}</b> <Speak text={[F('fReply'), ...r.reply.points.map((c) => cueText(c, lang)), r.reply.text].filter(Boolean).join('. ')} lang={lang} />
                 {r.reply.points.length > 0 && <ul className="exlist">{r.reply.points.map((c) => <li key={c}>{cueText(c, lang)}</li>)}</ul>}
                 {r.reply.text && <p>{r.reply.text}</p>}
               </div>
@@ -135,6 +150,7 @@ export function FormRequestScreen({ patient, pack, lang, exerciseId, onBack }: {
       </label>
       <p className="tiny">{F('fRecordHint')}</p>
       {file && <p className="okline">{F('fReady', { size: fmtSize(file.size) })}</p>}
+      {preview && <><p className="tiny">{F('fPreview')}</p><video src={preview} controls playsInline preload="metadata" data-testid="clip-preview" style={{ width: '100%', maxWidth: 480, borderRadius: 12 }} /></>}
       {err && <p className="err" role="alert">{err}</p>}
       <button className="big primary" data-testid="send-clip" disabled={busy || !file || !agreed} onClick={() => void send(true)}>{busy ? F('fSending') : F('fSend')}</button>
       <button className="link" disabled={busy || !note.trim()} onClick={() => void send(false)}>{F('fSendNote')}</button>
