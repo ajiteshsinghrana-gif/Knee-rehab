@@ -208,6 +208,7 @@ const cleanCheck = (raw: unknown): FormCheckLog | null => {
     ...(raw.answeredBy === 'patient' || raw.answeredBy === 'caregiver' ? { answeredBy: raw.answeredBy } : {}), ...(str(raw.requestId, 60) ? { requestId: raw.requestId } : {}), ...(limit ? { limit } : {}),
     ...(raw.mode === 'count' ? { mode: 'count' as const } : {}),
     ...(Array.isArray(raw.repSecs) && num(raw.tempo) ? { repSecs: raw.repSecs.filter((x): x is number => num(x) && x >= 0 && x <= 600).slice(0, 60), tempo: Math.max(1, Math.min(20, raw.tempo)) } : {}),
+    ...(Array.isArray(raw.peaks) && raw.peaks.length ? { peaks: raw.peaks.filter((x): x is number => num(x) && x >= 0 && x <= 360).slice(0, 60) } : {}),
     ...(isObj(raw.after) && typeof raw.after.redFlag === 'boolean' ? { after: { pain: num(raw.after.pain) ? Math.max(0, Math.min(10, Math.round(raw.after.pain))) : null, redFlag: raw.after.redFlag } } : {}) };
 };
 const mergeChecks = (local: FormCheckLog[] | undefined, raw: unknown): FormCheckLog[] | undefined => {

@@ -374,6 +374,8 @@ export interface FormCheckLog {
   /** How long each rep took (seconds) and the tempo it was compared with. */
   repSecs?: number[];
   tempo?: number;
+  /** Deepest point of each rep (degrees of knee bend, side view of the squat). */
+  peaks?: number[];
   /** The patient's answers after the set: pain 0 to 10, and dizziness, chest pain or breathlessness (a yes opens the warning signs). */
   after?: { pain: number | null; redFlag: boolean };
 }

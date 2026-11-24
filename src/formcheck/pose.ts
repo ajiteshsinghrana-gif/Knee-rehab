@@ -8,14 +8,14 @@
  */
 import type { Frame } from './analyze';
 
-export interface Pose { /** true when the separate hand model is loaded too */ hand: boolean; detect(video: HTMLVideoElement, tMs: number): Frame | null; close(): void }
+export interface Pose { /** true when the separate hand model is loaded too */ hand: boolean; detect(video: HTMLVideoElement | HTMLCanvasElement, tMs: number): Frame | null; close(): void }
 
 const LOCAL = 'mediapipe';
 const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10';
 const HAND_MODEL_CDN = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const MODEL_CDN = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
 
-interface RawLandmarker { detectForVideo(v: HTMLVideoElement, t: number): { landmarks?: { x: number; y: number; visibility?: number }[][] }; close(): void }
+interface RawLandmarker { detectForVideo(v: HTMLVideoElement | HTMLCanvasElement, t: number): { landmarks?: { x: number; y: number; visibility?: number }[][] }; close(): void }
 interface VisionModule {
   FilesetResolver: { forVisionTasks(wasmDir: string): Promise<unknown> };
   PoseLandmarker: { createFromOptions(fileset: unknown, opts: unknown): Promise<RawLandmarker> };

@@ -9,7 +9,7 @@
  */
 import { angleAt, type Pt } from '../angle';
 import type { FormFault, FormFaultKind, FormLimit } from '../types';
-import { DEFAULT_TEMPO, FORM_CHECK, HAND, HL, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, PACE, PACE_FAULTS, PUMP, PUMP_FAULT, STEP_FAULT, WALK, paceApplies, type FormKind } from './config';
+import { DEFAULT_TEMPO, DEPTH_KINDS, FORM_CHECK, HAND, HL, HOLD_FAULT, KINDS, LIMIT_FAULTS, LM, PACE, PACE_FAULTS, PUMP, PUMP_FAULT, STEP_FAULT, WALK, paceApplies, type FormKind } from './config';
 
 export interface Landmark { x: number; y: number; /** 0 to 1: how sure the model is that the point is in view */ v?: number }
 export type Frame = Landmark[];
@@ -38,6 +38,8 @@ export interface FormSummary {
   trace?: [number, number][];
   /** Exercises with a pace: how long each rep took, in seconds, and the tempo it was compared with. */
   repSecs?: number[];
+  /** Deepest point of each rep in the main number's unit (degrees of knee bend for the side view of the squat). */
+  peaks?: number[];
   tempo?: number;
   /** Count only: reps and pace, no form tips (an exercise without form rules of its own). */
   countOnly?: true;
@@ -106,6 +108,7 @@ export class FormAnalyzer {
   private moveT0 = 0;
   private wasMoving = false;
   private repSecs: number[] = [];
+  private peaks: number[] = [];
   /** Pilot mode: keep a thin trace of the main movement number. */
   recordTrace = false;
 
@@ -170,6 +173,7 @@ export class FormAnalyzer {
           this.steps.push({ len: this.peak, lead: dir === 0 ? 0 : this.peakSign * dir, t: tMs });
         }
         if (this.kind === 'ankle-pump') this.endPump(tMs, ev);
+        if (DEPTH_KINDS.includes(this.kind)) this.peaks.push(Math.round(this.peak * 10) / 10);
         this.pace(tMs, ev);
         if (this.limit?.min !== undefined && this.peak < this.limit.min) this.record(LIMIT_FAULTS.min.id, LIMIT_FAULTS.min.kind, this.reps, this.limit.min - this.peak, cfg.signal, tMs, ev);
       }
@@ -244,6 +248,7 @@ export class FormAnalyzer {
       ...(this.isRate && this.cadence() !== null ? { cadence: this.cadence()! } : {}),
       ...(this.heldMax.size ? { held: Object.fromEntries([...this.heldMax.entries()].map(([k, v]) => [k, Math.round(v * 10) / 10])) } : {}),
       ...(this.recordTrace ? { trace: this.traceOut } : {}),
+      ...(DEPTH_KINDS.includes(this.kind) && this.peaks.length ? { peaks: this.peaks.slice(0, 60) } : {}),
       ...(this.tempo !== null ? { repSecs: this.repSecs.slice(0, 60), tempo: this.tempo } : {}),
       ...(this.opts.countOnly ? { countOnly: true as const } : {}),
     };
@@ -271,6 +276,7 @@ export class FormAnalyzer {
     switch (this.kind) {
       case 'slr': return this.mSlr(f);
       case 'squat': return this.legs(f, 'squat', 1, true);
+      case 'squat-side': return this.mSquatSide(f);
       case 'sit-to-stand': return this.legs(f, 'sit', -1, true);
       case 'lunge': return this.legs(f, 'lunge', 1, false);
       case 'step-up': return this.legs(f, 'step', -1, false);
@@ -378,6 +384,22 @@ export class FormAnalyzer {
   }
 
   /** Side view, lying or sitting: the knee bends and straightens (heel slides, gentle knee movement). */
+  /** Side view, standing: the leg nearest the camera. The signal is how far the knee bends (the depth of the squat); the trunk tipping forward is judged against how upright it started. */
+  private mSquatSide(f: Landmark[]): Measure {
+    const sets = { l: [LM.lShoulder, LM.lHip, LM.lKnee, LM.lAnkle], r: [LM.rShoulder, LM.rHip, LM.rKnee, LM.rAnkle] } as const;
+    const k = this.nearSide(f, sets);
+    const [sh, hip, kn, an] = sets[k];
+    if (!this.seen(f, sh, hip, kn, an)) return { ok: false, signal: 0, faults: {} };
+    const S = this.pt(f, sh), H = this.pt(f, hip), K = this.pt(f, kn), A = this.pt(f, an);
+    const flex = bend(H, K, A);
+    if (flex === null) return { ok: false, signal: 0, faults: {} };
+    // Degrees the shoulder is away from straight above the hip, whichever way the person faces.
+    const lean = Math.atan2(Math.abs(S.x - H.x), H.y - S.y) * RAD;
+    if (flex < KINDS['squat-side'].repDown && this.base.n < FORM_CHECK.baselineFrames) { this.base.trunk = (this.base.trunk * this.base.n + lean) / (this.base.n + 1); this.base.n++; }
+    const hasBase = this.base.n >= FORM_CHECK.baselineFrames;
+    return { ok: true, signal: flex, faults: { 'squat-side-lean': hasBase && flex > 10 ? Math.max(0, lean - this.base.trunk) : null } };
+  }
+
   private mKneeFlex(f: Landmark[]): Measure {
     const sets = { l: [LM.lShoulder, LM.lHip, LM.lKnee, LM.lAnkle], r: [LM.rShoulder, LM.rHip, LM.rKnee, LM.rAnkle] } as const;
     const k = this.nearSide(f, sets);

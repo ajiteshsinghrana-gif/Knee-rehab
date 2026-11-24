@@ -9,7 +9,7 @@
 import type { FormFaultKind } from '../types';
 
 export type FormKind =
-  | 'slr' | 'squat' | 'shoulder-abduction'
+  | 'slr' | 'squat' | 'squat-side' | 'shoulder-abduction'
   | 'knee-flex' | 'sit-to-stand' | 'lunge' | 'step-up' | 'shoulder-flexion' | 'hip-abduction' | 'bridging' | 'calf-raise' | 'balance' | 'balance-line' | 'walking' | 'ankle-pump' | 'pendulum' | 'cycle' | 'plank' | 'bird-dog'
   | 'hand-fist' | 'wrist' | 'elbow' | 'scap' | 'band-rot';
 /** Where the phone goes: side on lying down, side on standing, facing the person standing, or facing the person seated. */
@@ -41,6 +41,8 @@ export const BONES: [number, number][] = [
 export const KIND_EXERCISES: Record<FormKind, string[]> = {
   slr: ['straight-leg-raise'],
   squat: ['squats', 'mini-squats'],
+  /** The second angle of the squat (from the side). Chosen by the screen after the front view, so no exercise maps here on its own. */
+  'squat-side': [],
   'shoulder-abduction': ['shoulder-abduction'],
   'knee-flex': ['heel-slides', 'gentle-rom'],
   'sit-to-stand': ['sit-to-stand'],
@@ -144,6 +146,13 @@ export const KINDS: Record<FormKind, KindConfig> = {
       { id: 'squat-knee-in', kind: 'posture', limit: 12, unit: 'pct' },        // knee falls inward by 12% of thigh length
       { id: 'squat-lean', kind: 'compensation', limit: 10, unit: 'deg' },      // trunk leans sideways more than 10 degrees
       { id: 'squat-balance', kind: 'stability', limit: 15, unit: 'pct' },      // a foot moves, or the hips sway, by 15% of leg length
+    ],
+  },
+  // Side-on, standing: the second angle of the squat. Signal: how far the knee bends, in degrees (0 = straight). This is the depth of the squat.
+  'squat-side': {
+    signal: 'deg', view: 'sideStand', hint: 'degrees of knee bend (squat depth, side view)', repUp: 25, repDown: 10, minFrames: 6,
+    faults: [
+      { id: 'squat-side-lean', kind: 'compensation', limit: 40, unit: 'deg' },  // trunk tips forward more than 40 degrees beyond how upright it started
     ],
   },
   // Facing the camera. Signal: arm raise away from the side, in degrees.
@@ -340,6 +349,13 @@ export const LIMIT_FAULTS: Record<'max' | 'min', { id: string; kind: FormFaultKi
   max: { id: 'limit-max', kind: 'precaution' },
   min: { id: 'limit-min', kind: 'range' },
 };
+/**
+ * Exercises that can be checked from a second angle, because one view cannot see everything. The squat from the front sees knees
+ * going in, leaning and swaying but not how deep the knees bend; from the side it measures the knee bend (depth) and the trunk tipping forward.
+ */
+export const COMPANIONS: Partial<Record<FormKind, FormKind>> = { squat: 'squat-side' };
+/** Kinds whose deepest point in every rep is kept and shown as a depth (degrees of knee bend). */
+export const DEPTH_KINDS: FormKind[] = ['squat-side'];
 export const unitOf = (k: FormKind): 'deg' | 'pct' => KINDS[k].signal;
 
 // ---------- what the camera offers for each exercise (camera check safety round) ----------
@@ -365,7 +381,7 @@ export const checkMode = (exerciseId: string): CheckMode => (!formKindFor(exerci
 export const PACE = { fast: 0.5, slow: 2.5, minSec: 1, maxSec: 20 } as const;
 /** No pace for timed holds, walking, cycling (they have their own rates) or the pendulum (a loose swing has no set speed). */
 export const DEFAULT_TEMPO: Partial<Record<FormKind, number>> = {
-  slr: 4, squat: 4, 'shoulder-abduction': 4, 'knee-flex': 4, 'sit-to-stand': 4, lunge: 4, 'step-up': 4, 'shoulder-flexion': 4, 'hip-abduction': 4,
+  slr: 4, squat: 4, 'squat-side': 4, 'shoulder-abduction': 4, 'knee-flex': 4, 'sit-to-stand': 4, lunge: 4, 'step-up': 4, 'shoulder-flexion': 4, 'hip-abduction': 4,
   bridging: 4, 'calf-raise': 3, 'ankle-pump': 2, 'hand-fist': 3, wrist: 3, elbow: 3, scap: 3, 'band-rot': 3,
 };
 export const paceApplies = (k: FormKind): boolean => DEFAULT_TEMPO[k] !== undefined;
